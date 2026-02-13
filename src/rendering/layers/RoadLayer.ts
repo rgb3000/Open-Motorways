@@ -1,6 +1,6 @@
 import type { Grid } from '../../core/Grid';
 import { CellType, Direction } from '../../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_OUTLINE_COLOR } from '../../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_OUTLINE_COLOR, ROAD_LANE_DIVIDER_COLOR } from '../../constants';
 
 export class RoadLayer {
   private grid: Grid;
@@ -33,6 +33,62 @@ export class RoadLayer {
         ctx.fillStyle = ROAD_COLOR;
         this.drawRoadShape(ctx, cx, cy, roadHalf, conns, half);
       }
+    }
+
+    // Lane divider pass
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = ROAD_LANE_DIVIDER_COLOR;
+    ctx.lineWidth = 1;
+
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const cell = this.grid.getCell(gx, gy);
+        if (!cell || cell.type !== CellType.Road) continue;
+
+        const px = gx * TILE_SIZE;
+        const py = gy * TILE_SIZE;
+        const cx = px + half;
+        const cy = py + half;
+        const conns = cell.roadConnections;
+
+        this.drawLaneDivider(ctx, cx, cy, roadHalf, conns, half);
+      }
+    }
+
+    ctx.setLineDash([]);
+  }
+
+  private drawLaneDivider(
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    roadHalf: number,
+    conns: Direction[],
+    half: number,
+  ): void {
+    const hasUp = conns.includes(Direction.Up);
+    const hasDown = conns.includes(Direction.Down);
+    const hasLeft = conns.includes(Direction.Left);
+    const hasRight = conns.includes(Direction.Right);
+    const hasVertical = hasUp || hasDown;
+    const hasHorizontal = hasLeft || hasRight;
+
+    if (hasVertical) {
+      const top = hasUp ? cy - half : cy - roadHalf;
+      const bottom = hasDown ? cy + half : cy + roadHalf;
+      ctx.beginPath();
+      ctx.moveTo(cx, top);
+      ctx.lineTo(cx, bottom);
+      ctx.stroke();
+    }
+
+    if (hasHorizontal) {
+      const left = hasLeft ? cx - half : cx - roadHalf;
+      const right = hasRight ? cx + half : cx + roadHalf;
+      ctx.beginPath();
+      ctx.moveTo(left, cy);
+      ctx.lineTo(right, cy);
+      ctx.stroke();
     }
   }
 

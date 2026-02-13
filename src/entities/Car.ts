@@ -1,4 +1,4 @@
-import type { GameColor, GridPos, PixelPos } from '../types';
+import type { GameColor, GridPos, PixelPos, Direction } from '../types';
 import { generateId, gridToPixelCenter } from '../utils/math';
 
 export const CarState = {
@@ -14,6 +14,7 @@ export class Car {
   readonly homeHouseId: string;
   state: CarState = CarState.Idle;
   targetBusinessId: string | null = null;
+  direction: Direction | null = null;
 
   // Path
   path: GridPos[] = [];

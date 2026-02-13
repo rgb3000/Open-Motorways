@@ -34,6 +34,14 @@ export const Direction = {
 } as const;
 export type Direction = (typeof Direction)[keyof typeof Direction];
 
+export const LaneId = {
+  HorizontalRight: 0,
+  HorizontalLeft: 1,
+  VerticalDown: 2,
+  VerticalUp: 3,
+} as const;
+export type LaneId = (typeof LaneId)[keyof typeof LaneId];
+
 export const GameState = {
   Playing: 0,
   Paused: 1,

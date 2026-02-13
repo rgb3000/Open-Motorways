@@ -20,6 +20,9 @@ export const DEMAND_INTERVAL_DECAY = 0.97; // multiplier per demand tick
 // Cars
 export const CARS_PER_HOUSE = 2;
 export const CAR_SPEED = 2; // tiles per second
+export const LANE_OFFSET = 3.0;   // px from tile center to lane center
+export const CAR_WIDTH = 5.0;     // px (narrow dimension, perpendicular to travel)
+export const CAR_LENGTH = 8.0;    // px (long dimension, along travel direction)
 
 // Spawning
 export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color
@@ -45,6 +48,7 @@ export const BG_COLOR = '#F5F0E8';
 export const GRID_LINE_COLOR = '#E8E3DB';
 export const ROAD_COLOR = '#9E9E9E';
 export const ROAD_OUTLINE_COLOR = '#757575';
+export const ROAD_LANE_DIVIDER_COLOR = '#B0B0B0';
 export const UI_TEXT_COLOR = '#333333';
 export const GAME_OVER_OVERLAY = 'rgba(0, 0, 0, 0.6)';
 
