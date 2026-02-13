@@ -2,10 +2,11 @@ import type { House } from '../entities/House';
 import type { Business } from '../entities/Business';
 import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
+import type { Grid } from '../core/Grid';
 import { CAR_SPEED, LANE_OFFSET } from '../constants';
-import { Direction, LaneId } from '../types';
+import { CellType, Direction, LaneId } from '../types';
 import type { GridPos, PixelPos } from '../types';
-import { gridToPixelCenter, manhattanDist } from '../utils/math';
+import { gridToPixelCenter, manhattanDist, pixelToGrid } from '../utils/math';
 
 function getDirection(from: GridPos, to: GridPos): Direction {
   const dx = to.gx - from.gx;
@@ -42,9 +43,11 @@ export class CarSystem {
   private cars: Car[] = [];
   private score = 0;
   private pathfinder: Pathfinder;
+  private grid: Grid;
 
-  constructor(pathfinder: Pathfinder) {
+  constructor(pathfinder: Pathfinder, grid: Grid) {
     this.pathfinder = pathfinder;
+    this.grid = grid;
   }
 
   getCars(): Car[] {
@@ -62,12 +65,105 @@ export class CarSystem {
 
   onRoadsChanged(houses: House[]): void {
     for (const car of this.cars) {
-      if (car.state !== CarState.Idle) {
-        this.teleportHome(car, houses);
+      if (car.state !== CarState.Stranded) continue;
+
+      const currentTile = this.getCarCurrentTile(car);
+      const home = houses.find(h => h.id === car.homeHouseId);
+
+      // Try to repath to original destination
+      if (car.destination) {
+        const path = this.pathfinder.findPath(currentTile, car.destination);
+        if (path) {
+          // Restore the state that matches the destination
+          car.state = home && car.destination.gx === home.pos.gx && car.destination.gy === home.pos.gy
+            ? CarState.GoingHome
+            : CarState.GoingToBusiness;
+          car.path = path;
+          car.pathIndex = 0;
+          car.segmentProgress = 0;
+          const center = gridToPixelCenter(currentTile);
+          car.pixelPos = { ...center };
+          continue;
+        }
+      }
+
+      // Try to go home instead
+      if (home) {
+        const homePath = this.pathfinder.findPath(currentTile, home.pos);
+        if (homePath) {
+          car.state = CarState.GoingHome;
+          car.targetBusinessId = null;
+          car.destination = home.pos;
+          car.path = homePath;
+          car.pathIndex = 0;
+          car.segmentProgress = 0;
+          const center = gridToPixelCenter(currentTile);
+          car.pixelPos = { ...center };
+          continue;
+        }
+      }
+
+      // Stay stranded
+    }
+  }
+
+  private getCarCurrentTile(car: Car): GridPos {
+    if (car.path.length >= 2 && car.pathIndex < car.path.length - 1) {
+      return car.segmentProgress >= 0.5
+        ? car.path[car.pathIndex + 1]
+        : car.path[car.pathIndex];
+    }
+    if (car.path.length > 0 && car.pathIndex < car.path.length) {
+      return car.path[car.pathIndex];
+    }
+    return pixelToGrid(car.pixelPos.x, car.pixelPos.y);
+  }
+
+  private rerouteCar(car: Car, houses: House[]): void {
+    const currentTile = this.getCarCurrentTile(car);
+    const home = houses.find(h => h.id === car.homeHouseId);
+
+    // Snap to current tile center
+    const center = gridToPixelCenter(currentTile);
+    car.pixelPos = { ...center };
+
+    // 1. Try to repath to original destination
+    if (car.destination) {
+      const path = this.pathfinder.findPath(currentTile, car.destination);
+      if (path) {
+        car.path = path;
+        car.pathIndex = 0;
+        car.segmentProgress = 0;
+        return;
       }
     }
-    // Remove all teleported (now idle) cars
-    this.cars = [];
+
+    // 2. If GoingToBusiness and can't reach business, clear target and try home
+    if (car.state === CarState.GoingToBusiness) {
+      car.targetBusinessId = null;
+    }
+
+    // 3. Try path home
+    if (home) {
+      const homePath = this.pathfinder.findPath(currentTile, home.pos);
+      if (homePath) {
+        car.state = CarState.GoingHome;
+        car.destination = home.pos;
+        car.path = homePath;
+        car.pathIndex = 0;
+        car.segmentProgress = 0;
+        return;
+      }
+    }
+
+    // 4. Nothing works — strand the car
+    car.state = CarState.Stranded;
+    car.path = [];
+    car.pathIndex = 0;
+    car.segmentProgress = 0;
+    if (home) {
+      car.destination = home.pos;
+    }
   }
 
   private dispatchCars(houses: House[], businesses: Business[]): void {
@@ -100,6 +196,7 @@ export class CarSystem {
         const car = new Car(house.id, house.color, house.pos);
         car.state = CarState.GoingToBusiness;
         car.targetBusinessId = biz.id;
+        car.destination = biz.pos;
         car.path = path;
         car.pathIndex = 0;
         car.segmentProgress = 0;
@@ -113,11 +210,11 @@ export class CarSystem {
   }
 
   private moveCars(dt: number, houses: House[], businesses: Business[]): void {
-    // Phase 1: Build occupancy map
+    // Phase 1: Build occupancy map (skip Idle and Stranded)
     const occupied = new Map<string, string>(); // occupancyKey -> carId
 
     for (const car of this.cars) {
-      if (car.state === CarState.Idle || car.path.length < 2) continue;
+      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.path.length < 2) continue;
 
       const currentTile = car.path[car.pathIndex];
       const nextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
@@ -134,13 +231,13 @@ export class CarSystem {
     const toRemove: string[] = [];
 
     for (const car of this.cars) {
-      if (car.state === CarState.Idle) continue;
+      if (car.state === CarState.Idle || car.state === CarState.Stranded) continue;
 
       car.prevPixelPos = { ...car.pixelPos };
 
       if (car.path.length < 2) {
-        // Degenerate path (shouldn't happen but handle gracefully)
-        this.handleArrival(car, houses, businesses, toRemove);
+        // Degenerate path — reroute instead of treating as arrival
+        this.rerouteCar(car, houses);
         continue;
       }
 
@@ -190,6 +287,22 @@ export class CarSystem {
       while (car.segmentProgress >= 1 && car.pathIndex < car.path.length - 1) {
         car.segmentProgress -= 1;
         car.pathIndex++;
+      }
+
+      // Check if next tile on path is still traversable
+      if (car.pathIndex < car.path.length - 1) {
+        const aheadTile = car.path[car.pathIndex + 1];
+        const cell = this.grid.getCell(aheadTile.gx, aheadTile.gy);
+        const isFinalTile = car.pathIndex + 1 === car.path.length - 1;
+        const isTraversable = cell && (
+          cell.type === CellType.Road ||
+          (isFinalTile && (cell.type === CellType.House || cell.type === CellType.Business))
+        );
+
+        if (!isTraversable) {
+          this.rerouteCar(car, houses);
+          continue; // skip position interpolation this frame
+        }
       }
 
       if (car.pathIndex >= car.path.length - 1) {
@@ -257,12 +370,18 @@ export class CarSystem {
         if (homePath) {
           car.state = CarState.GoingHome;
           car.targetBusinessId = null;
+          car.destination = home.pos;
           car.path = homePath;
           car.pathIndex = 0;
           car.segmentProgress = 0;
         } else {
-          this.teleportHome(car, houses);
-          toRemove.push(car.id);
+          // Can't find path home — strand at business
+          car.state = CarState.Stranded;
+          car.targetBusinessId = null;
+          car.destination = home.pos;
+          car.path = [];
+          car.pathIndex = 0;
+          car.segmentProgress = 0;
         }
       } else {
         toRemove.push(car.id);
@@ -274,18 +393,6 @@ export class CarSystem {
       }
       toRemove.push(car.id);
     }
-  }
-
-  private teleportHome(car: Car, houses: House[]): void {
-    const home = houses.find(h => h.id === car.homeHouseId);
-    if (home) {
-      home.availableCars++;
-      const center = gridToPixelCenter(home.pos);
-      car.pixelPos = { ...center };
-    }
-    car.state = CarState.Idle;
-    car.path = [];
-    car.direction = null;
   }
 
   reset(): void {

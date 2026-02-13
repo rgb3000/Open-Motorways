@@ -5,6 +5,7 @@ export const CarState = {
   Idle: 0,
   GoingToBusiness: 1,
   GoingHome: 2,
+  Stranded: 3,
 } as const;
 export type CarState = (typeof CarState)[keyof typeof CarState];
 
@@ -14,6 +15,7 @@ export class Car {
   readonly homeHouseId: string;
   state: CarState = CarState.Idle;
   targetBusinessId: string | null = null;
+  destination: GridPos | null = null;
   direction: Direction | null = null;
 
   // Path

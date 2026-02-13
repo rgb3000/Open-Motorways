@@ -41,7 +41,7 @@ export class Game {
     this.pathfinder = new Pathfinder(this.grid);
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
-    this.carSystem = new CarSystem(this.pathfinder);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.input = new InputHandler(canvas);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem);
     this.renderer = new Renderer(this.ctx, this.grid);
@@ -115,7 +115,7 @@ export class Game {
     this.pathfinder = new Pathfinder(this.grid);
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
-    this.carSystem = new CarSystem(this.pathfinder);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem);
     this.renderer = new Renderer(this.ctx, this.grid);
     this.state = GameState.Playing;
