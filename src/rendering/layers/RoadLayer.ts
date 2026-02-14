@@ -85,6 +85,9 @@ export class RoadLayer {
       }
     }
 
+    // Diagonal segments
+    this.buildDiagonalSegments(roadGeoms, outlineGeoms, outlineExtra);
+
     // Create merged meshes
     if (outlineGeoms.length > 0) {
       const merged = mergeGeometries(outlineGeoms, false);
@@ -251,6 +254,71 @@ export class RoadLayer {
     geom.rotateX(-Math.PI / 2);
     geom.translate(cx, yOffset, cz);
     geoms.push(geom);
+  }
+
+  private buildDiagonalSegments(
+    roadGeoms: THREE.BufferGeometry[],
+    outlineGeoms: THREE.BufferGeometry[],
+    outlineExtra: number,
+  ): void {
+    const half = TILE_SIZE / 2;
+    const diagLength = TILE_SIZE * Math.SQRT2;
+    const roadWidth = TILE_SIZE * ROAD_WIDTH_RATIO;
+    const outlineWidth = roadWidth + outlineExtra * 2;
+    const diagonalDirs = [Direction.UpRight, Direction.DownRight, Direction.DownLeft, Direction.UpLeft];
+    const dirAngles: Record<number, number> = {
+      [Direction.UpRight]: -Math.PI / 4,
+      [Direction.DownRight]: Math.PI / 4,
+      [Direction.DownLeft]: -Math.PI / 4,
+      [Direction.UpLeft]: Math.PI / 4,
+    };
+
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const cell = this.grid.getCell(gx, gy);
+        if (!cell || !this.isRoadOrConnector(cell)) continue;
+        if (cell.hasBridge) continue;
+
+        for (const dir of diagonalDirs) {
+          if (!cell.roadConnections.includes(dir)) continue;
+
+          const neighbor = this.grid.getNeighbor(gx, gy, dir);
+          if (!neighbor || !this.isRoadOrConnector(neighbor.cell)) continue;
+
+          const oppDir = ({
+            [Direction.UpRight]: Direction.DownLeft,
+            [Direction.DownRight]: Direction.UpLeft,
+            [Direction.DownLeft]: Direction.UpRight,
+            [Direction.UpLeft]: Direction.DownRight,
+          } as Record<number, Direction>)[dir];
+
+          if (!neighbor.cell.roadConnections.includes(oppDir)) continue;
+
+          // Only render once: when current cell is "lower" (gx < ngx, or gx == ngx && gy < ngy)
+          const ngx = neighbor.gx;
+          const ngy = neighbor.gy;
+          if (gx > ngx || (gx === ngx && gy > ngy)) continue;
+
+          const cx = (gx * TILE_SIZE + half + ngx * TILE_SIZE + half) / 2;
+          const cz = (gy * TILE_SIZE + half + ngy * TILE_SIZE + half) / 2;
+          const angle = dirAngles[dir];
+
+          // Road segment
+          const roadGeom = new THREE.BoxGeometry(diagLength, ROAD_HEIGHT, roadWidth);
+          roadGeom.rotateY(angle);
+          roadGeom.translate(cx, ROAD_HEIGHT / 2, cz);
+          roadGeoms.push(roadGeom.toNonIndexed());
+          roadGeom.dispose();
+
+          // Outline segment
+          const outGeom = new THREE.BoxGeometry(diagLength, ROAD_HEIGHT, outlineWidth);
+          outGeom.rotateY(angle);
+          outGeom.translate(cx, -0.01 + ROAD_HEIGHT / 2, cz);
+          outlineGeoms.push(outGeom.toNonIndexed());
+          outGeom.dispose();
+        }
+      }
+    }
   }
 
   private buildBridges(scene: THREE.Scene): void {
