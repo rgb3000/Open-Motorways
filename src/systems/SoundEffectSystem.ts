@@ -54,9 +54,15 @@ export class SoundEffectSystem {
     this.returnSynth.triggerAttackRelease('G5', '16n', now + 0.1);
   }
 
+  private lastPlaceTime = 0;
+
   playRoadPlace(): void {
     if (!this.initialized) return;
-    this.placeSynth.triggerAttackRelease('C6', 0.04);
+    const now = Tone.now();
+    // Ensure each trigger is strictly after the previous one (mono synth requirement)
+    const t = Math.max(now, this.lastPlaceTime + 0.01);
+    this.lastPlaceTime = t;
+    this.placeSynth.triggerAttackRelease('C6', 0.04, t);
   }
 
   playRoadDelete(): void {

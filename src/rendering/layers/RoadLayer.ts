@@ -9,7 +9,8 @@ import {
 
 const ROAD_HEIGHT = 0.4;
 const ROAD_WIDTH_RATIO = 0.6;
-const ROAD_CORNER_RADIUS = 10;
+const ROAD_CORNER_RADIUS = 5;    // outer (convex) corners
+const ROAD_INNER_RADIUS = 1.8;   // inner (concave) fillets at T/cross junctions
 const BRIDGE_HEIGHT = 1.5;
 const BRIDGE_WIDTH_RATIO = 0.7;
 
@@ -128,52 +129,52 @@ export class RoadLayer {
 
   private buildOutlinePoints(
     conns: Direction[], rh: number, half: number,
-  ): { x: number; z: number; round: boolean }[] {
+  ): { x: number; z: number; round: 'none' | 'convex' | 'concave' }[] {
     const up = conns.includes(Direction.Up);
     const right = conns.includes(Direction.Right);
     const down = conns.includes(Direction.Down);
     const left = conns.includes(Direction.Left);
 
-    const pts: { x: number; z: number; round: boolean }[] = [];
+    const pts: { x: number; z: number; round: 'none' | 'convex' | 'concave' }[] = [];
 
     // NW corner
-    if (left && up) pts.push({ x: -rh, z: -rh, round: false });
-    else if (!left && !up) pts.push({ x: -rh, z: -rh, round: true });
+    if (left && up) pts.push({ x: -rh, z: -rh, round: 'concave' });
+    else if (!left && !up) pts.push({ x: -rh, z: -rh, round: 'convex' });
 
     // Up arm
     if (up) {
-      pts.push({ x: -rh, z: -half, round: false });
-      pts.push({ x: rh, z: -half, round: false });
+      pts.push({ x: -rh, z: -half, round: 'none' });
+      pts.push({ x: rh, z: -half, round: 'none' });
     }
 
     // NE corner
-    if (up && right) pts.push({ x: rh, z: -rh, round: false });
-    else if (!up && !right) pts.push({ x: rh, z: -rh, round: true });
+    if (up && right) pts.push({ x: rh, z: -rh, round: 'concave' });
+    else if (!up && !right) pts.push({ x: rh, z: -rh, round: 'convex' });
 
     // Right arm
     if (right) {
-      pts.push({ x: half, z: -rh, round: false });
-      pts.push({ x: half, z: rh, round: false });
+      pts.push({ x: half, z: -rh, round: 'none' });
+      pts.push({ x: half, z: rh, round: 'none' });
     }
 
     // SE corner
-    if (right && down) pts.push({ x: rh, z: rh, round: false });
-    else if (!right && !down) pts.push({ x: rh, z: rh, round: true });
+    if (right && down) pts.push({ x: rh, z: rh, round: 'concave' });
+    else if (!right && !down) pts.push({ x: rh, z: rh, round: 'convex' });
 
     // Down arm
     if (down) {
-      pts.push({ x: rh, z: half, round: false });
-      pts.push({ x: -rh, z: half, round: false });
+      pts.push({ x: rh, z: half, round: 'none' });
+      pts.push({ x: -rh, z: half, round: 'none' });
     }
 
     // SW corner
-    if (down && left) pts.push({ x: -rh, z: rh, round: false });
-    else if (!down && !left) pts.push({ x: -rh, z: rh, round: true });
+    if (down && left) pts.push({ x: -rh, z: rh, round: 'concave' });
+    else if (!down && !left) pts.push({ x: -rh, z: rh, round: 'convex' });
 
     // Left arm
     if (left) {
-      pts.push({ x: -half, z: rh, round: false });
-      pts.push({ x: -half, z: -rh, round: false });
+      pts.push({ x: -half, z: rh, round: 'none' });
+      pts.push({ x: -half, z: -rh, round: 'none' });
     }
 
     return pts;
@@ -188,9 +189,14 @@ export class RoadLayer {
     const pts = this.buildOutlinePoints(conns, rh, half);
     if (pts.length < 3) return;
 
-    const R = Math.min(ROAD_CORNER_RADIUS, rh * 0.45);
+    const armLen = half - rh;
+    const Rconvex = Math.min(ROAD_CORNER_RADIUS, rh * 0.9);
+    const Rconcave = Math.min(ROAD_INNER_RADIUS, armLen * 0.45);
     const shape = new THREE.Shape();
     const n = pts.length;
+
+    const radiusFor = (type: 'convex' | 'concave') =>
+      type === 'convex' ? Rconvex : Rconcave;
 
     for (let i = 0; i < n; i++) {
       const pt = pts[i];
@@ -198,13 +204,14 @@ export class RoadLayer {
       const psx = pt.x;
       const psy = -pt.z;
 
-      if (!pt.round) {
+      if (pt.round === 'none') {
         if (i === 0) shape.moveTo(psx, psy);
         else shape.lineTo(psx, psy);
         continue;
       }
 
-      // Rounded convex corner: replace sharp vertex with quadratic curve
+      // Rounded corner: replace sharp vertex with quadratic curve
+      const R = radiusFor(pt.round);
       const prev = pts[(i - 1 + n) % n];
       const next = pts[(i + 1) % n];
 
@@ -230,7 +237,8 @@ export class RoadLayer {
     }
 
     // Close: if first point was rounded, line back to its t1
-    if (pts[0].round) {
+    if (pts[0].round !== 'none') {
+      const R = radiusFor(pts[0].round);
       const prev = pts[n - 1];
       const first = pts[0];
       const toPrevX = prev.x - first.x;
