@@ -25,6 +25,7 @@ export class RoadDrawer {
 
   private mode: DrawMode = 'none';
   private prevPlacedPos: GridPos | null = null;
+  private lastBuiltPos: GridPos | null = null;
 
   onRoadPlace: (() => void) | null = null;
   onRoadDelete: (() => void) | null = null;
@@ -42,18 +43,34 @@ export class RoadDrawer {
 
     if (leftDown) {
       if (!this.wasLeftDown) {
-        // Starting a new left-click drag — determine mode
+        // Starting a new left-click — determine mode
         this.lastGridPos = { ...gridPos };
-        const cell = this.grid.getCell(gridPos.gx, gridPos.gy);
-        const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.House || cell.type === CellType.Business);
-
         this.mode = 'place';
-        if (isOccupied) {
+
+        if (this.input.state.shiftDown && this.lastBuiltPos) {
+          // Shift-click: build L-shaped road from lastBuiltPos to clicked cell
+          let prev = { ...this.lastBuiltPos };
+          this.manhattanLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+            this.tryPlace(x, y);
+            if (prev.gx !== x || prev.gy !== y) {
+              this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
+            }
+            prev = { gx: x, gy: y };
+          });
           this.prevPlacedPos = { ...gridPos };
+          this.lastBuiltPos = { ...gridPos };
         } else {
-          this.prevPlacedPos = null;
-          this.tryPlace(gridPos.gx, gridPos.gy);
-          this.prevPlacedPos = { ...gridPos };
+          const cell = this.grid.getCell(gridPos.gx, gridPos.gy);
+          const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.House || cell.type === CellType.Business);
+
+          if (isOccupied) {
+            this.prevPlacedPos = { ...gridPos };
+          } else {
+            this.prevPlacedPos = null;
+            this.tryPlace(gridPos.gx, gridPos.gy);
+            this.prevPlacedPos = { ...gridPos };
+          }
+          this.lastBuiltPos = { ...gridPos };
         }
       } else if (this.lastGridPos && (gridPos.gx !== this.lastGridPos.gx || gridPos.gy !== this.lastGridPos.gy)) {
         if (this.mode === 'place') {
@@ -64,6 +81,7 @@ export class RoadDrawer {
             }
             this.prevPlacedPos = { gx: x, gy: y };
           });
+          this.lastBuiltPos = { ...gridPos };
         }
         this.lastGridPos = { ...gridPos };
       }
@@ -122,6 +140,25 @@ export class RoadDrawer {
       this.money.refund(ROAD_REFUND);
       this.onRoadDelete?.();
     }
+  }
+
+  private manhattanLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let x = x0;
+    let y = y0;
+    // Walk horizontally first
+    while (x !== x1) {
+      callback(x, y);
+      x += sx;
+    }
+    // Then walk vertically
+    while (y !== y1) {
+      callback(x, y);
+      y += sy;
+    }
+    // Final cell
+    callback(x1, y1);
   }
 
   private bresenhamLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {

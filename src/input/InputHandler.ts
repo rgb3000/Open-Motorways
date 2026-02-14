@@ -4,6 +4,7 @@ import { TILE_SIZE } from '../constants';
 export interface InputState {
   leftDown: boolean;
   rightDown: boolean;
+  shiftDown: boolean;
   gridPos: GridPos;
   canvasX: number;
   canvasY: number;
@@ -13,6 +14,7 @@ export class InputHandler {
   readonly state: InputState = {
     leftDown: false,
     rightDown: false,
+    shiftDown: false,
     gridPos: { gx: -1, gy: -1 },
     canvasX: 0,
     canvasY: 0,
@@ -54,22 +56,26 @@ export class InputHandler {
 
   private onMouseDown(e: MouseEvent): void {
     this.updatePosition(e);
+    this.state.shiftDown = e.shiftKey;
     if (e.button === 0) this.state.leftDown = true;
     if (e.button === 2) this.state.rightDown = true;
   }
 
   private onMouseUp(e: MouseEvent): void {
     this.updatePosition(e);
+    this.state.shiftDown = e.shiftKey;
     if (e.button === 0) this.state.leftDown = false;
     if (e.button === 2) this.state.rightDown = false;
   }
 
   private onMouseMove(e: MouseEvent): void {
     this.updatePosition(e);
+    this.state.shiftDown = e.shiftKey;
   }
 
   private onMouseLeave(): void {
     this.state.leftDown = false;
     this.state.rightDown = false;
+    this.state.shiftDown = false;
   }
 }
