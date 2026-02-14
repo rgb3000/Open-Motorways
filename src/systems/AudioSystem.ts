@@ -12,6 +12,7 @@ export class AudioSystem {
   private bass!: Tone.FMSynth;
   private bassPart!: Tone.Part;
   private chimeSynth!: Tone.PolySynth;
+  private returnSynth!: Tone.Synth;
   private hatsActive = false;
   private hatsCycleLoop!: Tone.Loop;
   private initialized = false;
@@ -128,6 +129,13 @@ export class AudioSystem {
       envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.2 },
     }).toDestination();
 
+    // Home-return ping — soft ascending two-note sound
+    this.returnSynth = new Tone.Synth({
+      volume: -10,
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.15 },
+    }).toDestination();
+
     Tone.getTransport().bpm.value = 125;
     this.initialized = true;
   }
@@ -147,6 +155,13 @@ export class AudioSystem {
     this.chimeSynth.triggerAttackRelease(['C4', 'E4', 'G4'], '8n');
   }
 
+  playHomeReturn(): void {
+    if (!this.initialized) return;
+    const now = Tone.now();
+    this.returnSynth.triggerAttackRelease('E5', '16n', now);
+    this.returnSynth.triggerAttackRelease('G5', '16n', now + 0.1);
+  }
+
   dispose(): void {
     if (!this.initialized) return;
     this.stopMusic();
@@ -160,6 +175,7 @@ export class AudioSystem {
     this.bassPart.dispose();
     this.bass.dispose();
     this.chimeSynth.dispose();
+    this.returnSynth.dispose();
     this.distortion.dispose();
     this.drumCompress.dispose();
     this.initialized = false;

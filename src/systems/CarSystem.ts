@@ -60,6 +60,7 @@ export class CarSystem {
   private pathfinder: Pathfinder;
   private grid: Grid;
   onDelivery: (() => void) | null = null;
+  onHomeReturn: (() => void) | null = null;
 
   constructor(pathfinder: Pathfinder, grid: Grid) {
     this.pathfinder = pathfinder;
@@ -610,6 +611,7 @@ export class CarSystem {
       if (home) {
         home.availableCars++;
       }
+      this.onHomeReturn?.();
       toRemove.push(car.id);
     }
   }

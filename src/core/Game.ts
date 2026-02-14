@@ -116,6 +116,7 @@ export class Game {
     await this.audioSystem.init();
     this.audioSystem.startMusic();
     this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
+    this.carSystem.onHomeReturn = () => this.audioSystem.playHomeReturn();
     this.state = GameState.Playing;
   }
 
@@ -149,6 +150,7 @@ export class Game {
     await this.audioSystem.init();
     this.audioSystem.startMusic();
     this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
+    this.carSystem.onHomeReturn = () => this.audioSystem.playHomeReturn();
     this.state = GameState.Playing;
   }
 
