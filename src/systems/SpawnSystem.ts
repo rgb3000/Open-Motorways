@@ -35,6 +35,7 @@ export class SpawnSystem {
   private currentSpawnInterval = SPAWN_INTERVAL;
   private grid: Grid;
   private dirty = false;
+  onSpawn: (() => void) | null = null;
 
   get isDirty(): boolean {
     return this.dirty;
@@ -163,6 +164,7 @@ export class SpawnSystem {
 
     const house = new House(pos, color, connDir);
     this.houses.push(house);
+    this.onSpawn?.();
 
     // House cell
     this.grid.setCell(pos.gx, pos.gy, {
@@ -197,6 +199,7 @@ export class SpawnSystem {
     this.dirty = true;
     const business = new Business(pos, color, orientation, connectorSide);
     this.businesses.push(business);
+    this.onSpawn?.();
 
     // Building cell
     this.grid.setCell(pos.gx, pos.gy, {

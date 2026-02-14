@@ -5,6 +5,7 @@ export class SoundEffectSystem {
   private returnSynth!: Tone.PolySynth;
   private placeSynth!: Tone.Synth;
   private deleteSynth!: Tone.Synth;
+  private spawnSynth!: Tone.MembraneSynth;
   private initialized = false;
 
   async init(): Promise<void> {
@@ -37,6 +38,15 @@ export class SoundEffectSystem {
       volume: -16,
       oscillator: { type: 'square' },
       envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.03 },
+    }).toDestination();
+
+    // Building spawn — deep kick thump
+    this.spawnSynth = new Tone.MembraneSynth({
+      volume: -8,
+      pitchDecay: 0.03,
+      octaves: 6,
+      oscillator: { type: 'square4' },
+      envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.05 },
     }).toDestination();
 
     this.initialized = true;
@@ -76,12 +86,23 @@ export class SoundEffectSystem {
     this.deleteSynth.triggerAttackRelease('A4', 0.05, t);
   }
 
+  private lastSpawnTime = 0;
+
+  playSpawn(): void {
+    if (!this.initialized) return;
+    const now = Tone.now();
+    const t = Math.max(now, this.lastSpawnTime + 0.12);
+    this.lastSpawnTime = t;
+    this.spawnSynth.triggerAttack('C1', t);
+  }
+
   dispose(): void {
     if (!this.initialized) return;
     this.chimeSynth.dispose();
     this.returnSynth.dispose();
     this.placeSynth.dispose();
     this.deleteSynth.dispose();
+    this.spawnSynth.dispose();
     this.initialized = false;
   }
 }

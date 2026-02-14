@@ -188,6 +188,7 @@ export class Game {
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
+    this.spawnSystem.onSpawn = () => this.soundEffects.playSpawn();
     this.state = GameState.Playing;
   }
 
