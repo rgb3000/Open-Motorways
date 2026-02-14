@@ -25,6 +25,7 @@ export const CAR_WIDTH = 5.0;     // px (narrow dimension, perpendicular to trav
 export const CAR_LENGTH = 8.0;    // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
+export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier approximation
 
 // Spawning
 export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color

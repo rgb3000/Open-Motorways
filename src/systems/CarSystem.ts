@@ -3,7 +3,7 @@ import type { Business } from '../entities/Business';
 import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
-import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT } from '../constants';
+import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, BEZIER_KAPPA } from '../constants';
 import { CellType, Direction, LaneId } from '../types';
 import type { GridPos } from '../types';
 import { gridToPixelCenter, manhattanDist, pixelToGrid, cubicBezier, cubicBezierTangent } from '../utils/math';
@@ -392,7 +392,7 @@ export class CarSystem {
         const li = laneIntersection(nextCenter.x, nextCenter.y, curDir, exitDir);
         p3x = li.x;
         p3y = li.y;
-        tangentDir3 = exitDir;
+        tangentDir3 = turningAtStart ? exitDir : curDir;
       } else {
         const off = laneOffset(curDir);
         p3x = nextCenter.x + off.x;
@@ -402,10 +402,11 @@ export class CarSystem {
 
       const u0 = unitVector(tangentDir0);
       const u3 = unitVector(tangentDir3);
-      const p1x = p0x + u0.x * half;
-      const p1y = p0y + u0.y * half;
-      const p2x = p3x - u3.x * half;
-      const p2y = p3y - u3.y * half;
+      const arm = half * BEZIER_KAPPA;
+      const p1x = p0x + u0.x * arm;
+      const p1y = p0y + u0.y * arm;
+      const p2x = p3x - u3.x * arm;
+      const p2y = p3y - u3.y * arm;
 
       const pos = cubicBezier(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
       const tang = cubicBezierTangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
