@@ -3,60 +3,7 @@ import { Direction } from '../../../types';
 import { TILE_SIZE } from '../../../constants';
 import { ROAD_HEIGHT, ROAD_WIDTH_RATIO, ROAD_CORNER_RADIUS, ROAD_INNER_RADIUS } from './roadConstants';
 
-export class CardinalRoadRenderer {
-  private buildOutlinePoints(
-    conns: Direction[], rh: number, half: number,
-  ): { x: number; z: number; round: 'none' | 'convex' | 'concave' }[] {
-    const up = conns.includes(Direction.Up);
-    const right = conns.includes(Direction.Right);
-    const down = conns.includes(Direction.Down);
-    const left = conns.includes(Direction.Left);
-
-    const pts: { x: number; z: number; round: 'none' | 'convex' | 'concave' }[] = [];
-
-    // NW corner
-    if (left && up) pts.push({ x: -rh, z: -rh, round: 'concave' });
-    else if (!left && !up) pts.push({ x: -rh, z: -rh, round: 'convex' });
-
-    // Up arm
-    if (up) {
-      pts.push({ x: -rh, z: -half, round: 'none' });
-      pts.push({ x: rh, z: -half, round: 'none' });
-    }
-
-    // NE corner
-    if (up && right) pts.push({ x: rh, z: -rh, round: 'concave' });
-    else if (!up && !right) pts.push({ x: rh, z: -rh, round: 'convex' });
-
-    // Right arm
-    if (right) {
-      pts.push({ x: half, z: -rh, round: 'none' });
-      pts.push({ x: half, z: rh, round: 'none' });
-    }
-
-    // SE corner
-    if (right && down) pts.push({ x: rh, z: rh, round: 'concave' });
-    else if (!right && !down) pts.push({ x: rh, z: rh, round: 'convex' });
-
-    // Down arm
-    if (down) {
-      pts.push({ x: rh, z: half, round: 'none' });
-      pts.push({ x: -rh, z: half, round: 'none' });
-    }
-
-    // SW corner
-    if (down && left) pts.push({ x: -rh, z: rh, round: 'concave' });
-    else if (!down && !left) pts.push({ x: -rh, z: rh, round: 'convex' });
-
-    // Left arm
-    if (left) {
-      pts.push({ x: -half, z: rh, round: 'none' });
-      pts.push({ x: -half, z: -rh, round: 'none' });
-    }
-
-    return pts;
-  }
-
+export class CellRoadRenderer {
   buildCellGeometries(
     geoms: THREE.BufferGeometry[],
     cx: number, cz: number,
@@ -64,8 +11,6 @@ export class CardinalRoadRenderer {
   ): void {
     const half = TILE_SIZE / 2;
     const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
-
-    // Road fill
     this.buildRoundedCellShape(geoms, cx, cz, roadHalf, connections, half, ROAD_HEIGHT, 0);
   }
 
@@ -77,9 +22,76 @@ export class CardinalRoadRenderer {
   ): void {
     const half = TILE_SIZE / 2;
     const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
-
-    // Outline (slightly larger, slightly lower)
     this.buildRoundedCellShape(geoms, cx, cz, roadHalf + outlineExtra, connections, half, ROAD_HEIGHT, -0.01);
+  }
+
+  private buildOutlinePoints(
+    conns: Direction[], rh: number, half: number,
+  ): { x: number; z: number; round: 'none' | 'convex' | 'concave' }[] {
+    const up = conns.includes(Direction.Up);
+    const right = conns.includes(Direction.Right);
+    const down = conns.includes(Direction.Down);
+    const left = conns.includes(Direction.Left);
+    const diagNW = conns.includes(Direction.UpLeft);
+    const diagNE = conns.includes(Direction.UpRight);
+    const diagSE = conns.includes(Direction.DownRight);
+    const diagSW = conns.includes(Direction.DownLeft);
+
+    const pts: { x: number; z: number; round: 'none' | 'convex' | 'concave' }[] = [];
+
+    // NW corner
+    if ((left && up) || diagNW) pts.push({ x: -rh, z: -rh, round: 'concave' });
+    else if (!left && !up) pts.push({ x: -rh, z: -rh, round: 'convex' });
+
+    // Up arm / top edge
+    if (up) {
+      pts.push({ x: -rh, z: -half, round: 'none' });
+      pts.push({ x: rh, z: -half, round: 'none' });
+    } else {
+      if (diagNW) pts.push({ x: -rh, z: -half, round: 'none' });
+      if (diagNE) pts.push({ x: rh, z: -half, round: 'none' });
+    }
+
+    // NE corner
+    if ((up && right) || diagNE) pts.push({ x: rh, z: -rh, round: 'concave' });
+    else if (!up && !right) pts.push({ x: rh, z: -rh, round: 'convex' });
+
+    // Right arm / right edge
+    if (right) {
+      pts.push({ x: half, z: -rh, round: 'none' });
+      pts.push({ x: half, z: rh, round: 'none' });
+    } else {
+      if (diagNE) pts.push({ x: half, z: -rh, round: 'none' });
+      if (diagSE) pts.push({ x: half, z: rh, round: 'none' });
+    }
+
+    // SE corner
+    if ((right && down) || diagSE) pts.push({ x: rh, z: rh, round: 'concave' });
+    else if (!right && !down) pts.push({ x: rh, z: rh, round: 'convex' });
+
+    // Down arm / bottom edge
+    if (down) {
+      pts.push({ x: rh, z: half, round: 'none' });
+      pts.push({ x: -rh, z: half, round: 'none' });
+    } else {
+      if (diagSE) pts.push({ x: rh, z: half, round: 'none' });
+      if (diagSW) pts.push({ x: -rh, z: half, round: 'none' });
+    }
+
+    // SW corner
+    if ((down && left) || diagSW) pts.push({ x: -rh, z: rh, round: 'concave' });
+    else if (!down && !left) pts.push({ x: -rh, z: rh, round: 'convex' });
+
+    // Left arm / left edge
+    if (left) {
+      pts.push({ x: -half, z: rh, round: 'none' });
+      pts.push({ x: -half, z: -rh, round: 'none' });
+    } else {
+      if (diagSW) pts.push({ x: -half, z: rh, round: 'none' });
+      if (diagNW) pts.push({ x: -half, z: -rh, round: 'none' });
+    }
+
+    return pts;
   }
 
   private buildRoundedCellShape(
@@ -88,10 +100,7 @@ export class CardinalRoadRenderer {
     rh: number, conns: Direction[], half: number,
     height: number, yOffset: number,
   ): void {
-    const cardinalConns = conns.filter(
-      d => d === Direction.Up || d === Direction.Down || d === Direction.Left || d === Direction.Right,
-    );
-    const pts = this.buildOutlinePoints(cardinalConns, rh, half);
+    const pts = this.buildOutlinePoints(conns, rh, half);
     if (pts.length < 3) return;
 
     const armLen = half - rh;

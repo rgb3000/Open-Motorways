@@ -28,8 +28,8 @@ export class DiagonalRoadRenderer {
     const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
 
     for (const strip of strips) {
-      this.buildRibbonGeometry(strip, roadGeoms, roadHalf, half, 0);
-      this.buildRibbonGeometry(strip, outlineGeoms, roadHalf + outlineExtra, half, -0.01);
+      this.buildRibbonGeometry(strip, roadGeoms, roadHalf, half, -0.005);
+      this.buildRibbonGeometry(strip, outlineGeoms, roadHalf + outlineExtra, half, -0.015);
     }
   }
 
@@ -156,17 +156,11 @@ export class DiagonalRoadRenderer {
     const perpX = -dirZ;
     const perpZ = dirX;
 
-    // Extend ribbon beyond first/last cell centers by roadHalf
+    // Ribbon starts/stops at cell centers (stubs handled by CellRoadRenderer)
     const firstCenter = centers[0];
     const lastCenter = centers[centers.length - 1];
-    const extStart = {
-      x: firstCenter.x - dirX * roadHalf,
-      z: firstCenter.z - dirZ * roadHalf,
-    };
-    const extEnd = {
-      x: lastCenter.x + dirX * roadHalf,
-      z: lastCenter.z + dirZ * roadHalf,
-    };
+    const extStart = { x: firstCenter.x, z: firstCenter.z };
+    const extEnd = { x: lastCenter.x, z: lastCenter.z };
 
     // Only apply rounded caps at free ends (no cardinal connection)
     const capStart = !this.hasCardinalConnection(cells[0].gx, cells[0].gy);

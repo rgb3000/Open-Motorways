@@ -166,9 +166,11 @@ export class BuildingLayer {
     const lotSize = TILE_SIZE * 0.9;
     const lotHeight = 0.15;
     const lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
-    const lotGeom = new THREE.BoxGeometry(lotSize, lotHeight, lotSize);
+    const lotShape = roundedRectShape(lotSize, lotSize, 3);
+    const lotGeom = new THREE.ExtrudeGeometry(lotShape, { depth: lotHeight, bevelEnabled: false, curveSegments: 4 });
+    lotGeom.rotateX(-Math.PI / 2);
     const lot = new THREE.Mesh(lotGeom, lotMat);
-    lot.position.set(lotPx, lotHeight / 2, lotPz);
+    lot.position.set(lotPx, 0, lotPz);
     lot.receiveShadow = true;
     group.add(lot);
 
