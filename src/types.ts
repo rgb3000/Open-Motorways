@@ -43,6 +43,7 @@ export const LaneId = {
 export type LaneId = (typeof LaneId)[keyof typeof LaneId];
 
 export const GameState = {
+  WaitingToStart: 3,
   Playing: 0,
   Paused: 1,
   GameOver: 2,

@@ -4,7 +4,7 @@ import type { Game } from '../core/Game';
 import { GameState, ToolType } from '../types';
 
 export function GameUI({ game }: { game: Game }) {
-  const [state, setState] = useState<GameState>(GameState.Playing);
+  const [state, setState] = useState<GameState>(game.getState());
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
   const [activeTool, setActiveTool] = useState<ToolType>(game.getActiveTool());
@@ -28,6 +28,9 @@ export function GameUI({ game }: { game: Game }) {
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
       <HUD score={score} time={timeStr} state={state} onPause={() => game.togglePause()} />
       <Toolbar activeTool={activeTool} onToolSelect={(tool) => game.setActiveTool(tool)} />
+      {state === GameState.WaitingToStart && (
+        <StartOverlay onStart={() => game.startGame()} />
+      )}
       {state === GameState.GameOver && (
         <GameOverOverlay score={score} onRestart={() => game.restart()} />
       )}
@@ -133,6 +136,40 @@ function ToolButton({ icon, label, shortcut, active, onClick }: {
     >
       {icon}
     </button>
+  );
+}
+
+function StartOverlay({ onStart }: { onStart: () => void }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 20,
+        pointerEvents: 'auto',
+      }}
+    >
+      <div style={{ color: '#fff', font: 'bold 48px monospace' }}>MOTERWAYS</div>
+      <button
+        onClick={onStart}
+        style={{
+          font: 'bold 20px monospace',
+          padding: '12px 32px',
+          borderRadius: 8,
+          border: 'none',
+          background: '#fff',
+          color: '#000',
+          cursor: 'pointer',
+        }}
+      >
+        Start Game
+      </button>
+    </div>
   );
 }
 

@@ -59,6 +59,7 @@ export class CarSystem {
   private score = 0;
   private pathfinder: Pathfinder;
   private grid: Grid;
+  onDelivery: (() => void) | null = null;
 
   constructor(pathfinder: Pathfinder, grid: Grid) {
     this.pathfinder = pathfinder;
@@ -572,6 +573,7 @@ export class CarSystem {
       if (biz && biz.demandPins > 0) {
         biz.demandPins--;
         this.score++;
+        this.onDelivery?.();
       }
 
       const dest = car.path[car.path.length - 1];

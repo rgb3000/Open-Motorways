@@ -9,6 +9,7 @@ import { RoadSystem } from '../systems/RoadSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { DemandSystem } from '../systems/DemandSystem';
 import { CarSystem } from '../systems/CarSystem';
+import { AudioSystem } from '../systems/AudioSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
 
 export class Game {
@@ -23,7 +24,8 @@ export class Game {
   private demandSystem: DemandSystem;
   private carSystem: CarSystem;
   private pathfinder: Pathfinder;
-  private state: GameState = GameState.Playing;
+  private audioSystem: AudioSystem = new AudioSystem();
+  private state: GameState = GameState.WaitingToStart;
   private elapsedTime = 0;
   private stateCallback: ((state: GameState, score: number, time: number) => void) | null = null;
   private activeTool: ToolType = ToolType.Road;
@@ -109,12 +111,26 @@ export class Game {
     this.stateCallback = cb;
   }
 
-  togglePause(): void {
-    if (this.state === GameState.Playing) this.state = GameState.Paused;
-    else if (this.state === GameState.Paused) this.state = GameState.Playing;
+  async startGame(): Promise<void> {
+    if (this.state !== GameState.WaitingToStart) return;
+    await this.audioSystem.init();
+    this.audioSystem.startMusic();
+    this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
+    this.state = GameState.Playing;
   }
 
-  restart(): void {
+  togglePause(): void {
+    if (this.state === GameState.Playing) {
+      this.state = GameState.Paused;
+      this.audioSystem.stopMusic();
+    } else if (this.state === GameState.Paused) {
+      this.state = GameState.Playing;
+      this.audioSystem.startMusic();
+    }
+  }
+
+  async restart(): Promise<void> {
+    this.audioSystem.dispose();
     this.renderer.dispose();
     this.grid = new Grid();
     this.roadSystem = new RoadSystem(this.grid);
@@ -125,14 +141,20 @@ export class Game {
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, () => this.activeTool);
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.resize(window.innerWidth, window.innerHeight);
-    this.state = GameState.Playing;
     this.elapsedTime = 0;
     this.activeTool = ToolType.Road;
     this.toolChangeCallback?.(this.activeTool);
     this.spawnSystem.spawnInitial();
+    this.audioSystem = new AudioSystem();
+    await this.audioSystem.init();
+    this.audioSystem.startMusic();
+    this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
+    this.state = GameState.Playing;
   }
 
   private update(dt: number): void {
+    if (this.state === GameState.WaitingToStart) return;
+
     // Road editing — always runs (even when paused)
     this.roadDrawer.update();
 
@@ -153,6 +175,7 @@ export class Game {
 
     if (this.demandSystem.isGameOver) {
       this.state = GameState.GameOver;
+      this.audioSystem.stopMusic();
     }
   }
 
