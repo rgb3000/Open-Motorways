@@ -56,7 +56,7 @@ export class Game {
       canvas,
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface());
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -163,7 +163,7 @@ export class Game {
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.money = STARTING_MONEY;
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface());
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;

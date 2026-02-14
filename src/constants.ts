@@ -30,6 +30,7 @@ export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier
 // Parking
 export const PARKING_SLOTS = 4;
 export const UNLOAD_TIME = 3; // seconds
+export const PARKING_EXIT_DELAY = 1; // seconds between departures from same lot
 
 // Spawning
 export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color
@@ -40,6 +41,7 @@ export const SPAWN_INTERVAL = 12;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 6;
 export const SPAWN_INTERVAL_DECAY = 0.95;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
+export const INNER_SPAWN_THRESHOLD = 50;
 
 // Money
 export const STARTING_MONEY = 400;

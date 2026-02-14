@@ -1,4 +1,5 @@
 import type { Grid } from '../core/Grid';
+import { OPPOSITE_DIR } from '../core/Grid';
 import { CellType, Direction, TrafficLevel, type GridPos } from '../types';
 import { gridPosEqual, gridPosKey, manhattanDist } from '../utils/math';
 import { PriorityQueue } from '../utils/PriorityQueue';
@@ -99,7 +100,11 @@ export class Pathfinder {
             if (!currentCell.roadConnections.includes(dir)) continue;
           }
         }
-        // Houses and Businesses can exit in any direction (no connection check)
+        // Houses can only exit in their connector direction
+        if (currentCell && currentCell.type === CellType.House) {
+          if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
+        }
+        // Businesses can exit in any direction (no connection check)
 
         const nx = current.gx + dx;
         const ny = current.gy + dy;
@@ -112,6 +117,10 @@ export class Pathfinder {
         if (cell.type === CellType.Empty) continue;
         if (cell.type === CellType.Business) continue; // building cell is impassable
         if ((cell.type === CellType.House || cell.type === CellType.ParkingLot) && !isDestination) continue;
+        // Houses can only be entered from the connector direction
+        if (cell.type === CellType.House && cell.connectorDir !== null) {
+          if (dir !== OPPOSITE_DIR[cell.connectorDir]) continue;
+        }
 
         // Determine level when entering the neighbor cell
         let nextLevel: TrafficLevel = TrafficLevel.Ground;

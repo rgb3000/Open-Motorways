@@ -8,6 +8,7 @@ export const CarState = {
   GoingHome: 2,
   Stranded: 3,
   Unloading: 4,
+  WaitingToExit: 5,
 } as const;
 export type CarState = (typeof CarState)[keyof typeof CarState];
 

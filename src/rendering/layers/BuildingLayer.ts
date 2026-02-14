@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS } from '../../constants';
-import type { GameColor } from '../../types';
+import { Direction } from '../../types';
 
 function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
   const shape = new THREE.Shape();
@@ -21,17 +21,32 @@ function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
 
 export class BuildingLayer {
   private houseMeshes = new Map<string, THREE.Group>();
+  private houseConnectorDirs = new Map<string, Direction>();
   private businessMeshes = new Map<string, THREE.Group>();
   private demandPinRefs = new Map<string, THREE.Mesh[]>();
 
   update(scene: THREE.Scene, houses: House[], businesses: Business[]): void {
-    // Add meshes for new houses
+    // Add or update meshes for houses
     for (const house of houses) {
-      if (this.houseMeshes.has(house.id)) continue;
+      const prevDir = this.houseConnectorDirs.get(house.id);
+      if (this.houseMeshes.has(house.id) && prevDir === house.connectorDir) continue;
 
-      const group = this.createHouseMesh(house.pos.gx, house.pos.gy, house.color);
+      // Remove old mesh if connector direction changed
+      if (this.houseMeshes.has(house.id)) {
+        const oldGroup = this.houseMeshes.get(house.id)!;
+        scene.remove(oldGroup);
+        oldGroup.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.dispose();
+            (obj.material as THREE.Material).dispose();
+          }
+        });
+      }
+
+      const group = this.createHouseMesh(house);
       scene.add(group);
       this.houseMeshes.set(house.id, group);
+      this.houseConnectorDirs.set(house.id, house.connectorDir);
     }
 
     // Add meshes for new businesses
@@ -51,7 +66,10 @@ export class BuildingLayer {
     }
   }
 
-  private createHouseMesh(gx: number, gy: number, color: GameColor): THREE.Group {
+  private createHouseMesh(house: House): THREE.Group {
+    const gx = house.pos.gx;
+    const gy = house.pos.gy;
+    const color = house.color;
     const group = new THREE.Group();
     const hexColor = COLOR_MAP[color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
@@ -76,10 +94,22 @@ export class BuildingLayer {
     roof.castShadow = true;
     group.add(roof);
 
+    // Ground plate filling exactly 1 grid cell beneath the house
+    const plateSize = TILE_SIZE;
+    const plateShape = roundedRectShape(plateSize, plateSize, 3);
+    const plateHeight = 0.4;
+    const plateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: plateHeight, bevelEnabled: false, curveSegments: 4 });
+    plateGeom.rotateX(-Math.PI / 2);
+    const plateMat = new THREE.MeshStandardMaterial({ color: '#777777' });
+    const plate = new THREE.Mesh(plateGeom, plateMat);
+    plate.position.set(0, 0.05, 0);
+    plate.receiveShadow = true;
+    group.add(plate);
+
     // Position in world: pixel center of tile
     const px = gx * TILE_SIZE + TILE_SIZE / 2;
-    const py = gy * TILE_SIZE + TILE_SIZE / 2;
-    group.position.set(px, 0, py);
+    const pz = gy * TILE_SIZE + TILE_SIZE / 2;
+    group.position.set(px, 0, pz);
 
     return group;
   }

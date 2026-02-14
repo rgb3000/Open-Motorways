@@ -1,8 +1,10 @@
 import type { InputHandler } from './InputHandler';
 import type { RoadSystem } from '../systems/RoadSystem';
 import type { Grid } from '../core/Grid';
+import { OPPOSITE_DIR } from '../core/Grid';
+import type { House } from '../entities/House';
 import type { GridPos } from '../types';
-import { CellType, ToolType } from '../types';
+import { CellType, Direction, ToolType } from '../types';
 import { GRID_COLS, GRID_ROWS, ROAD_COST, BRIDGE_COST, ROAD_REFUND, BRIDGE_REFUND } from '../constants';
 
 export interface MoneyInterface {
@@ -11,7 +13,7 @@ export interface MoneyInterface {
   refund(amount: number): void;
 }
 
-type DrawMode = 'none' | 'place';
+type DrawMode = 'none' | 'place' | 'connector-drag';
 
 export class RoadDrawer {
   private lastGridPos: GridPos | null = null;
@@ -22,20 +24,27 @@ export class RoadDrawer {
   private grid: Grid;
   private getActiveTool: () => ToolType;
   private money: MoneyInterface;
+  private getHouses: () => House[];
 
   private mode: DrawMode = 'none';
   private prevPlacedPos: GridPos | null = null;
   private lastBuiltPos: GridPos | null = null;
+  private draggingHouse: House | null = null;
 
   onRoadPlace: (() => void) | null = null;
   onRoadDelete: (() => void) | null = null;
 
-  constructor(input: InputHandler, roadSystem: RoadSystem, grid: Grid, getActiveTool: () => ToolType, money: MoneyInterface) {
+  constructor(
+    input: InputHandler, roadSystem: RoadSystem, grid: Grid,
+    getActiveTool: () => ToolType, money: MoneyInterface,
+    getHouses: () => House[],
+  ) {
     this.input = input;
     this.roadSystem = roadSystem;
     this.grid = grid;
     this.getActiveTool = getActiveTool;
     this.money = money;
+    this.getHouses = getHouses;
   }
 
   update(): void {
@@ -45,35 +54,65 @@ export class RoadDrawer {
       if (!this.wasLeftDown) {
         // Starting a new left-click — determine mode
         this.lastGridPos = { ...gridPos };
-        this.mode = 'place';
 
-        if (this.input.state.shiftDown && this.lastBuiltPos) {
-          // Shift-click: build L-shaped road from lastBuiltPos to clicked cell
-          let prev = { ...this.lastBuiltPos };
-          this.manhattanLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
-            this.tryPlace(x, y);
-            if (prev.gx !== x || prev.gy !== y) {
-              this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
-            }
-            prev = { gx: x, gy: y };
-          });
-          this.prevPlacedPos = { ...gridPos };
-          this.lastBuiltPos = { ...gridPos };
-        } else {
-          const cell = this.grid.getCell(gridPos.gx, gridPos.gy);
-          const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.House || cell.type === CellType.Business);
-
-          if (isOccupied) {
-            this.prevPlacedPos = { ...gridPos };
+        // Check if clicking on a house cell → connector drag mode
+        const cell = this.grid.getCell(gridPos.gx, gridPos.gy);
+        if (cell && cell.type === CellType.House && cell.entityId) {
+          const house = this.getHouses().find(h => h.id === cell.entityId);
+          if (house) {
+            this.mode = 'connector-drag';
+            this.draggingHouse = house;
           } else {
-            this.prevPlacedPos = null;
-            this.tryPlace(gridPos.gx, gridPos.gy);
-            this.prevPlacedPos = { ...gridPos };
+            this.mode = 'place';
           }
-          this.lastBuiltPos = { ...gridPos };
+        } else {
+          this.mode = 'place';
+        }
+
+        if (this.mode === 'place') {
+          if (this.input.state.shiftDown && this.lastBuiltPos) {
+            // Shift-click: build L-shaped road from lastBuiltPos to clicked cell
+            let prev = { ...this.lastBuiltPos };
+            this.manhattanLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+              this.tryPlace(x, y);
+              if (prev.gx !== x || prev.gy !== y) {
+                this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
+              }
+              prev = { gx: x, gy: y };
+            });
+            this.prevPlacedPos = { ...gridPos };
+            this.lastBuiltPos = { ...gridPos };
+          } else {
+            const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.House || cell.type === CellType.Business);
+
+            if (isOccupied) {
+              this.prevPlacedPos = { ...gridPos };
+            } else {
+              this.prevPlacedPos = null;
+              this.tryPlace(gridPos.gx, gridPos.gy);
+              this.prevPlacedPos = { ...gridPos };
+            }
+            this.lastBuiltPos = { ...gridPos };
+          }
         }
       } else if (this.lastGridPos && (gridPos.gx !== this.lastGridPos.gx || gridPos.gy !== this.lastGridPos.gy)) {
-        if (this.mode === 'place') {
+        if (this.mode === 'connector-drag' && this.draggingHouse) {
+          // Check if dragged to an adjacent cell of the house
+          const house = this.draggingHouse;
+          const dx = gridPos.gx - house.pos.gx;
+          const dy = gridPos.gy - house.pos.gy;
+          if (Math.abs(dx) + Math.abs(dy) === 1) {
+            let newDir: Direction;
+            if (dx === 1) newDir = Direction.Right;
+            else if (dx === -1) newDir = Direction.Left;
+            else if (dy === 1) newDir = Direction.Down;
+            else newDir = Direction.Up;
+
+            if (newDir !== house.connectorDir) {
+              this.relocateHouseConnector(house, newDir);
+            }
+          }
+        } else if (this.mode === 'place') {
           this.bresenhamLine(this.lastGridPos.gx, this.lastGridPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
             this.tryPlace(x, y);
             if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
@@ -103,10 +142,83 @@ export class RoadDrawer {
       this.lastGridPos = null;
       this.mode = 'none';
       this.prevPlacedPos = null;
+      this.draggingHouse = null;
     }
 
     this.wasLeftDown = leftDown;
     this.wasRightDown = rightDown;
+  }
+
+  private relocateHouseConnector(house: House, newDir: Direction): void {
+    const oldConnectorPos = house.connectorPos;
+
+    // Check target cell is empty
+    const off = this.grid.getDirectionOffset(newDir);
+    const newConnX = house.pos.gx + off.gx;
+    const newConnY = house.pos.gy + off.gy;
+    const targetCell = this.grid.getCell(newConnX, newConnY);
+    if (!targetCell || targetCell.type !== CellType.Empty) return;
+
+    // Remove old connector cell — disconnect from neighbors first
+    const oldCell = this.grid.getCell(oldConnectorPos.gx, oldConnectorPos.gy);
+    if (oldCell && oldCell.type === CellType.Road) {
+      // Disconnect neighbors from old connector (except permanent house connection)
+      for (const dir of this.grid.getAllDirections()) {
+        const neighbor = this.grid.getNeighbor(oldConnectorPos.gx, oldConnectorPos.gy, dir);
+        if (!neighbor) continue;
+        const oppDir = OPPOSITE_DIR[dir];
+        // Skip the house cell
+        if (neighbor.cell.type === CellType.House) continue;
+        neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
+      }
+
+      // Clear old connector cell
+      this.grid.setCell(oldConnectorPos.gx, oldConnectorPos.gy, {
+        type: CellType.Empty,
+        entityId: null,
+        roadConnections: [],
+        color: null,
+        hasBridge: false,
+        bridgeAxis: null,
+        bridgeConnections: [],
+        connectorDir: null,
+      });
+    }
+
+    // Update house
+    house.setConnectorDir(newDir);
+
+    // Update house cell's connectorDir
+    this.grid.setCell(house.pos.gx, house.pos.gy, {
+      connectorDir: newDir,
+    });
+
+    // Place new connector road cell
+    const connToHouseDir = house.getConnectorToHouseDir();
+    this.grid.setCell(newConnX, newConnY, {
+      type: CellType.Road,
+      entityId: house.id,
+      color: null,
+      roadConnections: [connToHouseDir],
+      hasBridge: false,
+      bridgeAxis: null,
+      bridgeConnections: [],
+      connectorDir: null,
+    });
+
+    // Connect new connector to any adjacent roads
+    for (const dir of this.grid.getAllDirections()) {
+      // Skip connection toward house (already permanent)
+      if (dir === connToHouseDir) continue;
+      const neighbor = this.grid.getNeighbor(newConnX, newConnY, dir);
+      if (!neighbor) continue;
+      if (neighbor.cell.type === CellType.Road) {
+        this.roadSystem.connectRoads(newConnX, newConnY, neighbor.gx, neighbor.gy);
+      }
+    }
+
+    // Mark road system dirty to trigger repath and redraw
+    this.roadSystem.markDirty();
   }
 
   private tryPlace(gx: number, gy: number): void {

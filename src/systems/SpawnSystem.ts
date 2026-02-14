@@ -1,7 +1,7 @@
 import type { Grid } from '../core/Grid';
 import { House } from '../entities/House';
 import { Business } from '../entities/Business';
-import { CellType, type GameColor, type GridPos } from '../types';
+import { CellType, Direction, type GameColor, type GridPos } from '../types';
 import {
   COLOR_UNLOCK_ORDER,
   COLOR_UNLOCK_INTERVAL,
@@ -10,6 +10,7 @@ import {
   HOUSE_CLUSTER_RADIUS,
   HOUSE_SPAWN_PROBABILITY,
   INITIAL_SPAWN_DELAY,
+  INNER_SPAWN_THRESHOLD,
   MIN_BUSINESS_DISTANCE,
   MIN_SPAWN_INTERVAL,
   SPAWN_INTERVAL,
@@ -60,13 +61,13 @@ export class SpawnSystem {
   }
 
   spawnInitial(): void {
-    const hx = Math.floor(GRID_COLS * 0.3) + Math.floor(Math.random() * 5 - 2);
-    const hy = Math.floor(GRID_ROWS * 0.5) + Math.floor(Math.random() * 3 - 1);
+    const hx = Math.floor(GRID_COLS * 0.45) + Math.floor(Math.random() * 5 - 2);
+    const hy = Math.floor(GRID_ROWS * 0.45) + Math.floor(Math.random() * 3 - 1);
     this.spawnHouse({ gx: hx, gy: hy }, COLOR_UNLOCK_ORDER[0]);
 
     // For initial business, find an L-shape spot near desired location
-    const bx = Math.floor(GRID_COLS * 0.7) + Math.floor(Math.random() * 5 - 2);
-    const by = Math.floor(GRID_ROWS * 0.5) + Math.floor(Math.random() * 3 - 1);
+    const bx = Math.floor(GRID_COLS * 0.55) + Math.floor(Math.random() * 5 - 2);
+    const by = Math.floor(GRID_ROWS * 0.55) + Math.floor(Math.random() * 3 - 1);
     const spot = this.findEmptyLShapeNear({ gx: bx, gy: by }, 5);
     if (spot) {
       this.spawnBusiness(spot.pos, COLOR_UNLOCK_ORDER[0], spot.orientation, spot.connectorSide);
@@ -114,11 +115,11 @@ export class SpawnSystem {
 
     if (sameColorHouses.length > 0) {
       const anchor = sameColorHouses[Math.floor(Math.random() * sameColorHouses.length)];
-      pos = this.findEmptyNear(anchor.pos, HOUSE_CLUSTER_RADIUS);
+      pos = this.findEmptyWithAdjacentEmpty(anchor.pos, HOUSE_CLUSTER_RADIUS);
     }
 
     if (!pos) {
-      pos = this.findRandomEmpty();
+      pos = this.findRandomEmptyWithAdjacentEmpty();
     }
 
     if (pos) {
@@ -146,12 +147,41 @@ export class SpawnSystem {
 
   private spawnHouse(pos: GridPos, color: GameColor): void {
     this.dirty = true;
-    const house = new House(pos, color);
+
+    // Find an empty adjacent cell for the connector
+    const tryDirs = [Direction.Down, Direction.Right, Direction.Up, Direction.Left];
+    let connDir: Direction = Direction.Down;
+    for (const dir of tryDirs) {
+      const off = this.grid.getDirectionOffset(dir);
+      const nx = pos.gx + off.gx;
+      const ny = pos.gy + off.gy;
+      if (this.isCellEmpty(nx, ny)) {
+        connDir = dir;
+        break;
+      }
+    }
+
+    const house = new House(pos, color, connDir);
     this.houses.push(house);
+
+    // House cell
     this.grid.setCell(pos.gx, pos.gy, {
       type: CellType.House,
       entityId: house.id,
       color,
+      hasBridge: false,
+      bridgeAxis: null,
+      bridgeConnections: [],
+      connectorDir: connDir,
+    });
+
+    // Connector road cell owned by the house
+    const connToHouseDir = house.getConnectorToHouseDir();
+    this.grid.setCell(house.connectorPos.gx, house.connectorPos.gy, {
+      type: CellType.Road,
+      entityId: house.id,
+      color: null,
+      roadConnections: [connToHouseDir],
       hasBridge: false,
       bridgeAxis: null,
       bridgeConnections: [],
@@ -205,12 +235,34 @@ export class SpawnSystem {
     });
   }
 
+  private isInnerSpawnPhase(): boolean {
+    return this.houses.length + this.businesses.length < INNER_SPAWN_THRESHOLD;
+  }
+
+  private getSpawnBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
+    if (this.isInnerSpawnPhase()) {
+      return {
+        minX: Math.floor(GRID_COLS * 0.4),
+        maxX: Math.floor(GRID_COLS * 0.6) - 1,
+        minY: Math.floor(GRID_ROWS * 0.4),
+        maxY: Math.floor(GRID_ROWS * 0.6) - 1,
+      };
+    }
+    return { minX: 0, maxX: GRID_COLS - 1, minY: 0, maxY: GRID_ROWS - 1 };
+  }
+
+  private isInBounds(gx: number, gy: number): boolean {
+    const b = this.getSpawnBounds();
+    return gx >= b.minX && gx <= b.maxX && gy >= b.minY && gy <= b.maxY;
+  }
+
   private findEmptyLShapeNear(center: GridPos, radius: number): EmptyLShape | null {
     const candidates: EmptyLShape[] = [];
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         const gx = center.gx + dx;
         const gy = center.gy + dy;
+        if (!this.isInBounds(gx, gy)) continue;
         this.tryLShapeCandidates(gx, gy, candidates);
       }
     }
@@ -219,7 +271,7 @@ export class SpawnSystem {
   }
 
   private findEmptyLShapeFarFrom(positions: GridPos[], minDist: number): EmptyLShape | null {
-    const candidates = this.getAllEmptyLShapes();
+    const candidates = this.getAllEmptyLShapes().filter(spot => this.isInBounds(spot.pos.gx, spot.pos.gy));
     const far = candidates.filter(spot => {
       return positions.every(p => manhattanDist(spot.pos, p) >= minDist);
     });
@@ -228,7 +280,7 @@ export class SpawnSystem {
   }
 
   private findRandomEmptyLShape(): EmptyLShape | null {
-    const candidates = this.getAllEmptyLShapes();
+    const candidates = this.getAllEmptyLShapes().filter(spot => this.isInBounds(spot.pos.gx, spot.pos.gy));
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
@@ -284,15 +336,23 @@ export class SpawnSystem {
     return cell !== null && cell.type === CellType.Empty;
   }
 
-  private findEmptyNear(center: GridPos, radius: number): GridPos | null {
+  private hasAdjacentEmpty(gx: number, gy: number): boolean {
+    for (const dir of [Direction.Down, Direction.Right, Direction.Up, Direction.Left]) {
+      const off = this.grid.getDirectionOffset(dir);
+      if (this.isCellEmpty(gx + off.gx, gy + off.gy)) return true;
+    }
+    return false;
+  }
+
+  private findEmptyWithAdjacentEmpty(center: GridPos, radius: number): GridPos | null {
     const candidates: GridPos[] = [];
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         if (dx === 0 && dy === 0) continue;
         const gx = center.gx + dx;
         const gy = center.gy + dy;
-        const cell = this.grid.getCell(gx, gy);
-        if (cell && cell.type === CellType.Empty) {
+        if (!this.isInBounds(gx, gy)) continue;
+        if (this.isCellEmpty(gx, gy) && this.hasAdjacentEmpty(gx, gy)) {
           candidates.push({ gx, gy });
         }
       }
@@ -301,9 +361,11 @@ export class SpawnSystem {
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  private findRandomEmpty(): GridPos | null {
-    const empty = this.grid.getEmptyCells();
+  private findRandomEmptyWithAdjacentEmpty(): GridPos | null {
+    const empty = this.grid.getEmptyCells()
+      .filter(p => this.isInBounds(p.gx, p.gy) && this.hasAdjacentEmpty(p.gx, p.gy));
     if (empty.length === 0) return null;
     return empty[Math.floor(Math.random() * empty.length)];
   }
+
 }

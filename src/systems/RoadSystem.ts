@@ -19,6 +19,10 @@ export class RoadSystem {
     this.dirty = false;
   }
 
+  markDirty(): void {
+    this.dirty = true;
+  }
+
   placeRoad(gx: number, gy: number): boolean {
     const cell = this.grid.getCell(gx, gy);
     if (!cell || cell.type !== CellType.Empty) return false;
@@ -51,11 +55,11 @@ export class RoadSystem {
       const neighbor = this.grid.getNeighbor(gx, gy, dir);
       if (neighbor) {
         const oppDir = OPPOSITE_DIR[dir];
-        // Skip disconnecting business-owned connectors' permanent parking-lot connection
+        // Skip disconnecting entity-owned connectors' permanent connections
         if (neighbor.cell.type === CellType.Road && neighbor.cell.entityId !== null) {
-          // Check if this connection points toward the parking lot (permanent)
-          const parkingNeighbor = this.grid.getNeighbor(neighbor.gx, neighbor.gy, oppDir);
-          if (parkingNeighbor && parkingNeighbor.cell.type === CellType.ParkingLot) continue;
+          // Check if this connection points toward the parking lot or house (permanent)
+          const permanentNeighbor = this.grid.getNeighbor(neighbor.gx, neighbor.gy, oppDir);
+          if (permanentNeighbor && (permanentNeighbor.cell.type === CellType.ParkingLot || permanentNeighbor.cell.type === CellType.House)) continue;
         }
         neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
       }
@@ -182,8 +186,8 @@ export class RoadSystem {
     const cell2 = this.grid.getCell(gx2, gy2);
     if (!cell1 || !cell2) return false;
 
-    if (cell1.type === CellType.Empty || cell1.type === CellType.Business) return false;
-    if (cell2.type === CellType.Empty || cell2.type === CellType.Business) return false;
+    if (cell1.type === CellType.Empty || cell1.type === CellType.Business || cell1.type === CellType.House) return false;
+    if (cell2.type === CellType.Empty || cell2.type === CellType.Business || cell2.type === CellType.House) return false;
 
     // Must be orthogonal neighbors
     const dx = gx2 - gx1;
