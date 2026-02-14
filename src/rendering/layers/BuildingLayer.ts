@@ -4,6 +4,21 @@ import type { Business } from '../../entities/Business';
 import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS } from '../../constants';
 import type { GameColor } from '../../types';
 
+function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
+  const shape = new THREE.Shape();
+  const hw = w / 2, hh = h / 2;
+  shape.moveTo(-hw + r, -hh);
+  shape.lineTo(hw - r, -hh);
+  shape.quadraticCurveTo(hw, -hh, hw, -hh + r);
+  shape.lineTo(hw, hh - r);
+  shape.quadraticCurveTo(hw, hh, hw - r, hh);
+  shape.lineTo(-hw + r, hh);
+  shape.quadraticCurveTo(-hw, hh, -hw, hh - r);
+  shape.lineTo(-hw, -hh + r);
+  shape.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
+  return shape;
+}
+
 export class BuildingLayer {
   private houseMeshes = new Map<string, THREE.Group>();
   private businessMeshes = new Map<string, THREE.Group>();
@@ -44,10 +59,11 @@ export class BuildingLayer {
     const size = TILE_SIZE * 0.75;
     const height = 5;
 
-    // Body
-    const bodyGeom = new THREE.BoxGeometry(size, height, size);
+    // Body (rounded corners)
+    const bodyShape = roundedRectShape(size, size, 2);
+    const bodyGeom = new THREE.ExtrudeGeometry(bodyShape, { depth: height, bevelEnabled: false, curveSegments: 4 });
+    bodyGeom.rotateX(-Math.PI / 2);
     const body = new THREE.Mesh(bodyGeom, mat);
-    body.position.y = height / 2;
     body.castShadow = true;
     group.add(body);
 
@@ -73,14 +89,16 @@ export class BuildingLayer {
     const hexColor = COLOR_MAP[biz.color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
-    // Building: single-cell box at biz.pos (taller than house)
+    // Building: single-cell rounded box at biz.pos (taller than house)
     const buildingSize = TILE_SIZE * 0.75;
     const buildingHeight = 7;
-    const bodyGeom = new THREE.BoxGeometry(buildingSize, buildingHeight, buildingSize);
-    const body = new THREE.Mesh(bodyGeom, mat);
     const buildingPx = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
     const buildingPz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
-    body.position.set(buildingPx, buildingHeight / 2, buildingPz);
+    const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
+    const bodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: false, curveSegments: 4 });
+    bodyGeom.rotateX(-Math.PI / 2);
+    const body = new THREE.Mesh(bodyGeom, mat);
+    body.position.set(buildingPx, 0, buildingPz);
     body.castShadow = true;
     group.add(body);
 
@@ -92,6 +110,25 @@ export class BuildingLayer {
     tower.position.set(buildingPx, buildingHeight + towerHeight / 2, buildingPz);
     tower.castShadow = true;
     group.add(tower);
+
+    // Background plate spanning building + parking lot (2x1 tiles)
+    const plateInset = 2; // 1px inset per side on long axis
+    const plateLong = TILE_SIZE * 2 - plateInset;
+    const plateShort = TILE_SIZE; // flush on short axis so connector road connects
+    const isHoriz = biz.orientation === 'horizontal';
+    const plateW = isHoriz ? plateLong : plateShort;
+    const plateH = isHoriz ? plateShort : plateLong;
+    const plateShape = roundedRectShape(plateW, plateH, 3);
+    const plateHeight = 0.4;
+    const plateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: plateHeight, bevelEnabled: false, curveSegments: 4 });
+    plateGeom.rotateX(-Math.PI / 2);
+    const plateMat = new THREE.MeshStandardMaterial({ color: '#777777' });
+    const plate = new THREE.Mesh(plateGeom, plateMat);
+    const lotCx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
+    const lotCz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
+    plate.position.set((buildingPx + lotCx) / 2, 0.05, (buildingPz + lotCz) / 2);
+    plate.receiveShadow = true;
+    group.add(plate);
 
     // Parking lot: flat gray surface at biz.parkingLotPos
     const lotPx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
