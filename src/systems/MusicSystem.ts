@@ -38,7 +38,7 @@ export class MusicSystem {
 
     // ── Pad: warm chords ──
     this.pad = new Tone.PolySynth(Tone.Synth, {
-      volume: -14,
+      volume: -24,
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.8, decay: 1.5, sustain: 0.6, release: 2 },
     }).connect(this.reverb);
@@ -58,7 +58,7 @@ export class MusicSystem {
 
     // ── Kick: soft and round ──
     this.kick = new Tone.MembraneSynth({
-      volume: -10,
+      volume: -20,
       pitchDecay: 0.05,
       octaves: 4,
       oscillator: { type: 'sine' },
@@ -71,7 +71,7 @@ export class MusicSystem {
 
     // ── Snare: soft vinyl-noise rimshot ──
     this.snare = new Tone.NoiseSynth({
-      volume: -18,
+      volume: -28,
       noise: { type: 'pink' },
       envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.05 },
     }).connect(this.compressor);
@@ -82,7 +82,7 @@ export class MusicSystem {
 
     // ── Hi-hats: gentle ticking ──
     this.hats = new Tone.MetalSynth({
-      volume: -24,
+      volume: -34,
       envelope: { attack: 0.001, decay: 0.03, release: 0.01 },
       harmonicity: 5.1,
       modulationIndex: 16,
@@ -99,7 +99,7 @@ export class MusicSystem {
 
     // ── Bass: warm sine with gentle attack ──
     this.bass = new Tone.Synth({
-      volume: -10,
+      volume: -20,
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.05, decay: 0.3, sustain: 0.4, release: 0.5 },
     }).connect(this.compressor);
