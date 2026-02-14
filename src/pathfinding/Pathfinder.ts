@@ -1,7 +1,7 @@
 import type { Grid } from '../core/Grid';
 import { OPPOSITE_DIR } from '../core/Grid';
 import { CellType, Direction, TrafficLevel, type GridPos } from '../types';
-import { gridPosEqual, gridPosKey, manhattanDist } from '../utils/math';
+import { gridPosEqual, gridPosKey, octileDist, isDiagonal } from '../utils/math';
 import { PriorityQueue } from '../utils/PriorityQueue';
 
 interface AStarNode {
@@ -18,6 +18,10 @@ const DIR_OFFSETS = [
   { dir: Direction.Down, dx: 0, dy: 1 },
   { dir: Direction.Left, dx: -1, dy: 0 },
   { dir: Direction.Right, dx: 1, dy: 0 },
+  { dir: Direction.UpLeft, dx: -1, dy: -1 },
+  { dir: Direction.UpRight, dx: 1, dy: -1 },
+  { dir: Direction.DownLeft, dx: -1, dy: 1 },
+  { dir: Direction.DownRight, dx: 1, dy: 1 },
 ] as const;
 
 function isAlongBridgeAxis(dir: Direction, bridgeAxis: 'horizontal' | 'vertical'): boolean {
@@ -61,7 +65,7 @@ export class Pathfinder {
       gy: from.gy,
       level: TrafficLevel.Ground,
       g: 0,
-      f: manhattanDist(from, to),
+      f: octileDist(from, to),
       parentKey: null,
     };
     open.push(startNode);
@@ -80,8 +84,12 @@ export class Pathfinder {
       const currentCell = this.grid.getCell(current.gx, current.gy);
 
       for (const { dir, dx, dy } of DIR_OFFSETS) {
+        const diag = isDiagonal(dir);
+
         // Check if we can exit in this direction from current cell/level
         if (currentCell && currentCell.hasBridge && currentCell.bridgeAxis) {
+          // No diagonal movement on bridge cells
+          if (diag) continue;
           const dirAlongBridge = isAlongBridgeAxis(dir, currentCell.bridgeAxis);
           if (current.level === TrafficLevel.Bridge && !dirAlongBridge) continue;
           if (current.level === TrafficLevel.Ground && dirAlongBridge) continue;
@@ -130,11 +138,14 @@ export class Pathfinder {
             : TrafficLevel.Ground;
         }
 
+        // No diagonal movement onto bridge cells
+        if (diag && cell.hasBridge) continue;
+
         const nKey = `${nx},${ny},${nextLevel}`;
         if (closed.has(nKey)) continue;
 
-        const g = current.g + 1;
-        const h = manhattanDist({ gx: nx, gy: ny }, to);
+        const g = current.g + (diag ? Math.SQRT2 : 1);
+        const h = octileDist({ gx: nx, gy: ny }, to);
         const f = g + h;
 
         open.push({

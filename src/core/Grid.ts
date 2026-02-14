@@ -6,6 +6,10 @@ const DIRECTION_OFFSETS: Record<Direction, GridPos> = {
   [Direction.Down]: { gx: 0, gy: 1 },
   [Direction.Left]: { gx: -1, gy: 0 },
   [Direction.Right]: { gx: 1, gy: 0 },
+  [Direction.UpLeft]: { gx: -1, gy: -1 },
+  [Direction.UpRight]: { gx: 1, gy: -1 },
+  [Direction.DownLeft]: { gx: -1, gy: 1 },
+  [Direction.DownRight]: { gx: 1, gy: 1 },
 };
 
 export const OPPOSITE_DIR: Record<Direction, Direction> = {
@@ -13,6 +17,10 @@ export const OPPOSITE_DIR: Record<Direction, Direction> = {
   [Direction.Down]: Direction.Up,
   [Direction.Left]: Direction.Right,
   [Direction.Right]: Direction.Left,
+  [Direction.UpLeft]: Direction.DownRight,
+  [Direction.UpRight]: Direction.DownLeft,
+  [Direction.DownLeft]: Direction.UpRight,
+  [Direction.DownRight]: Direction.UpLeft,
 };
 
 export class Grid {
@@ -67,7 +75,7 @@ export class Grid {
 
   getRoadNeighbors(gx: number, gy: number): { dir: Direction; gx: number; gy: number }[] {
     const results: { dir: Direction; gx: number; gy: number }[] = [];
-    for (const dir of [Direction.Up, Direction.Down, Direction.Left, Direction.Right]) {
+    for (const dir of this.getAllDirections()) {
       const n = this.getNeighbor(gx, gy, dir);
       if (!n) continue;
       if (n.cell.type === CellType.Road || n.cell.type === CellType.House || n.cell.type === CellType.ParkingLot) {
@@ -90,6 +98,11 @@ export class Grid {
   }
 
   getAllDirections(): Direction[] {
+    return [Direction.Up, Direction.Down, Direction.Left, Direction.Right,
+            Direction.UpLeft, Direction.UpRight, Direction.DownLeft, Direction.DownRight];
+  }
+
+  getCardinalDirections(): Direction[] {
     return [Direction.Up, Direction.Down, Direction.Left, Direction.Right];
   }
 

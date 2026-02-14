@@ -65,10 +65,15 @@ export class SoundEffectSystem {
     this.placeSynth.triggerAttackRelease('C6', 0.04, t);
   }
 
+  private lastDeleteTime = 0;
+
   playRoadDelete(): void {
     if (!this.initialized) return;
     const now = Tone.now();
-    this.deleteSynth.triggerAttackRelease('A4', 0.05, now);
+    // Ensure each trigger is strictly after the previous one (mono synth requirement)
+    const t = Math.max(now, this.lastDeleteTime + 0.01);
+    this.lastDeleteTime = t;
+    this.deleteSynth.triggerAttackRelease('A4', 0.05, t);
   }
 
   dispose(): void {

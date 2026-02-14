@@ -95,7 +95,7 @@ export class BuildingLayer {
     group.add(roof);
 
     // Ground plate filling exactly 1 grid cell beneath the house
-    const plateSize = TILE_SIZE;
+    const plateSize = TILE_SIZE - 2;
     const plateShape = roundedRectShape(plateSize, plateSize, 3);
     const plateHeight = 0.4;
     const plateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: plateHeight, bevelEnabled: false, curveSegments: 4 });
@@ -144,7 +144,7 @@ export class BuildingLayer {
     // Background plate spanning building + parking lot (2x1 tiles)
     const plateInset = 2; // 1px inset per side on long axis
     const plateLong = TILE_SIZE * 2 - plateInset;
-    const plateShort = TILE_SIZE; // flush on short axis so connector road connects
+    const plateShort = TILE_SIZE - 2;
     const isHoriz = biz.orientation === 'horizontal';
     const plateW = isHoriz ? plateLong : plateShort;
     const plateH = isHoriz ? plateShort : plateLong;
@@ -166,9 +166,11 @@ export class BuildingLayer {
     const lotSize = TILE_SIZE * 0.9;
     const lotHeight = 0.15;
     const lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
-    const lotGeom = new THREE.BoxGeometry(lotSize, lotHeight, lotSize);
+    const lotShape = roundedRectShape(lotSize, lotSize, 3);
+    const lotGeom = new THREE.ExtrudeGeometry(lotShape, { depth: lotHeight, bevelEnabled: false, curveSegments: 4 });
+    lotGeom.rotateX(-Math.PI / 2);
     const lot = new THREE.Mesh(lotGeom, lotMat);
-    lot.position.set(lotPx, lotHeight / 2, lotPz);
+    lot.position.set(lotPx, 0, lotPz);
     lot.receiveShadow = true;
     group.add(lot);
 

@@ -3,11 +3,12 @@ import * as Tone from 'tone';
 export class MusicSystem {
   private drumCompress!: Tone.Compressor;
   private distortion!: Tone.Distortion;
-  private hats!: Tone.Player;
+  private hats!: Tone.MetalSynth;
   private hatsLoop!: Tone.Loop;
   private hatsCycleLoop!: Tone.Loop;
   private hatsActive = false;
-  private snare!: Tone.Player;
+  private snareNoise!: Tone.NoiseSynth;
+  private snareTone!: Tone.MembraneSynth;
   private snarePart!: Tone.Sequence;
   private kick!: Tone.MembraneSynth;
   private kickPart!: Tone.Sequence;
@@ -33,10 +34,14 @@ export class MusicSystem {
     });
 
     // Hats
-    this.hats = new Tone.Player({
-      url: 'https://tonejs.github.io/audio/drum-samples/CR78/hihat.mp3',
+    this.hats = new Tone.MetalSynth({
       volume: -10,
-      fadeOut: 0.01,
+      frequency: 200,
+      envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
+      harmonicity: 5.1,
+      modulationIndex: 32,
+      resonance: 4000,
+      octaves: 1.5,
     }).chain(this.distortion, this.drumCompress);
 
     // Hats play for ~4 bars then rest for ~28 bars (~1 min cycle at 125bpm)
@@ -44,7 +49,7 @@ export class MusicSystem {
     this.hatsLoop = new Tone.Loop({
       callback: (time) => {
         if (!this.hatsActive) return;
-        this.hats.start(time).stop(time + 0.05);
+        this.hats.triggerAttackRelease('16n', time);
       },
       interval: '16n',
       probability: 0.7,
@@ -57,16 +62,27 @@ export class MusicSystem {
     // Start off, turn on at bar 28 (~56s), off at bar 32, on at bar 60, etc.
     this.hatsCycleLoop.start('28m');
 
-    // Snare
-    this.snare = new Tone.Player({
-      url: 'https://tonejs.github.io/audio/drum-samples/CR78/snare.mp3',
-      fadeOut: 0.1,
+    // Snare – two layers: noise (wire sizzle) + membrane (tonal body)
+    this.snareNoise = new Tone.NoiseSynth({
+      volume: -8,
+      noise: { type: 'white' },
+      envelope: { attack: 0.001, decay: 0.15, sustain: 0 },
+    }).chain(this.distortion, this.drumCompress);
+
+    this.snareTone = new Tone.MembraneSynth({
+      volume: -6,
+      pitchDecay: 0.01,
+      octaves: 4,
+      envelope: { attack: 0.001, decay: 0.15, sustain: 0 },
     }).chain(this.distortion, this.drumCompress);
 
     this.snarePart = new Tone.Sequence((time, velocity) => {
       if (velocity) {
-        this.snare.volume.value = Tone.gainToDb(velocity as number);
-        this.snare.start(time).stop(time + 0.1);
+        const vel = velocity as number;
+        this.snareNoise.volume.value = Tone.gainToDb(vel) - 8;
+        this.snareTone.volume.value = Tone.gainToDb(vel) - 6;
+        this.snareNoise.triggerAttackRelease('16n', time);
+        this.snareTone.triggerAttackRelease('E3', '16n', time);
       }
     }, [null, 1, null, [1, 0.3]], '4n').start(0);
 
@@ -141,7 +157,8 @@ export class MusicSystem {
     this.hatsLoop.dispose();
     this.hats.dispose();
     this.snarePart.dispose();
-    this.snare.dispose();
+    this.snareNoise.dispose();
+    this.snareTone.dispose();
     this.kickPart.dispose();
     this.kick.dispose();
     this.bassPart.dispose();

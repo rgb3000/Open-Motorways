@@ -20,6 +20,8 @@ export class InputHandler {
     canvasY: 0,
   };
 
+  panningActive = false;
+
   private canvas: HTMLCanvasElement;
   private screenToWorld: (sx: number, sy: number) => { x: number; z: number };
 
@@ -57,7 +59,7 @@ export class InputHandler {
   private onMouseDown(e: MouseEvent): void {
     this.updatePosition(e);
     this.state.shiftDown = e.shiftKey;
-    if (e.button === 0) this.state.leftDown = true;
+    if (e.button === 0 && !this.panningActive) this.state.leftDown = true;
     if (e.button === 2) this.state.rightDown = true;
   }
 

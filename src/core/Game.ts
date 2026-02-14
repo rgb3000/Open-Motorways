@@ -35,8 +35,14 @@ export class Game {
   private stateCallback: ((state: GameState, score: number, time: number, money: number) => void) | null = null;
   private activeTool: ToolType = ToolType.Road;
   private toolChangeCallback: ((tool: ToolType) => void) | null = null;
+  private spaceDown = false;
+  private isPanning = false;
+  private lastPanX = 0;
+  private lastPanY = 0;
+  private canvas: HTMLCanvasElement;
 
   constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
     this.webglRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.webglRenderer.setPixelRatio(2);
     this.webglRenderer.setSize(window.innerWidth, window.innerHeight);
@@ -63,19 +69,62 @@ export class Game {
       (alpha) => this.render(alpha),
     );
 
-    // Wheel zoom
+    // Wheel: pan (normal scroll) or zoom (ctrl/pinch)
     canvas.addEventListener('wheel', (e) => this.renderer.onWheel(e), { passive: false });
 
     // Window resize
     window.addEventListener('resize', () => this.onResize());
 
-    // Keyboard zoom + pause + tool shortcuts
+    // Keyboard zoom + pause + tool shortcuts + space panning
     window.addEventListener('keydown', (e) => {
       if (e.key === '+' || e.key === '=') this.renderer.zoomByKey(1);
       if (e.key === '-') this.renderer.zoomByKey(-1);
       if (e.key === 'Escape' || e.key === 'p') this.togglePause();
       if (e.key === '1') this.setActiveTool(ToolType.Road);
       if (e.key === '2') this.setActiveTool(ToolType.Bridge);
+      if (e.key === ' ' && !e.repeat) {
+        e.preventDefault();
+        this.spaceDown = true;
+        this.input.panningActive = true;
+        this.canvas.style.cursor = 'grab';
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === ' ') {
+        this.spaceDown = false;
+        this.isPanning = false;
+        this.input.panningActive = false;
+        this.canvas.style.cursor = 'default';
+      }
+    });
+
+    // Space+drag panning
+    canvas.addEventListener('mousedown', (e) => {
+      if (this.spaceDown && e.button === 0) {
+        this.isPanning = true;
+        this.lastPanX = e.clientX;
+        this.lastPanY = e.clientY;
+        this.canvas.style.cursor = 'grabbing';
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (this.isPanning) {
+        const dx = e.clientX - this.lastPanX;
+        const dy = e.clientY - this.lastPanY;
+        this.lastPanX = e.clientX;
+        this.lastPanY = e.clientY;
+        const zoom = this.renderer.getCurrentZoom();
+        this.renderer.panBy(-dx / zoom, -dy / zoom);
+      }
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      if (e.button === 0 && this.isPanning) {
+        this.isPanning = false;
+        this.canvas.style.cursor = this.spaceDown ? 'grab' : 'default';
+      }
     });
 
     // Initial spawn

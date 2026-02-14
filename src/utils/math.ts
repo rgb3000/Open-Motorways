@@ -1,4 +1,5 @@
-import type { GridPos, PixelPos } from '../types';
+import type { GridPos, PixelPos, Direction } from '../types';
+import { Direction as Dir } from '../types';
 import { TILE_SIZE } from '../constants';
 
 let nextId = 0;
@@ -17,6 +18,16 @@ export function clamp(value: number, min: number, max: number): number {
 
 export function manhattanDist(a: GridPos, b: GridPos): number {
   return Math.abs(a.gx - b.gx) + Math.abs(a.gy - b.gy);
+}
+
+export function octileDist(a: GridPos, b: GridPos): number {
+  const dx = Math.abs(a.gx - b.gx);
+  const dy = Math.abs(a.gy - b.gy);
+  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
+}
+
+export function isDiagonal(dir: Direction): boolean {
+  return dir === Dir.UpLeft || dir === Dir.UpRight || dir === Dir.DownLeft || dir === Dir.DownRight;
 }
 
 export function gridToPixelCenter(pos: GridPos): PixelPos {

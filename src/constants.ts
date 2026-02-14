@@ -1,9 +1,9 @@
 import { GameColor } from './types';
 
 // Grid
-export const GRID_COLS = 80;
-export const GRID_ROWS = 50;
-export const TILE_SIZE = 24;
+export const GRID_COLS = 70;
+export const GRID_ROWS = 40;
+export const TILE_SIZE = 30;
 export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;  // 960
 export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE; // 600
 
@@ -41,7 +41,7 @@ export const SPAWN_INTERVAL = 12;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 6;
 export const SPAWN_INTERVAL_DECAY = 0.95;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
-export const INNER_SPAWN_THRESHOLD = 50;
+export const INNER_SPAWN_THRESHOLD = 10;
 
 // Money
 export const STARTING_MONEY = 400;
