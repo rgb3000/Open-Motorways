@@ -40,3 +40,29 @@ export function gridPosEqual(a: GridPos, b: GridPos): boolean {
 export function gridPosKey(pos: GridPos): string {
   return `${pos.gx},${pos.gy}`;
 }
+
+export function cubicBezier(
+  p0x: number, p0y: number, p1x: number, p1y: number,
+  p2x: number, p2y: number, p3x: number, p3y: number, t: number,
+): { x: number; y: number } {
+  const u = 1 - t;
+  const uu = u * u;
+  const uuu = uu * u;
+  const tt = t * t;
+  const ttt = tt * t;
+  return {
+    x: uuu * p0x + 3 * uu * t * p1x + 3 * u * tt * p2x + ttt * p3x,
+    y: uuu * p0y + 3 * uu * t * p1y + 3 * u * tt * p2y + ttt * p3y,
+  };
+}
+
+export function cubicBezierTangent(
+  p0x: number, p0y: number, p1x: number, p1y: number,
+  p2x: number, p2y: number, p3x: number, p3y: number, t: number,
+): { x: number; y: number } {
+  const u = 1 - t;
+  return {
+    x: 3 * u * u * (p1x - p0x) + 6 * u * t * (p2x - p1x) + 3 * t * t * (p3x - p2x),
+    y: 3 * u * u * (p1y - p0y) + 6 * u * t * (p2y - p1y) + 3 * t * t * (p3y - p2y),
+  };
+}
