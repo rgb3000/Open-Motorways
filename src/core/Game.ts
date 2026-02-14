@@ -80,6 +80,8 @@ export class Game {
 
     // Initial spawn
     this.spawnSystem.spawnInitial();
+    this.renderer.markGroundDirty();
+    this.spawnSystem.clearDirty();
   }
 
   start(): void {
@@ -168,6 +170,8 @@ export class Game {
     this.activeTool = ToolType.Road;
     this.toolChangeCallback?.(this.activeTool);
     this.spawnSystem.spawnInitial();
+    this.renderer.markGroundDirty();
+    this.spawnSystem.clearDirty();
     this.musicSystem = new MusicSystem();
     this.soundEffects = new SoundEffectSystem();
     await this.musicSystem.init();
@@ -198,6 +202,12 @@ export class Game {
 
     this.elapsedTime += dt;
     this.spawnSystem.update(dt);
+
+    if (this.spawnSystem.isDirty) {
+      this.renderer.markGroundDirty();
+      this.spawnSystem.clearDirty();
+    }
+
     this.demandSystem.update(dt, this.spawnSystem.getBusinesses());
     this.carSystem.update(dt, this.spawnSystem.getHouses(), this.spawnSystem.getBusinesses());
 

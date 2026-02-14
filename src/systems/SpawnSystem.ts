@@ -33,6 +33,15 @@ export class SpawnSystem {
   private spawnTimer = 0;
   private currentSpawnInterval = SPAWN_INTERVAL;
   private grid: Grid;
+  private dirty = false;
+
+  get isDirty(): boolean {
+    return this.dirty;
+  }
+
+  clearDirty(): void {
+    this.dirty = false;
+  }
 
   constructor(grid: Grid) {
     this.grid = grid;
@@ -136,6 +145,7 @@ export class SpawnSystem {
   }
 
   private spawnHouse(pos: GridPos, color: GameColor): void {
+    this.dirty = true;
     const house = new House(pos, color);
     this.houses.push(house);
     this.grid.setCell(pos.gx, pos.gy, {
@@ -154,6 +164,7 @@ export class SpawnSystem {
     orientation: 'horizontal' | 'vertical',
     connectorSide: 'positive' | 'negative',
   ): void {
+    this.dirty = true;
     const business = new Business(pos, color, orientation, connectorSide);
     this.businesses.push(business);
 
