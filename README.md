@@ -41,6 +41,21 @@ npm run build
 npm run preview
 ```
 
+## Controls
+
+| Input | Action |
+|-------|--------|
+| **Left Click** + Drag | Draw roads |
+| **Right Click** + Drag | Erase roads |
+| **Shift** + Click | Build L-shaped road to clicked cell |
+| **Scroll Wheel** | Zoom in/out |
+| **Space** + Drag | Pan the camera |
+| **+** / **=** | Zoom in |
+| **-** | Zoom out |
+| **1** | Road tool |
+| **2** | Bridge tool |
+| **Esc** / **P** | Pause/unpause |
+
 ## License
 
 MIT
