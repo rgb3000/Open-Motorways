@@ -7,6 +7,7 @@ import {
 } from '../../constants';
 import { CardinalRoadRenderer } from './road/CardinalRoadRenderer';
 import { DiagonalRoadRenderer } from './road/DiagonalRoadRenderer';
+import { JunctionConnectorRenderer } from './road/JunctionConnectorRenderer';
 
 const CARDINAL_DIRS: Direction[] = [Direction.Up, Direction.Down, Direction.Left, Direction.Right];
 
@@ -19,6 +20,7 @@ export class RoadLayer {
   private outlineMat = new THREE.MeshStandardMaterial({ color: ROAD_OUTLINE_COLOR });
 
   private cardinalRenderer = new CardinalRoadRenderer();
+  private connectorRenderer = new JunctionConnectorRenderer();
   private diagonalRenderer: DiagonalRoadRenderer;
 
   constructor(grid: Grid) {
@@ -51,6 +53,8 @@ export class RoadLayer {
 
         this.cardinalRenderer.buildCellGeometries(roadGeoms, cx, cz, conns);
         this.cardinalRenderer.buildCellOutlineGeometries(outlineGeoms, cx, cz, conns, outlineExtra);
+        this.connectorRenderer.buildCellGeometries(roadGeoms, cx, cz, conns);
+        this.connectorRenderer.buildCellOutlineGeometries(outlineGeoms, cx, cz, conns, outlineExtra);
       }
     }
 
