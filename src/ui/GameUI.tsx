@@ -7,13 +7,15 @@ export function GameUI({ game }: { game: Game }) {
   const [state, setState] = useState<GameState>(game.getState());
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
+  const [money, setMoney] = useState(game.getMoney());
   const [activeTool, setActiveTool] = useState<ToolType>(game.getActiveTool());
 
   useEffect(() => {
-    game.onStateUpdate((s, sc, t) => {
+    game.onStateUpdate((s, sc, t, m) => {
       setState(s);
       setScore(sc);
       setTime(t);
+      setMoney(m);
     });
     game.onToolChange((tool) => {
       setActiveTool(tool);
@@ -26,7 +28,7 @@ export function GameUI({ game }: { game: Game }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      <HUD score={score} time={timeStr} state={state} onPause={() => game.togglePause()} />
+      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} />
       <Toolbar activeTool={activeTool} onToolSelect={(tool) => game.setActiveTool(tool)} />
       {state === GameState.WaitingToStart && (
         <StartOverlay onStart={() => game.startGame()} />
@@ -38,7 +40,7 @@ export function GameUI({ game }: { game: Game }) {
   );
 }
 
-function HUD({ score, time, state, onPause }: { score: number; time: string; state: GameState; onPause: () => void }) {
+function HUD({ score, money, time, state, onPause }: { score: number; money: number; time: string; state: GameState; onPause: () => void }) {
   return (
     <div
       style={{
@@ -48,9 +50,14 @@ function HUD({ score, time, state, onPause }: { score: number; time: string; sta
         padding: 10,
       }}
     >
-      <span style={{ color: '#000', font: 'bold 18px monospace' }}>
-        Score: {score}
-      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ color: '#000', font: 'bold 18px monospace' }}>
+          Score: {score}
+        </span>
+        <span style={{ color: '#2a7d2a', font: 'bold 18px monospace' }}>
+          ${money}
+        </span>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ color: '#000', font: 'bold 18px monospace' }}>
           {time}

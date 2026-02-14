@@ -3,7 +3,13 @@ import type { RoadSystem } from '../systems/RoadSystem';
 import type { Grid } from '../core/Grid';
 import type { GridPos } from '../types';
 import { CellType, ToolType } from '../types';
-import { GRID_COLS, GRID_ROWS } from '../constants';
+import { GRID_COLS, GRID_ROWS, ROAD_COST, BRIDGE_COST, ROAD_REFUND, BRIDGE_REFUND } from '../constants';
+
+export interface MoneyInterface {
+  canAfford(cost: number): boolean;
+  spend(cost: number): void;
+  refund(amount: number): void;
+}
 
 type DrawMode = 'none' | 'place' | 'connect';
 
@@ -15,16 +21,18 @@ export class RoadDrawer {
   private roadSystem: RoadSystem;
   private grid: Grid;
   private getActiveTool: () => ToolType;
+  private money: MoneyInterface;
 
   private mode: DrawMode = 'none';
   private connectOrigin: GridPos | null = null;
   private prevPlacedPos: GridPos | null = null;
 
-  constructor(input: InputHandler, roadSystem: RoadSystem, grid: Grid, getActiveTool: () => ToolType) {
+  constructor(input: InputHandler, roadSystem: RoadSystem, grid: Grid, getActiveTool: () => ToolType, money: MoneyInterface) {
     this.input = input;
     this.roadSystem = roadSystem;
     this.grid = grid;
     this.getActiveTool = getActiveTool;
+    this.money = money;
   }
 
   update(): void {
@@ -96,17 +104,27 @@ export class RoadDrawer {
 
     if (this.getActiveTool() === ToolType.Bridge) {
       // Bridge tool: try placing bridge first, fall back to road on empty cells
-      if (!this.roadSystem.placeBridge(gx, gy)) {
-        this.roadSystem.placeRoad(gx, gy);
+      if (this.money.canAfford(BRIDGE_COST) && this.roadSystem.placeBridge(gx, gy)) {
+        this.money.spend(BRIDGE_COST);
+      } else if (this.money.canAfford(ROAD_COST) && this.roadSystem.placeRoad(gx, gy)) {
+        this.money.spend(ROAD_COST);
       }
     } else {
-      this.roadSystem.placeRoad(gx, gy);
+      if (!this.money.canAfford(ROAD_COST)) return;
+      if (this.roadSystem.placeRoad(gx, gy)) {
+        this.money.spend(ROAD_COST);
+      }
     }
   }
 
   private tryErase(gx: number, gy: number): void {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
-    this.roadSystem.removeBridgeOrRoad(gx, gy);
+    const result = this.roadSystem.removeBridgeOrRoad(gx, gy);
+    if (result === 'bridge') {
+      this.money.refund(BRIDGE_REFUND);
+    } else if (result === 'road') {
+      this.money.refund(ROAD_REFUND);
+    }
   }
 
   private bresenhamLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {

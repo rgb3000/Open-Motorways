@@ -37,6 +37,14 @@ export const MIN_SPAWN_INTERVAL = 6;
 export const SPAWN_INTERVAL_DECAY = 0.95;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
 
+// Money
+export const STARTING_MONEY = 200;
+export const ROAD_COST = 10;
+export const BRIDGE_COST = 20;
+export const DELIVERY_REWARD = 50;
+export const ROAD_REFUND = 10;
+export const BRIDGE_REFUND = 20;
+
 // Colors - map GameColor enum to hex
 export const COLOR_MAP: Record<GameColor, string> = {
   [GameColor.Red]: '#E74C3C',

@@ -107,14 +107,14 @@ export class RoadSystem {
     return true;
   }
 
-  removeBridgeOrRoad(gx: number, gy: number): boolean {
+  removeBridgeOrRoad(gx: number, gy: number): 'bridge' | 'road' | false {
     const cell = this.grid.getCell(gx, gy);
     if (!cell) return false;
 
     if (cell.hasBridge) {
-      return this.removeBridge(gx, gy);
+      return this.removeBridge(gx, gy) ? 'bridge' : false;
     }
-    return this.removeRoad(gx, gy);
+    return this.removeRoad(gx, gy) ? 'road' : false;
   }
 
   private updateBridgeConnections(gx: number, gy: number): void {

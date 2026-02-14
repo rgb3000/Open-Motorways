@@ -5,12 +5,14 @@ import { GameLoop } from './GameLoop';
 import { Renderer } from '../rendering/Renderer';
 import { InputHandler } from '../input/InputHandler';
 import { RoadDrawer } from '../input/RoadDrawer';
+import type { MoneyInterface } from '../input/RoadDrawer';
 import { RoadSystem } from '../systems/RoadSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { DemandSystem } from '../systems/DemandSystem';
 import { CarSystem } from '../systems/CarSystem';
 import { AudioSystem } from '../systems/AudioSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
+import { STARTING_MONEY, DELIVERY_REWARD } from '../constants';
 
 export class Game {
   private webglRenderer: THREE.WebGLRenderer;
@@ -27,7 +29,8 @@ export class Game {
   private audioSystem: AudioSystem = new AudioSystem();
   private state: GameState = GameState.WaitingToStart;
   private elapsedTime = 0;
-  private stateCallback: ((state: GameState, score: number, time: number) => void) | null = null;
+  private money = STARTING_MONEY;
+  private stateCallback: ((state: GameState, score: number, time: number, money: number) => void) | null = null;
   private activeTool: ToolType = ToolType.Road;
   private toolChangeCallback: ((tool: ToolType) => void) | null = null;
 
@@ -51,7 +54,7 @@ export class Game {
       canvas,
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface());
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -93,6 +96,18 @@ export class Game {
     return this.elapsedTime;
   }
 
+  getMoney(): number {
+    return this.money;
+  }
+
+  private createMoneyInterface(): MoneyInterface {
+    return {
+      canAfford: (cost: number) => this.money >= cost,
+      spend: (cost: number) => { this.money -= cost; },
+      refund: (amount: number) => { this.money += amount; },
+    };
+  }
+
   getActiveTool(): ToolType {
     return this.activeTool;
   }
@@ -107,7 +122,7 @@ export class Game {
     this.toolChangeCallback = cb;
   }
 
-  onStateUpdate(cb: (state: GameState, score: number, time: number) => void): void {
+  onStateUpdate(cb: (state: GameState, score: number, time: number, money: number) => void): void {
     this.stateCallback = cb;
   }
 
@@ -116,7 +131,7 @@ export class Game {
     await this.audioSystem.init();
     this.audioSystem.startMusic();
     this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
-    this.carSystem.onHomeReturn = () => this.audioSystem.playHomeReturn();
+    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.audioSystem.playHomeReturn(); };
     this.state = GameState.Playing;
   }
 
@@ -139,7 +154,8 @@ export class Game {
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool);
+    this.money = STARTING_MONEY;
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface());
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
@@ -150,7 +166,7 @@ export class Game {
     await this.audioSystem.init();
     this.audioSystem.startMusic();
     this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
-    this.carSystem.onHomeReturn = () => this.audioSystem.playHomeReturn();
+    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.audioSystem.playHomeReturn(); };
     this.state = GameState.Playing;
   }
 
@@ -188,7 +204,7 @@ export class Game {
       this.spawnSystem.getBusinesses(),
       this.carSystem.getCars(),
     );
-    this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime);
+    this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money);
   }
 
   private onResize(): void {
