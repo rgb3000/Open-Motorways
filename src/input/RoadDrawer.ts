@@ -4,8 +4,8 @@ import type { Grid } from '../core/Grid';
 import { OPPOSITE_DIR } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { GridPos } from '../types';
-import { CellType, Direction, ToolType } from '../types';
-import { GRID_COLS, GRID_ROWS, ROAD_COST, BRIDGE_COST, ROAD_REFUND, BRIDGE_REFUND } from '../constants';
+import { CellType, Direction } from '../types';
+import { GRID_COLS, GRID_ROWS, ROAD_COST, ROAD_REFUND, BRIDGE_REFUND } from '../constants';
 
 export interface MoneyInterface {
   canAfford(cost: number): boolean;
@@ -22,7 +22,6 @@ export class RoadDrawer {
   private input: InputHandler;
   private roadSystem: RoadSystem;
   private grid: Grid;
-  private getActiveTool: () => ToolType;
   private money: MoneyInterface;
   private getHouses: () => House[];
 
@@ -36,13 +35,12 @@ export class RoadDrawer {
 
   constructor(
     input: InputHandler, roadSystem: RoadSystem, grid: Grid,
-    getActiveTool: () => ToolType, money: MoneyInterface,
+    money: MoneyInterface,
     getHouses: () => House[],
   ) {
     this.input = input;
     this.roadSystem = roadSystem;
     this.grid = grid;
-    this.getActiveTool = getActiveTool;
     this.money = money;
     this.getHouses = getHouses;
   }
@@ -245,21 +243,10 @@ export class RoadDrawer {
   private tryPlace(gx: number, gy: number): void {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
 
-    if (this.getActiveTool() === ToolType.Bridge) {
-      // Bridge tool: try placing bridge first, fall back to road on empty cells
-      if (this.money.canAfford(BRIDGE_COST) && this.roadSystem.placeBridge(gx, gy)) {
-        this.money.spend(BRIDGE_COST);
-        this.onRoadPlace?.();
-      } else if (this.money.canAfford(ROAD_COST) && this.roadSystem.placeRoad(gx, gy)) {
-        this.money.spend(ROAD_COST);
-        this.onRoadPlace?.();
-      }
-    } else {
-      if (!this.money.canAfford(ROAD_COST)) return;
-      if (this.roadSystem.placeRoad(gx, gy)) {
-        this.money.spend(ROAD_COST);
-        this.onRoadPlace?.();
-      }
+    if (!this.money.canAfford(ROAD_COST)) return;
+    if (this.roadSystem.placeRoad(gx, gy)) {
+      this.money.spend(ROAD_COST);
+      this.onRoadPlace?.();
     }
   }
 

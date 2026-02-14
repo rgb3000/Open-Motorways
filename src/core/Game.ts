@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GameState, ToolType } from '../types';
+import { GameState } from '../types';
 import { Grid } from './Grid';
 import { GameLoop } from './GameLoop';
 import { Renderer } from '../rendering/Renderer';
@@ -33,8 +33,6 @@ export class Game {
   private elapsedTime = 0;
   private money = STARTING_MONEY;
   private stateCallback: ((state: GameState, score: number, time: number, money: number) => void) | null = null;
-  private activeTool: ToolType = ToolType.Road;
-  private toolChangeCallback: ((tool: ToolType) => void) | null = null;
   private spaceDown = false;
   private isPanning = false;
   private lastPanX = 0;
@@ -63,7 +61,7 @@ export class Game {
       canvas,
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -81,8 +79,6 @@ export class Game {
       if (e.key === '+' || e.key === '=') this.renderer.zoomByKey(1);
       if (e.key === '-') this.renderer.zoomByKey(-1);
       if (e.key === 'Escape' || e.key === 'p') this.togglePause();
-      if (e.key === '1') this.setActiveTool(ToolType.Road);
-      if (e.key === '2') this.setActiveTool(ToolType.Bridge);
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
         this.spaceDown = true;
@@ -162,20 +158,6 @@ export class Game {
     };
   }
 
-  getActiveTool(): ToolType {
-    return this.activeTool;
-  }
-
-  setActiveTool(tool: ToolType): void {
-    if (this.activeTool === tool) return;
-    this.activeTool = tool;
-    this.toolChangeCallback?.(tool);
-  }
-
-  onToolChange(cb: (tool: ToolType) => void): void {
-    this.toolChangeCallback = cb;
-  }
-
   onStateUpdate(cb: (state: GameState, score: number, time: number, money: number) => void): void {
     this.stateCallback = cb;
   }
@@ -213,12 +195,10 @@ export class Game {
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.money = STARTING_MONEY;
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
-    this.activeTool = ToolType.Road;
-    this.toolChangeCallback?.(this.activeTool);
     this.spawnSystem.spawnInitial();
     this.renderer.markGroundDirty();
     this.spawnSystem.clearDirty();

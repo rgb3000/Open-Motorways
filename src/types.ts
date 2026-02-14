@@ -59,12 +59,6 @@ export const GameState = {
 } as const;
 export type GameState = (typeof GameState)[keyof typeof GameState];
 
-export const ToolType = {
-  Road: 0,
-  Bridge: 1,
-} as const;
-export type ToolType = (typeof ToolType)[keyof typeof ToolType];
-
 export const TrafficLevel = {
   Ground: 0,
   Bridge: 1,
