@@ -131,6 +131,9 @@ export class SpawnSystem {
       type: CellType.House,
       entityId: house.id,
       color,
+      hasBridge: false,
+      bridgeAxis: null,
+      bridgeConnections: [],
     });
   }
 
@@ -141,6 +144,9 @@ export class SpawnSystem {
       type: CellType.Business,
       entityId: business.id,
       color,
+      hasBridge: false,
+      bridgeAxis: null,
+      bridgeConnections: [],
     });
   }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GameState } from '../types';
+import { GameState, ToolType } from '../types';
 import { Grid } from './Grid';
 import { GameLoop } from './GameLoop';
 import { Renderer } from '../rendering/Renderer';
@@ -26,6 +26,8 @@ export class Game {
   private state: GameState = GameState.Playing;
   private elapsedTime = 0;
   private stateCallback: ((state: GameState, score: number, time: number) => void) | null = null;
+  private activeTool: ToolType = ToolType.Road;
+  private toolChangeCallback: ((tool: ToolType) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.webglRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -47,7 +49,7 @@ export class Game {
       canvas,
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, () => this.activeTool);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -60,11 +62,13 @@ export class Game {
     // Window resize
     window.addEventListener('resize', () => this.onResize());
 
-    // Keyboard zoom + pause
+    // Keyboard zoom + pause + tool shortcuts
     window.addEventListener('keydown', (e) => {
       if (e.key === '+' || e.key === '=') this.renderer.zoomByKey(1);
       if (e.key === '-') this.renderer.zoomByKey(-1);
       if (e.key === 'Escape') this.togglePause();
+      if (e.key === '1') this.setActiveTool(ToolType.Road);
+      if (e.key === '2') this.setActiveTool(ToolType.Bridge);
     });
 
     // Initial spawn
@@ -87,6 +91,20 @@ export class Game {
     return this.elapsedTime;
   }
 
+  getActiveTool(): ToolType {
+    return this.activeTool;
+  }
+
+  setActiveTool(tool: ToolType): void {
+    if (this.activeTool === tool) return;
+    this.activeTool = tool;
+    this.toolChangeCallback?.(tool);
+  }
+
+  onToolChange(cb: (tool: ToolType) => void): void {
+    this.toolChangeCallback = cb;
+  }
+
   onStateUpdate(cb: (state: GameState, score: number, time: number) => void): void {
     this.stateCallback = cb;
   }
@@ -104,11 +122,13 @@ export class Game {
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, () => this.activeTool);
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.state = GameState.Playing;
     this.elapsedTime = 0;
+    this.activeTool = ToolType.Road;
+    this.toolChangeCallback?.(this.activeTool);
     this.spawnSystem.spawnInitial();
   }
 

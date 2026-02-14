@@ -1,6 +1,7 @@
 import type { InputHandler } from './InputHandler';
 import type { RoadSystem } from '../systems/RoadSystem';
 import type { GridPos } from '../types';
+import { ToolType } from '../types';
 import { GRID_COLS, GRID_ROWS } from '../constants';
 
 export class RoadDrawer {
@@ -9,10 +10,12 @@ export class RoadDrawer {
   private wasRightDown = false;
   private input: InputHandler;
   private roadSystem: RoadSystem;
+  private getActiveTool: () => ToolType;
 
-  constructor(input: InputHandler, roadSystem: RoadSystem) {
+  constructor(input: InputHandler, roadSystem: RoadSystem, getActiveTool: () => ToolType) {
     this.input = input;
     this.roadSystem = roadSystem;
+    this.getActiveTool = getActiveTool;
   }
 
   update(): void {
@@ -52,12 +55,20 @@ export class RoadDrawer {
 
   private tryPlace(gx: number, gy: number): void {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
-    this.roadSystem.placeRoad(gx, gy);
+
+    if (this.getActiveTool() === ToolType.Bridge) {
+      // Bridge tool: try placing bridge first, fall back to road on empty cells
+      if (!this.roadSystem.placeBridge(gx, gy)) {
+        this.roadSystem.placeRoad(gx, gy);
+      }
+    } else {
+      this.roadSystem.placeRoad(gx, gy);
+    }
   }
 
   private tryErase(gx: number, gy: number): void {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
-    this.roadSystem.removeRoad(gx, gy);
+    this.roadSystem.removeBridgeOrRoad(gx, gy);
   }
 
   private bresenhamLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {

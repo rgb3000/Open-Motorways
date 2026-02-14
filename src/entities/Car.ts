@@ -1,4 +1,5 @@
 import type { GameColor, GridPos, PixelPos, Direction } from '../types';
+import { TrafficLevel } from '../types';
 import { generateId, gridToPixelCenter } from '../utils/math';
 
 export const CarState = {
@@ -25,6 +26,7 @@ export class Car {
   pathIndex = 0;
   segmentProgress = 0; // 0..1 between current and next tile
   intersectionWaitTime = 0;
+  currentLevel: TrafficLevel = TrafficLevel.Ground;
 
   // Rendering interpolation
   pixelPos: PixelPos;

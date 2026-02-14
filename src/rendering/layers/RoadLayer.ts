@@ -1,6 +1,9 @@
 import type { Grid } from '../../core/Grid';
 import { CellType, Direction } from '../../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_OUTLINE_COLOR, ROAD_LANE_DIVIDER_COLOR, ROAD_CORNER_RADIUS } from '../../constants';
+import {
+  GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_OUTLINE_COLOR, ROAD_LANE_DIVIDER_COLOR, ROAD_CORNER_RADIUS,
+  BRIDGE_COLOR, BRIDGE_OUTLINE_COLOR, BRIDGE_BARRIER_COLOR, BRIDGE_SHADOW_COLOR,
+} from '../../constants';
 
 export class RoadLayer {
   private grid: Grid;
@@ -58,6 +61,100 @@ export class RoadLayer {
     }
 
     ctx.setLineDash([]);
+
+    // Bridge rendering pass (on top of roads)
+    this.renderBridges(ctx);
+  }
+
+  private renderBridges(ctx: CanvasRenderingContext2D): void {
+    const half = TILE_SIZE / 2;
+    const bridgeWidth = TILE_SIZE * 0.7;
+    const bridgeHalf = bridgeWidth / 2;
+
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const cell = this.grid.getCell(gx, gy);
+        if (!cell || !cell.hasBridge || !cell.bridgeAxis) continue;
+
+        const px = gx * TILE_SIZE;
+        const py = gy * TILE_SIZE;
+        const cx = px + half;
+        const cy = py + half;
+        const isHorizontal = cell.bridgeAxis === 'horizontal';
+
+        // Shadow
+        ctx.fillStyle = BRIDGE_SHADOW_COLOR;
+        if (isHorizontal) {
+          ctx.fillRect(cx - half - 1, cy - bridgeHalf + 2, TILE_SIZE + 2, bridgeWidth);
+        } else {
+          ctx.fillRect(cx - bridgeHalf + 2, cy - half - 1, bridgeWidth, TILE_SIZE + 2);
+        }
+
+        // Bridge outline
+        ctx.fillStyle = BRIDGE_OUTLINE_COLOR;
+        if (isHorizontal) {
+          ctx.fillRect(cx - half - 1, cy - bridgeHalf - 1, TILE_SIZE + 2, bridgeWidth + 2);
+        } else {
+          ctx.fillRect(cx - bridgeHalf - 1, cy - half - 1, bridgeWidth + 2, TILE_SIZE + 2);
+        }
+
+        // Bridge fill
+        ctx.fillStyle = BRIDGE_COLOR;
+        if (isHorizontal) {
+          ctx.fillRect(cx - half, cy - bridgeHalf, TILE_SIZE, bridgeWidth);
+        } else {
+          ctx.fillRect(cx - bridgeHalf, cy - half, bridgeWidth, TILE_SIZE);
+        }
+
+        // Side barrier lines
+        ctx.strokeStyle = BRIDGE_BARRIER_COLOR;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+
+        if (isHorizontal) {
+          // Top barrier
+          ctx.beginPath();
+          ctx.moveTo(cx - half, cy - bridgeHalf);
+          ctx.lineTo(cx + half, cy - bridgeHalf);
+          ctx.stroke();
+          // Bottom barrier
+          ctx.beginPath();
+          ctx.moveTo(cx - half, cy + bridgeHalf);
+          ctx.lineTo(cx + half, cy + bridgeHalf);
+          ctx.stroke();
+        } else {
+          // Left barrier
+          ctx.beginPath();
+          ctx.moveTo(cx - bridgeHalf, cy - half);
+          ctx.lineTo(cx - bridgeHalf, cy + half);
+          ctx.stroke();
+          // Right barrier
+          ctx.beginPath();
+          ctx.moveTo(cx + bridgeHalf, cy - half);
+          ctx.lineTo(cx + bridgeHalf, cy + half);
+          ctx.stroke();
+        }
+
+        // Lane divider on bridge
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = ROAD_LANE_DIVIDER_COLOR;
+        ctx.lineWidth = 1;
+
+        if (isHorizontal) {
+          ctx.beginPath();
+          ctx.moveTo(cx - half, cy);
+          ctx.lineTo(cx + half, cy);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - half);
+          ctx.lineTo(cx, cy + half);
+          ctx.stroke();
+        }
+
+        ctx.setLineDash([]);
+      }
+    }
   }
 
   private drawLaneDivider(

@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Pause, Play } from 'lucide-react';
+import { Pause, Play, Route, Layers } from 'lucide-react';
 import type { Game } from '../core/Game';
-import { GameState } from '../types';
+import { GameState, ToolType } from '../types';
 
 export function GameUI({ game }: { game: Game }) {
   const [state, setState] = useState<GameState>(GameState.Playing);
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
+  const [activeTool, setActiveTool] = useState<ToolType>(game.getActiveTool());
 
   useEffect(() => {
     game.onStateUpdate((s, sc, t) => {
       setState(s);
       setScore(sc);
       setTime(t);
+    });
+    game.onToolChange((tool) => {
+      setActiveTool(tool);
     });
   }, [game]);
 
@@ -23,6 +27,7 @@ export function GameUI({ game }: { game: Game }) {
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
       <HUD score={score} time={timeStr} state={state} onPause={() => game.togglePause()} />
+      <Toolbar activeTool={activeTool} onToolSelect={(tool) => game.setActiveTool(tool)} />
       {state === GameState.GameOver && (
         <GameOverOverlay score={score} onRestart={() => game.restart()} />
       )}
@@ -64,6 +69,70 @@ function HUD({ score, time, state, onPause }: { score: number; time: string; sta
         </button>
       </div>
     </div>
+  );
+}
+
+function Toolbar({ activeTool, onToolSelect }: { activeTool: ToolType; onToolSelect: (tool: ToolType) => void }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: 10,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        background: 'rgba(255, 255, 255, 0.85)',
+        borderRadius: 8,
+        padding: 4,
+        pointerEvents: 'auto',
+      }}
+    >
+      <ToolButton
+        icon={<Route size={20} />}
+        label="Road"
+        shortcut="1"
+        active={activeTool === ToolType.Road}
+        onClick={() => onToolSelect(ToolType.Road)}
+      />
+      <ToolButton
+        icon={<Layers size={20} />}
+        label="Bridge"
+        shortcut="2"
+        active={activeTool === ToolType.Bridge}
+        onClick={() => onToolSelect(ToolType.Bridge)}
+      />
+    </div>
+  );
+}
+
+function ToolButton({ icon, label, shortcut, active, onClick }: {
+  icon: React.ReactNode;
+  label: string;
+  shortcut: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={`${label} (${shortcut})`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 36,
+        height: 36,
+        borderRadius: 6,
+        border: 'none',
+        cursor: 'pointer',
+        background: active ? '#333' : 'transparent',
+        color: active ? '#fff' : '#555',
+      }}
+    >
+      {icon}
+    </button>
   );
 }
 

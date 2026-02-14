@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Car } from '../../entities/Car';
-import { COLOR_MAP, CAR_WIDTH, CAR_LENGTH } from '../../constants';
+import { COLOR_MAP, CAR_WIDTH, CAR_LENGTH, BRIDGE_Y_POSITION, GROUND_Y_POSITION } from '../../constants';
 import type { GameColor } from '../../types';
+import { TrafficLevel } from '../../types';
 import { lerp } from '../../utils/math';
 
 function lerpAngle(a: number, b: number, t: number): number {
@@ -47,7 +48,8 @@ export class CarLayer {
       // Interpolate position
       const x = lerp(car.prevPixelPos.x, car.pixelPos.x, alpha);
       const y = lerp(car.prevPixelPos.y, car.pixelPos.y, alpha);
-      mesh.position.set(x, 1, y); // y=1 centers the 2-unit-tall box above ground
+      const elevation = car.currentLevel === TrafficLevel.Bridge ? BRIDGE_Y_POSITION : GROUND_Y_POSITION;
+      mesh.position.set(x, elevation, y);
 
       // Interpolate rotation
       const angle = lerpAngle(car.prevRenderAngle, car.renderAngle, alpha);

@@ -56,6 +56,14 @@ export const ROAD_CORNER_RADIUS = 3.0; // px
 export const UI_TEXT_COLOR = '#333333';
 export const GAME_OVER_OVERLAY = 'rgba(0, 0, 0, 0.6)';
 
+// Bridge rendering
+export const BRIDGE_COLOR = '#787878';
+export const BRIDGE_OUTLINE_COLOR = '#555555';
+export const BRIDGE_BARRIER_COLOR = '#444444';
+export const BRIDGE_SHADOW_COLOR = 'rgba(0, 0, 0, 0.15)';
+export const BRIDGE_Y_POSITION = 5;
+export const GROUND_Y_POSITION = 1;
+
 // Color unlock order
 export const COLOR_UNLOCK_ORDER: GameColor[] = [
   GameColor.Red,
