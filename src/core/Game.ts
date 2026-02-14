@@ -1,8 +1,10 @@
+import * as THREE from 'three';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../constants';
 import { GameState } from '../types';
 import { Grid } from './Grid';
 import { GameLoop } from './GameLoop';
 import { Renderer } from '../rendering/Renderer';
+import { UILayer } from '../rendering/layers/UILayer';
 import { InputHandler } from '../input/InputHandler';
 import { RoadDrawer } from '../input/RoadDrawer';
 import { RoadSystem } from '../systems/RoadSystem';
@@ -13,10 +15,11 @@ import { Pathfinder } from '../pathfinding/Pathfinder';
 
 export class Game {
   private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  private webglRenderer: THREE.WebGLRenderer;
   private grid: Grid;
   private gameLoop: GameLoop;
   private renderer: Renderer;
+  private uiLayer: UILayer;
   private input: InputHandler;
   private roadDrawer: RoadDrawer;
   private roadSystem: RoadSystem;
@@ -29,12 +32,11 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.canvas.width = CANVAS_WIDTH;
-    this.canvas.height = CANVAS_HEIGHT;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Could not get 2D context');
-    this.ctx = ctx;
+    this.webglRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.webglRenderer.setSize(CANVAS_WIDTH, CANVAS_HEIGHT);
+    this.webglRenderer.shadowMap.enabled = true;
+    this.webglRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.grid = new Grid();
     this.roadSystem = new RoadSystem(this.grid);
@@ -44,15 +46,17 @@ export class Game {
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.input = new InputHandler(canvas);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem);
-    this.renderer = new Renderer(this.ctx, this.grid);
+    this.uiLayer = new UILayer();
+    this.renderer = new Renderer(this.webglRenderer, this.grid);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
       (alpha) => this.render(alpha),
     );
 
-    // Listen for restart click
-    canvas.addEventListener('click', () => {
+    // Listen for restart click on the game-over overlay
+    const gameOverEl = document.getElementById('game-over-overlay')!;
+    gameOverEl.addEventListener('click', () => {
       if (this.state === GameState.GameOver) {
         this.restart();
       }
@@ -80,6 +84,7 @@ export class Game {
       this.pathfinder.clearCache();
       this.carSystem.onRoadsChanged(this.spawnSystem.getHouses());
       this.roadSystem.clearDirty();
+      this.renderer.markGroundDirty();
     }
 
     // Spawning
@@ -103,13 +108,12 @@ export class Game {
       this.spawnSystem.getHouses(),
       this.spawnSystem.getBusinesses(),
       this.carSystem.getCars(),
-      this.state,
-      this.carSystem.getScore(),
-      this.elapsedTime,
     );
+    this.uiLayer.update(this.state, this.carSystem.getScore(), this.elapsedTime);
   }
 
   private restart(): void {
+    this.renderer.dispose();
     this.grid = new Grid();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
@@ -117,7 +121,7 @@ export class Game {
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem);
-    this.renderer = new Renderer(this.ctx, this.grid);
+    this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.state = GameState.Playing;
     this.elapsedTime = 0;
     this.spawnSystem.spawnInitial();

@@ -1,82 +1,137 @@
+import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS } from '../../constants';
+import type { GameColor } from '../../types';
 
 export class BuildingLayer {
-  render(ctx: CanvasRenderingContext2D, houses: House[], businesses: Business[]): void {
-    // Draw houses (filled squares with small roof triangle)
+  private houseMeshes = new Map<string, THREE.Group>();
+  private businessMeshes = new Map<string, THREE.Group>();
+  private demandPinRefs = new Map<string, THREE.Mesh[]>();
+
+  update(scene: THREE.Scene, houses: House[], businesses: Business[]): void {
+    // Add meshes for new houses
     for (const house of houses) {
-      const px = house.pos.gx * TILE_SIZE;
-      const py = house.pos.gy * TILE_SIZE;
-      const color = COLOR_MAP[house.color];
-      const size = TILE_SIZE * 0.75;
-      const offset = (TILE_SIZE - size) / 2;
+      if (this.houseMeshes.has(house.id)) continue;
 
-      // House body
-      ctx.fillStyle = color;
-      ctx.fillRect(px + offset, py + offset + 2, size, size - 2);
-
-      // Roof triangle
-      ctx.beginPath();
-      ctx.moveTo(px + offset - 1, py + offset + 2);
-      ctx.lineTo(px + TILE_SIZE / 2, py + offset - 3);
-      ctx.lineTo(px + offset + size + 1, py + offset + 2);
-      ctx.closePath();
-      ctx.fill();
-
-      // Border
-      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(px + offset, py + offset + 2, size, size - 2);
+      const group = this.createHouseMesh(house.pos.gx, house.pos.gy, house.color);
+      scene.add(group);
+      this.houseMeshes.set(house.id, group);
     }
 
-    // Draw businesses (filled circles)
+    // Add meshes for new businesses
     for (const biz of businesses) {
-      const px = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
-      const py = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
-      const color = COLOR_MAP[biz.color];
-      const radius = TILE_SIZE * 0.38;
+      if (!this.businessMeshes.has(biz.id)) {
+        const { group, pins } = this.createBusinessMesh(biz.pos.gx, biz.pos.gy, biz.color);
+        scene.add(group);
+        this.businessMeshes.set(biz.id, group);
+        this.demandPinRefs.set(biz.id, pins);
+      }
 
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(px, py, radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Border
-      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Demand pins - small dots arranged around the business
-      if (biz.demandPins > 0) {
-        this.drawDemandPins(ctx, px, py, biz.demandPins, radius);
+      // Update demand pin visibility
+      const pins = this.demandPinRefs.get(biz.id)!;
+      for (let i = 0; i < MAX_DEMAND_PINS; i++) {
+        pins[i].visible = i < biz.demandPins;
       }
     }
   }
 
-  private drawDemandPins(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    count: number,
-    businessRadius: number,
-  ): void {
-    const pinRadius = 3;
-    const ringRadius = businessRadius + 6;
+  private createHouseMesh(gx: number, gy: number, color: GameColor): THREE.Group {
+    const group = new THREE.Group();
+    const hexColor = COLOR_MAP[color];
+    const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
-    for (let i = 0; i < count; i++) {
+    const size = TILE_SIZE * 0.75;
+    const height = 5;
+
+    // Body
+    const bodyGeom = new THREE.BoxGeometry(size, height, size);
+    const body = new THREE.Mesh(bodyGeom, mat);
+    body.position.y = height / 2;
+    body.castShadow = true;
+    group.add(body);
+
+    // Roof (cone with 4 sides = pyramid)
+    const roofHeight = 3;
+    const roofGeom = new THREE.ConeGeometry(size / 2 * 1.1, roofHeight, 4);
+    const roof = new THREE.Mesh(roofGeom, mat);
+    roof.position.y = height + roofHeight / 2;
+    roof.rotation.y = Math.PI / 4; // Align pyramid edges with box
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Position in world: pixel center of tile
+    const px = gx * TILE_SIZE + TILE_SIZE / 2;
+    const py = gy * TILE_SIZE + TILE_SIZE / 2;
+    group.position.set(px, 0, py);
+
+    return group;
+  }
+
+  private createBusinessMesh(gx: number, gy: number, color: GameColor): { group: THREE.Group; pins: THREE.Mesh[] } {
+    const group = new THREE.Group();
+    const hexColor = COLOR_MAP[color];
+    const mat = new THREE.MeshStandardMaterial({ color: hexColor });
+
+    const radius = TILE_SIZE * 0.38;
+    const height = 4;
+
+    // Body (cylinder)
+    const bodyGeom = new THREE.CylinderGeometry(radius, radius, height, 16);
+    const body = new THREE.Mesh(bodyGeom, mat);
+    body.position.y = height / 2;
+    body.castShadow = true;
+    group.add(body);
+
+    // Demand pins (pre-create all 8, toggle visibility)
+    const pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
+    const pinGeom = new THREE.SphereGeometry(3, 8, 8);
+    const ringRadius = radius + 6;
+    const pins: THREE.Mesh[] = [];
+
+    for (let i = 0; i < MAX_DEMAND_PINS; i++) {
       const angle = (i / MAX_DEMAND_PINS) * Math.PI * 2 - Math.PI / 2;
-      const px = cx + Math.cos(angle) * ringRadius;
-      const py = cy + Math.sin(angle) * ringRadius;
-
-      ctx.fillStyle = '#E74C3C';
-      ctx.beginPath();
-      ctx.arc(px, py, pinRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = '#C0392B';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
+      const pin = new THREE.Mesh(pinGeom, pinMat);
+      pin.position.set(
+        Math.cos(angle) * ringRadius,
+        0.5,
+        Math.sin(angle) * ringRadius,
+      );
+      pin.castShadow = true;
+      pin.visible = false;
+      group.add(pin);
+      pins.push(pin);
     }
+
+    // Position in world
+    const px = gx * TILE_SIZE + TILE_SIZE / 2;
+    const py = gy * TILE_SIZE + TILE_SIZE / 2;
+    group.position.set(px, 0, py);
+
+    return { group, pins };
+  }
+
+  dispose(scene: THREE.Scene): void {
+    for (const [, group] of this.houseMeshes) {
+      scene.remove(group);
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+    }
+    for (const [, group] of this.businessMeshes) {
+      scene.remove(group);
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+    }
+    this.houseMeshes.clear();
+    this.businessMeshes.clear();
+    this.demandPinRefs.clear();
   }
 }
