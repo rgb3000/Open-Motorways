@@ -6,6 +6,7 @@ import { Renderer } from '../rendering/Renderer';
 import { InputHandler } from '../input/InputHandler';
 import { RoadDrawer } from '../input/RoadDrawer';
 import type { MoneyInterface } from '../input/RoadDrawer';
+import { UndoSystem } from '../input/UndoSystem';
 import { RoadSystem } from '../systems/RoadSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { DemandSystem } from '../systems/DemandSystem';
@@ -37,7 +38,9 @@ export class Game {
   private isPanning = false;
   private lastPanX = 0;
   private lastPanY = 0;
+  private undoSystem: UndoSystem;
   private canvas: HTMLCanvasElement;
+  private onUndoStateChange: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -61,7 +64,8 @@ export class Game {
       canvas,
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
+    this.undoSystem = new UndoSystem(this.grid);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -79,6 +83,10 @@ export class Game {
       if (e.key === '+' || e.key === '=') this.renderer.zoomByKey(1);
       if (e.key === '-') this.renderer.zoomByKey(-1);
       if (e.key === 'Escape' || e.key === 'p') this.togglePause();
+      if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        this.performUndo();
+      }
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
         this.spaceDown = true;
@@ -195,7 +203,8 @@ export class Game {
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.money = STARTING_MONEY;
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses());
+    this.undoSystem = new UndoSystem(this.grid);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem);
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
@@ -211,6 +220,24 @@ export class Game {
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
     this.state = GameState.Playing;
+  }
+
+  performUndo(): void {
+    if (this.state === GameState.WaitingToStart || this.state === GameState.GameOver) return;
+    const group = this.undoSystem.undo();
+    if (!group) return;
+    // Reverse the money change
+    this.money -= group.moneyDelta;
+    this.roadSystem.markDirty();
+    this.onUndoStateChange?.();
+  }
+
+  canUndo(): boolean {
+    return this.undoSystem.canUndo();
+  }
+
+  setOnUndoStateChange(cb: (() => void) | null): void {
+    this.onUndoStateChange = cb;
   }
 
   private update(dt: number): void {

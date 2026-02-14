@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Pause, Play } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Pause, Play, Undo2 } from 'lucide-react';
 import type { Game } from '../core/Game';
 import { GameState } from '../types';
 
@@ -8,14 +8,19 @@ export function GameUI({ game }: { game: Game }) {
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
   const [money, setMoney] = useState(game.getMoney());
+  const [canUndo, setCanUndo] = useState(false);
   useEffect(() => {
     game.onStateUpdate((s, sc, t, m) => {
       setState(s);
       setScore(sc);
       setTime(t);
       setMoney(m);
+      setCanUndo(game.canUndo());
     });
+    game.setOnUndoStateChange(() => setCanUndo(game.canUndo()));
+    return () => game.setOnUndoStateChange(null);
   }, [game]);
+  const handleUndo = useCallback(() => game.performUndo(), [game]);
 
   const minutes = Math.floor(time / 60);
   const seconds = Math.floor(time % 60);
@@ -23,7 +28,7 @@ export function GameUI({ game }: { game: Game }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} />
+      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} />
       {state === GameState.WaitingToStart && (
         <StartOverlay onStart={() => game.startGame()} />
       )}
@@ -34,7 +39,7 @@ export function GameUI({ game }: { game: Game }) {
   );
 }
 
-function HUD({ score, money, time, state, onPause }: { score: number; money: number; time: string; state: GameState; onPause: () => void }) {
+function HUD({ score, money, time, state, onPause, canUndo, onUndo }: { score: number; money: number; time: string; state: GameState; onPause: () => void; canUndo: boolean; onUndo: () => void }) {
   return (
     <div
       style={{
@@ -56,6 +61,23 @@ function HUD({ score, money, time, state, onPause }: { score: number; money: num
         <span style={{ color: '#000', font: 'bold 18px monospace' }}>
           {time}
         </span>
+        <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+          style={{
+            pointerEvents: 'auto',
+            background: 'none',
+            color: canUndo ? '#000' : '#bbb',
+            border: 'none',
+            padding: 0,
+            cursor: canUndo ? 'pointer' : 'default',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <Undo2 size={18} />
+        </button>
         <button
           onClick={onPause}
           style={{

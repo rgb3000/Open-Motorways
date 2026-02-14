@@ -1,4 +1,5 @@
 import type { InputHandler } from './InputHandler';
+import type { UndoSystem } from './UndoSystem';
 import type { RoadSystem } from '../systems/RoadSystem';
 import type { Grid } from '../core/Grid';
 import { OPPOSITE_DIR } from '../core/Grid';
@@ -24,6 +25,7 @@ export class RoadDrawer {
   private grid: Grid;
   private money: MoneyInterface;
   private getHouses: () => House[];
+  private undoSystem: UndoSystem;
 
   private mode: DrawMode = 'none';
   private prevPlacedPos: GridPos | null = null;
@@ -37,12 +39,14 @@ export class RoadDrawer {
     input: InputHandler, roadSystem: RoadSystem, grid: Grid,
     money: MoneyInterface,
     getHouses: () => House[],
+    undoSystem: UndoSystem,
   ) {
     this.input = input;
     this.roadSystem = roadSystem;
     this.grid = grid;
     this.money = money;
     this.getHouses = getHouses;
+    this.undoSystem = undoSystem;
   }
 
   update(): void {
@@ -51,6 +55,7 @@ export class RoadDrawer {
     if (leftDown) {
       if (!this.wasLeftDown) {
         // Starting a new left-click — determine mode
+        this.undoSystem.beginGroup();
         this.lastGridPos = { ...gridPos };
 
         // Check if clicking on a house cell → connector drag mode
@@ -147,6 +152,7 @@ export class RoadDrawer {
 
     if (rightDown) {
       if (!this.wasRightDown) {
+        this.undoSystem.beginGroup();
         this.lastGridPos = { ...gridPos };
         this.tryErase(gridPos.gx, gridPos.gy);
       } else if (this.lastGridPos && (gridPos.gx !== this.lastGridPos.gx || gridPos.gy !== this.lastGridPos.gy)) {
@@ -155,6 +161,13 @@ export class RoadDrawer {
         });
         this.lastGridPos = { ...gridPos };
       }
+    }
+
+    if (!leftDown && this.wasLeftDown) {
+      this.undoSystem.endGroup();
+    }
+    if (!rightDown && this.wasRightDown) {
+      this.undoSystem.endGroup();
     }
 
     if (!leftDown && !rightDown) {
@@ -170,6 +183,7 @@ export class RoadDrawer {
 
   private relocateHouseConnector(house: House, newDir: Direction): void {
     const oldConnectorPos = house.connectorPos;
+    const oldDir = house.connectorDir;
 
     // Check target cell is empty
     const off = this.grid.getDirectionOffset(newDir);
@@ -177,6 +191,12 @@ export class RoadDrawer {
     const newConnY = house.pos.gy + off.gy;
     const targetCell = this.grid.getCell(newConnX, newConnY);
     if (!targetCell || targetCell.type !== CellType.Empty) return;
+
+    // Snapshot old and new connector positions + neighbors before mutation
+    this.undoSystem.snapshotCellAndNeighbors(oldConnectorPos.gx, oldConnectorPos.gy);
+    this.undoSystem.snapshotCellAndNeighbors(newConnX, newConnY);
+    this.undoSystem.snapshotCellAndNeighbors(house.pos.gx, house.pos.gy);
+    this.undoSystem.setHouseConnectorChange(house, oldDir);
 
     // Remove old connector cell — disconnect from neighbors first
     const oldCell = this.grid.getCell(oldConnectorPos.gx, oldConnectorPos.gy);
@@ -244,20 +264,25 @@ export class RoadDrawer {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
 
     if (!this.money.canAfford(ROAD_COST)) return;
+    this.undoSystem.snapshotCellAndNeighbors(gx, gy);
     if (this.roadSystem.placeRoad(gx, gy)) {
       this.money.spend(ROAD_COST);
+      this.undoSystem.addMoneyDelta(-ROAD_COST);
       this.onRoadPlace?.();
     }
   }
 
   private tryErase(gx: number, gy: number): void {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
+    this.undoSystem.snapshotCellAndNeighbors(gx, gy);
     const result = this.roadSystem.removeBridgeOrRoad(gx, gy);
     if (result === 'bridge') {
       this.money.refund(BRIDGE_REFUND);
+      this.undoSystem.addMoneyDelta(BRIDGE_REFUND);
       this.onRoadDelete?.();
     } else if (result === 'road') {
       this.money.refund(ROAD_REFUND);
+      this.undoSystem.addMoneyDelta(ROAD_REFUND);
       this.onRoadDelete?.();
     }
   }
