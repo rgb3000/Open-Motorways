@@ -7,8 +7,8 @@ import {
   BRIDGE_COLOR, BRIDGE_OUTLINE_COLOR, BRIDGE_BARRIER_COLOR, BRIDGE_Y_POSITION,
 } from '../../constants';
 
-const ROAD_HEIGHT = 1.0;
-const ROAD_WIDTH_RATIO = 0.45;
+const ROAD_HEIGHT = 0.4;
+const ROAD_WIDTH_RATIO = 0.6;
 const BRIDGE_HEIGHT = 1.5;
 const BRIDGE_WIDTH_RATIO = 0.7;
 
