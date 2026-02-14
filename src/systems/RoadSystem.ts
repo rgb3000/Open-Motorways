@@ -31,7 +31,6 @@ export class RoadSystem {
       bridgeConnections: [],
     });
 
-    this.updateConnections(gx, gy);
     this.dirty = true;
     return true;
   }
@@ -168,34 +167,36 @@ export class RoadSystem {
     }
   }
 
-  private updateConnections(gx: number, gy: number): void {
-    const cell = this.grid.getCell(gx, gy);
-    if (!cell) return;
+  connectRoads(gx1: number, gy1: number, gx2: number, gy2: number): boolean {
+    const cell1 = this.grid.getCell(gx1, gy1);
+    const cell2 = this.grid.getCell(gx2, gy2);
+    if (!cell1 || !cell2) return false;
 
-    const connections: Direction[] = [];
+    if (cell1.type === CellType.Empty || cell2.type === CellType.Empty) return false;
 
-    for (const dir of this.grid.getAllDirections()) {
-      const neighbor = this.grid.getNeighbor(gx, gy, dir);
-      if (!neighbor) continue;
+    // Must be orthogonal neighbors
+    const dx = gx2 - gx1;
+    const dy = gy2 - gy1;
+    if (Math.abs(dx) + Math.abs(dy) !== 1) return false;
 
-      const nType = neighbor.cell.type;
-      if (nType === CellType.Road || nType === CellType.House || nType === CellType.Business) {
-        connections.push(dir);
+    // Determine directions
+    let dir: Direction;
+    if (dx === 1) dir = Direction.Right;
+    else if (dx === -1) dir = Direction.Left;
+    else if (dy === 1) dir = Direction.Down;
+    else dir = Direction.Up;
 
-        if (nType === CellType.Road) {
-          const oppDir = OPPOSITE_DIR[dir];
-          if (!neighbor.cell.roadConnections.includes(oppDir)) {
-            neighbor.cell.roadConnections.push(oppDir);
-          }
+    const oppDir = OPPOSITE_DIR[dir];
 
-          // Also update bridge connections on neighbor if it has a bridge connecting toward us
-          if (neighbor.cell.hasBridge && neighbor.cell.bridgeAxis) {
-            this.updateBridgeConnections(neighbor.gx, neighbor.gy);
-          }
-        }
-      }
+    if (!cell1.roadConnections.includes(dir)) {
+      cell1.roadConnections.push(dir);
+    }
+    if (!cell2.roadConnections.includes(oppDir)) {
+      cell2.roadConnections.push(oppDir);
     }
 
-    cell.roadConnections = connections;
+    this.dirty = true;
+    return true;
   }
+
 }

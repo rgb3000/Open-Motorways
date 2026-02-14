@@ -51,7 +51,7 @@ export class Game {
       canvas,
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, () => this.activeTool);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -68,7 +68,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.key === '+' || e.key === '=') this.renderer.zoomByKey(1);
       if (e.key === '-') this.renderer.zoomByKey(-1);
-      if (e.key === 'Escape') this.togglePause();
+      if (e.key === 'Escape' || e.key === 'p') this.togglePause();
       if (e.key === '1') this.setActiveTool(ToolType.Road);
       if (e.key === '2') this.setActiveTool(ToolType.Bridge);
     });
@@ -138,7 +138,7 @@ export class Game {
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, () => this.activeTool);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, () => this.activeTool);
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;

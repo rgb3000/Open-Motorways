@@ -35,6 +35,7 @@ export const MIN_BUSINESS_DISTANCE = 8;    // tiles from matching houses
 export const SPAWN_INTERVAL = 12;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 6;
 export const SPAWN_INTERVAL_DECAY = 0.95;
+export const HOUSE_SPAWN_PROBABILITY = 0.7;
 
 // Colors - map GameColor enum to hex
 export const COLOR_MAP: Record<GameColor, string> = {

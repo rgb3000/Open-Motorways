@@ -8,6 +8,7 @@ import {
   GRID_COLS,
   GRID_ROWS,
   HOUSE_CLUSTER_RADIUS,
+  HOUSE_SPAWN_PROBABILITY,
   INITIAL_SPAWN_DELAY,
   MIN_BUSINESS_DISTANCE,
   MIN_SPAWN_INTERVAL,
@@ -75,7 +76,7 @@ export class SpawnSystem {
   private spawnRandom(): void {
     const color = this.unlockedColors[Math.floor(Math.random() * this.unlockedColors.length)];
 
-    if (Math.random() < 0.6) {
+    if (Math.random() < HOUSE_SPAWN_PROBABILITY) {
       this.trySpawnHouseForColor(color);
     } else {
       this.trySpawnBusinessForColor(color);

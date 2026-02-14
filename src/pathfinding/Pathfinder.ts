@@ -86,6 +86,21 @@ export class Pathfinder {
           if (current.level === TrafficLevel.Ground && dirAlongBridge) continue;
         }
 
+        // Check road connections for exit from current cell
+        if (currentCell && currentCell.type === CellType.Road) {
+          if (currentCell.hasBridge && currentCell.bridgeAxis) {
+            // Bridge level uses bridgeConnections, ground level uses roadConnections
+            if (current.level === TrafficLevel.Bridge) {
+              if (!currentCell.bridgeConnections.includes(dir)) continue;
+            } else {
+              if (!currentCell.roadConnections.includes(dir)) continue;
+            }
+          } else {
+            if (!currentCell.roadConnections.includes(dir)) continue;
+          }
+        }
+        // Houses and Businesses can exit in any direction (no connection check)
+
         const nx = current.gx + dx;
         const ny = current.gy + dy;
 

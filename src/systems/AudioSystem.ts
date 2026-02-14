@@ -12,6 +12,8 @@ export class AudioSystem {
   private bass!: Tone.FMSynth;
   private bassPart!: Tone.Part;
   private chimeSynth!: Tone.PolySynth;
+  private hatsActive = false;
+  private hatsCycleLoop!: Tone.Loop;
   private initialized = false;
 
   async init(): Promise<void> {
@@ -38,17 +40,23 @@ export class AudioSystem {
       fadeOut: 0.01,
     }).chain(this.distortion, this.drumCompress);
 
+    // Hats play for ~4 bars then rest for ~28 bars (~1 min cycle at 125bpm)
+    this.hatsActive = false;
     this.hatsLoop = new Tone.Loop({
       callback: (time) => {
-        // Every 2 bars, 30% chance to skip the whole bar
-        const pos = Tone.getTransport().position as string;
-        const bar = parseInt(pos.split(':')[0], 10);
-        if (bar % 2 === 0 && Math.random() < 0.3) return;
+        if (!this.hatsActive) return;
         this.hats.start(time).stop(time + 0.05);
       },
       interval: '16n',
-      probability: 0.6,
+      probability: 0.7,
     }).start('1m');
+
+    // Toggle hats on/off on a slow cycle
+    this.hatsCycleLoop = new Tone.Loop((_time) => {
+      this.hatsActive = !this.hatsActive;
+    }, '4m'); // every 4 bars toggle
+    // Start off, turn on at bar 28 (~56s), off at bar 32, on at bar 60, etc.
+    this.hatsCycleLoop.start('28m');
 
     // Snare
     this.snare = new Tone.Player({
@@ -142,6 +150,7 @@ export class AudioSystem {
   dispose(): void {
     if (!this.initialized) return;
     this.stopMusic();
+    this.hatsCycleLoop.dispose();
     this.hatsLoop.dispose();
     this.hats.dispose();
     this.snarePart.dispose();
