@@ -105,26 +105,6 @@ export class BuildingLayer {
     tower2.castShadow = true;
     group.add(tower2);
 
-    // Connector block: full tile-sized grey block at the connector cell
-    const connMat = new THREE.MeshStandardMaterial({ color: 0xBDBDBD });
-    const connSize = TILE_SIZE * 0.75;
-    const connHeight = 2.5;
-    const connGeom = new THREE.BoxGeometry(connSize, connHeight, connSize);
-    const conn = new THREE.Mesh(connGeom, connMat);
-
-    // Offset from body center to connector cell center (1.5 tiles from anchor, body center is at 0.5 tiles offset)
-    let connOffsetX = 0, connOffsetZ = 0;
-    if (isHorizontal) {
-      // Connector is at gx+2, body center is between gx and gx+1 => offset = +1 tile
-      connOffsetX = TILE_SIZE;
-    } else {
-      // Connector is at gy+2, body center is between gy and gy+1 => offset = +1 tile
-      connOffsetZ = TILE_SIZE;
-    }
-    conn.position.set(connOffsetX, connHeight / 2, connOffsetZ);
-    conn.castShadow = true;
-    group.add(conn);
-
     // Demand pins: ring around body center
     const pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
     const pinGeom = new THREE.SphereGeometry(3, 8, 8);

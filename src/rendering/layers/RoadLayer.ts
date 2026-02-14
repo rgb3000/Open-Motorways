@@ -12,6 +12,19 @@ export class RoadLayer {
     this.grid = grid;
   }
 
+  private oppositeDir(dir: Direction): Direction {
+    switch (dir) {
+      case Direction.Up: return Direction.Down;
+      case Direction.Down: return Direction.Up;
+      case Direction.Left: return Direction.Right;
+      case Direction.Right: return Direction.Left;
+    }
+  }
+
+  private isRoadOrConnector(cell: { type: CellType; connectorDir: Direction | null }): boolean {
+    return cell.type === CellType.Road || (cell.type === CellType.Business && cell.connectorDir !== null);
+  }
+
   render(ctx: CanvasRenderingContext2D): void {
     const half = TILE_SIZE / 2;
     const roadWidth = TILE_SIZE * 0.6;
@@ -20,13 +33,19 @@ export class RoadLayer {
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
-        if (!cell || cell.type !== CellType.Road) continue;
+        if (!cell || !this.isRoadOrConnector(cell)) continue;
 
         const px = gx * TILE_SIZE;
         const py = gy * TILE_SIZE;
         const cx = px + half;
         const cy = py + half;
-        const conns = cell.roadConnections;
+
+        // For connector cells, always include the arm toward the business body
+        let conns = cell.roadConnections;
+        if (cell.type === CellType.Business && cell.connectorDir !== null) {
+          const towardBiz = this.oppositeDir(cell.connectorDir);
+          conns = conns.includes(towardBiz) ? conns : [towardBiz, ...conns];
+        }
 
         // Draw road outline
         ctx.fillStyle = ROAD_OUTLINE_COLOR;
@@ -48,13 +67,18 @@ export class RoadLayer {
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
-        if (!cell || cell.type !== CellType.Road) continue;
+        if (!cell || !this.isRoadOrConnector(cell)) continue;
 
         const px = gx * TILE_SIZE;
         const py = gy * TILE_SIZE;
         const cx = px + half;
         const cy = py + half;
-        const conns = cell.roadConnections;
+
+        let conns = cell.roadConnections;
+        if (cell.type === CellType.Business && cell.connectorDir !== null) {
+          const towardBiz = this.oppositeDir(cell.connectorDir);
+          conns = conns.includes(towardBiz) ? conns : [towardBiz, ...conns];
+        }
 
         this.drawLaneDivider(ctx, cx, cy, roadHalf, conns, half);
       }
