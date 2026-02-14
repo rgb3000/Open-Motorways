@@ -538,6 +538,7 @@ export class CarSystem {
       car.pixelPos = { ...center };
       car.currentLevel = TrafficLevel.Ground;
       this.handleArrival(car, houses, businesses, toRemove);
+      if (car.path.length === 0) return;
     } else {
       this.interpolateCarPosition(car);
     }
