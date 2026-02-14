@@ -161,7 +161,7 @@ function StartOverlay({ onStart }: { onStart: () => void }) {
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ color: '#fff', font: 'bold 48px monospace' }}>MOTERWAYS</div>
+      <div style={{ color: '#fff', font: 'bold 48px monospace' }}>Open Motorways</div>
       <button
         onClick={onStart}
         style={{

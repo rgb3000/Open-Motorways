@@ -34,8 +34,8 @@ export class Renderer {
   private dpr: number;
 
   // Zoom state
-  private currentZoom = 1;
-  private targetZoom = 1;
+  private currentZoom = MAX_ZOOM;
+  private targetZoom = MAX_ZOOM;
   private cameraCenterX = CANVAS_WIDTH / 2;
   private cameraCenterZ = CANVAS_HEIGHT / 2;
   private cameraTargetX = CANVAS_WIDTH / 2;
