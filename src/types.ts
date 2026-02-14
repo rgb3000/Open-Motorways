@@ -23,6 +23,7 @@ export const CellType = {
   Road: 1,
   House: 2,
   Business: 3,
+  ParkingLot: 4,
 } as const;
 export type CellType = (typeof CellType)[keyof typeof CellType];
 

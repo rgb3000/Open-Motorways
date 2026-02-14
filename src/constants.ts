@@ -27,6 +27,10 @@ export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
 export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier approximation
 
+// Parking
+export const PARKING_SLOTS = 4;
+export const UNLOAD_TIME = 3; // seconds
+
 // Spawning
 export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color
 export const COLOR_UNLOCK_INTERVAL = 35;   // seconds between new colors

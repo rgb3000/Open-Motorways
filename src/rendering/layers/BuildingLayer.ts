@@ -73,68 +73,74 @@ export class BuildingLayer {
     const hexColor = COLOR_MAP[biz.color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
-    const bodyHeight = 4;
-    const isHorizontal = biz.orientation === 'horizontal';
-
-    // Main body: box spanning 2 body cells (NOT including connector)
-    const bodyWidth = isHorizontal ? TILE_SIZE * 2 * 0.75 : TILE_SIZE * 0.75;
-    const bodyDepth = isHorizontal ? TILE_SIZE * 0.75 : TILE_SIZE * 2 * 0.75;
-    const bodyGeom = new THREE.BoxGeometry(bodyWidth, bodyHeight, bodyDepth);
+    // Building: single-cell box at biz.pos (taller than house)
+    const buildingSize = TILE_SIZE * 0.75;
+    const buildingHeight = 7;
+    const bodyGeom = new THREE.BoxGeometry(buildingSize, buildingHeight, buildingSize);
     const body = new THREE.Mesh(bodyGeom, mat);
-    body.position.y = bodyHeight / 2;
+    const buildingPx = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
+    const buildingPz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
+    body.position.set(buildingPx, buildingHeight / 2, buildingPz);
     body.castShadow = true;
     group.add(body);
 
-    // Towers: 2 small boxes on top of the body, one per body cell
-    const towerSize = TILE_SIZE * 0.25;
-    const towerHeight = 3.5;
+    // Tower on top of building
+    const towerSize = TILE_SIZE * 0.3;
+    const towerHeight = 3;
     const towerGeom = new THREE.BoxGeometry(towerSize, towerHeight, towerSize);
-    const towerMat = new THREE.MeshStandardMaterial({ color: hexColor });
+    const tower = new THREE.Mesh(towerGeom, mat);
+    tower.position.set(buildingPx, buildingHeight + towerHeight / 2, buildingPz);
+    tower.castShadow = true;
+    group.add(tower);
 
-    // Tower positions relative to body center (one per body cell)
-    const towerOffset = isHorizontal ? TILE_SIZE * 0.35 : 0;
-    const towerOffsetZ = isHorizontal ? 0 : TILE_SIZE * 0.35;
+    // Parking lot: flat gray surface at biz.parkingLotPos
+    const lotPx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
+    const lotPz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
+    const lotSize = TILE_SIZE * 0.9;
+    const lotHeight = 0.15;
+    const lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
+    const lotGeom = new THREE.BoxGeometry(lotSize, lotHeight, lotSize);
+    const lot = new THREE.Mesh(lotGeom, lotMat);
+    lot.position.set(lotPx, lotHeight / 2, lotPz);
+    lot.receiveShadow = true;
+    group.add(lot);
 
-    const tower1 = new THREE.Mesh(towerGeom, towerMat);
-    tower1.position.set(-towerOffset, bodyHeight + towerHeight / 2, -towerOffsetZ);
-    tower1.castShadow = true;
-    group.add(tower1);
+    // Parking slot markings (4 lighter rectangles)
+    const slotMat = new THREE.MeshStandardMaterial({ color: '#AAAAAA' });
+    const slotW = lotSize * 0.4;
+    const slotD = lotSize * 0.4;
+    const slotGeom = new THREE.BoxGeometry(slotW, 0.05, slotD);
+    const offsets = [
+      { x: -lotSize * 0.22, z: -lotSize * 0.22 },
+      { x: lotSize * 0.22, z: -lotSize * 0.22 },
+      { x: -lotSize * 0.22, z: lotSize * 0.22 },
+      { x: lotSize * 0.22, z: lotSize * 0.22 },
+    ];
+    for (const off of offsets) {
+      const slot = new THREE.Mesh(slotGeom, slotMat);
+      slot.position.set(lotPx + off.x, lotHeight + 0.03, lotPz + off.z);
+      group.add(slot);
+    }
 
-    const tower2 = new THREE.Mesh(towerGeom, towerMat);
-    tower2.position.set(towerOffset, bodyHeight + towerHeight / 2, towerOffsetZ);
-    tower2.castShadow = true;
-    group.add(tower2);
-
-    // Demand pins: ring around body center
+    // Demand pins: ring around building cell center
     const pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
     const pinGeom = new THREE.SphereGeometry(3, 8, 8);
-    const ringRadius = Math.max(bodyWidth, bodyDepth) / 2 + 6;
+    const ringRadius = buildingSize / 2 + 6;
     const pins: THREE.Mesh[] = [];
 
     for (let i = 0; i < MAX_DEMAND_PINS; i++) {
       const angle = (i / MAX_DEMAND_PINS) * Math.PI * 2 - Math.PI / 2;
       const pin = new THREE.Mesh(pinGeom, pinMat);
       pin.position.set(
-        Math.cos(angle) * ringRadius,
+        buildingPx + Math.cos(angle) * ringRadius,
         0.5,
-        Math.sin(angle) * ringRadius,
+        buildingPz + Math.sin(angle) * ringRadius,
       );
       pin.castShadow = true;
       pin.visible = false;
       group.add(pin);
       pins.push(pin);
     }
-
-    // Position: midpoint of the 2 body cells (connector hangs off one end)
-    let px: number, py: number;
-    if (isHorizontal) {
-      px = biz.pos.gx * TILE_SIZE + TILE_SIZE;
-      py = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
-    } else {
-      px = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
-      py = biz.pos.gy * TILE_SIZE + TILE_SIZE;
-    }
-    group.position.set(px, 0, py);
 
     return { group, pins };
   }

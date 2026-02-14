@@ -7,6 +7,7 @@ export const CarState = {
   GoingToBusiness: 1,
   GoingHome: 2,
   Stranded: 3,
+  Unloading: 4,
 } as const;
 export type CarState = (typeof CarState)[keyof typeof CarState];
 
@@ -27,6 +28,10 @@ export class Car {
   segmentProgress = 0; // 0..1 between current and next tile
   intersectionWaitTime = 0;
   currentLevel: TrafficLevel = TrafficLevel.Ground;
+
+  // Parking
+  assignedSlotIndex: number | null = null;
+  unloadTimer = 0;
 
   // Rendering interpolation
   pixelPos: PixelPos;

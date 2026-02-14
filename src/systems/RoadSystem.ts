@@ -39,6 +39,9 @@ export class RoadSystem {
     const cell = this.grid.getCell(gx, gy);
     if (!cell || cell.type !== CellType.Road) return false;
 
+    // Can't remove business-owned connector
+    if (cell.entityId !== null) return false;
+
     // Disconnect bridge connections from neighbors
     if (cell.hasBridge) {
       this.disconnectBridgeFromNeighbors(gx, gy);
@@ -48,6 +51,12 @@ export class RoadSystem {
       const neighbor = this.grid.getNeighbor(gx, gy, dir);
       if (neighbor) {
         const oppDir = OPPOSITE_DIR[dir];
+        // Skip disconnecting business-owned connectors' permanent parking-lot connection
+        if (neighbor.cell.type === CellType.Road && neighbor.cell.entityId !== null) {
+          // Check if this connection points toward the parking lot (permanent)
+          const parkingNeighbor = this.grid.getNeighbor(neighbor.gx, neighbor.gy, oppDir);
+          if (parkingNeighbor && parkingNeighbor.cell.type === CellType.ParkingLot) continue;
+        }
         neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
       }
     }
@@ -173,7 +182,8 @@ export class RoadSystem {
     const cell2 = this.grid.getCell(gx2, gy2);
     if (!cell1 || !cell2) return false;
 
-    if (cell1.type === CellType.Empty || cell2.type === CellType.Empty) return false;
+    if (cell1.type === CellType.Empty || cell1.type === CellType.Business) return false;
+    if (cell2.type === CellType.Empty || cell2.type === CellType.Business) return false;
 
     // Must be orthogonal neighbors
     const dx = gx2 - gx1;
@@ -188,14 +198,6 @@ export class RoadSystem {
     else dir = Direction.Up;
 
     const oppDir = OPPOSITE_DIR[dir];
-
-    // Validate business connector: only allow connection through the connector side
-    if (cell1.type === CellType.Business) {
-      if (cell1.connectorDir === null || cell1.connectorDir !== dir) return false;
-    }
-    if (cell2.type === CellType.Business) {
-      if (cell2.connectorDir === null || cell2.connectorDir !== oppDir) return false;
-    }
 
     if (!cell1.roadConnections.includes(dir)) {
       cell1.roadConnections.push(dir);

@@ -30,17 +30,8 @@ export class RoadLayer {
     this.grid = grid;
   }
 
-  private oppositeDir(dir: Direction): Direction {
-    switch (dir) {
-      case Direction.Up: return Direction.Down;
-      case Direction.Down: return Direction.Up;
-      case Direction.Left: return Direction.Right;
-      case Direction.Right: return Direction.Left;
-    }
-  }
-
-  private isRoadOrConnector(cell: { type: CellType; connectorDir: Direction | null }): boolean {
-    return cell.type === CellType.Road || (cell.type === CellType.Business && cell.connectorDir !== null);
+  private isRoadOrConnector(cell: { type: CellType }): boolean {
+    return cell.type === CellType.Road;
   }
 
   update(scene: THREE.Scene): void {
@@ -63,11 +54,7 @@ export class RoadLayer {
         const cx = gx * TILE_SIZE + half;
         const cz = gy * TILE_SIZE + half;
 
-        let conns = cell.roadConnections;
-        if (cell.type === CellType.Business && cell.connectorDir !== null) {
-          const towardBiz = this.oppositeDir(cell.connectorDir);
-          conns = conns.includes(towardBiz) ? conns : [towardBiz, ...conns];
-        }
+        const conns = cell.roadConnections;
 
         // Road fill geometry
         this.buildRoundedCellShape(roadGeoms, cx, cz, roadHalf, conns, half, ROAD_HEIGHT, 0);

@@ -70,13 +70,8 @@ export class Grid {
     for (const dir of [Direction.Up, Direction.Down, Direction.Left, Direction.Right]) {
       const n = this.getNeighbor(gx, gy, dir);
       if (!n) continue;
-      if (n.cell.type === CellType.Road || n.cell.type === CellType.House) {
+      if (n.cell.type === CellType.Road || n.cell.type === CellType.House || n.cell.type === CellType.ParkingLot) {
         results.push({ dir, gx: n.gx, gy: n.gy });
-      } else if (n.cell.type === CellType.Business) {
-        // Only include the connector side of a business
-        if (n.cell.connectorDir === OPPOSITE_DIR[dir]) {
-          results.push({ dir, gx: n.gx, gy: n.gy });
-        }
       }
     }
     return results;

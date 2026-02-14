@@ -3,7 +3,7 @@ import type { Business } from '../entities/Business';
 import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
-import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, BEZIER_KAPPA } from '../constants';
+import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, BEZIER_KAPPA, PARKING_SLOTS, UNLOAD_TIME } from '../constants';
 import { CellType, Direction, LaneId, TrafficLevel } from '../types';
 import type { GridPos } from '../types';
 import { gridToPixelCenter, manhattanDist, pixelToGrid, cubicBezier, cubicBezierTangent } from '../utils/math';
@@ -54,6 +54,14 @@ interface IntersectionEntry {
   inIntersection: boolean;
 }
 
+// Sub-positions within a parking lot cell for visual placement
+const PARKING_SLOT_OFFSETS = [
+  { x: -TILE_SIZE * 0.25, y: -TILE_SIZE * 0.25 },
+  { x: TILE_SIZE * 0.25, y: -TILE_SIZE * 0.25 },
+  { x: -TILE_SIZE * 0.25, y: TILE_SIZE * 0.25 },
+  { x: TILE_SIZE * 0.25, y: TILE_SIZE * 0.25 },
+];
+
 export class CarSystem {
   private cars: Car[] = [];
   private score = 0;
@@ -82,6 +90,8 @@ export class CarSystem {
 
   onRoadsChanged(houses: House[]): void {
     for (const car of this.cars) {
+      // Skip unloading cars — they're parked, not affected by road changes
+      if (car.state === CarState.Unloading) continue;
       if (car.state !== CarState.Stranded) continue;
 
       const currentTile = this.getCarCurrentTile(car);
@@ -137,6 +147,9 @@ export class CarSystem {
   }
 
   private rerouteCar(car: Car, houses: House[]): void {
+    // Skip unloading cars
+    if (car.state === CarState.Unloading) return;
+
     const currentTile = this.getCarCurrentTile(car);
     const home = houses.find(h => h.id === car.homeHouseId);
 
@@ -196,24 +209,26 @@ export class CarSystem {
 
     for (const biz of demandBusinesses) {
       const enRouteCount = carsEnRoute.get(biz.id) ?? 0;
-      const neededCars = biz.demandPins - enRouteCount;
+      // Capacity check: parking slots minus occupied minus en-route
+      const availableSlots = PARKING_SLOTS - biz.getOccupiedSlotCount() - enRouteCount;
+      const neededCars = Math.min(biz.demandPins - enRouteCount, availableSlots);
       if (neededCars <= 0) continue;
 
       const availableHouses = houses
         .filter(h => h.color === biz.color && h.availableCars > 0)
-        .sort((a, b) => manhattanDist(a.pos, biz.connectorPos) - manhattanDist(b.pos, biz.connectorPos));
+        .sort((a, b) => manhattanDist(a.pos, biz.parkingLotPos) - manhattanDist(b.pos, biz.parkingLotPos));
 
       let dispatched = 0;
       for (const house of availableHouses) {
         if (dispatched >= neededCars) break;
 
-        const path = this.pathfinder.findPath(house.pos, biz.connectorPos);
+        const path = this.pathfinder.findPath(house.pos, biz.parkingLotPos);
         if (!path) continue;
 
         const car = new Car(house.id, house.color, house.pos);
         car.state = CarState.GoingToBusiness;
         car.targetBusinessId = biz.id;
-        car.destination = biz.connectorPos;
+        car.destination = biz.parkingLotPos;
         car.path = path;
         car.pathIndex = 0;
         car.segmentProgress = 0;
@@ -235,7 +250,7 @@ export class CarSystem {
   private buildOccupancyMap(): Map<string, string> {
     const occupied = new Map<string, string>();
     for (const car of this.cars) {
-      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.path.length < 2) continue;
+      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.path.length < 2) continue;
 
       const currentTile = car.path[car.pathIndex];
       const nextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
@@ -254,7 +269,7 @@ export class CarSystem {
     const intersectionMap = new Map<string, IntersectionEntry[]>();
 
     for (const car of this.cars) {
-      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.path.length < 2) continue;
+      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.path.length < 2) continue;
 
       const curTile = car.path[car.pathIndex];
       const nextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
@@ -522,7 +537,7 @@ export class CarSystem {
       const isFinalTile = car.pathIndex + 1 === car.path.length - 1;
       const isTraversable = cell && (
         cell.type === CellType.Road ||
-        (isFinalTile && (cell.type === CellType.House || cell.type === CellType.Business))
+        (isFinalTile && (cell.type === CellType.House || cell.type === CellType.ParkingLot))
       );
 
       if (!isTraversable) {
@@ -556,6 +571,70 @@ export class CarSystem {
     occupied.set(newKey, car.id);
   }
 
+  private updateUnloadingCar(
+    car: Car, dt: number,
+    houses: House[], businesses: Business[],
+    toRemove: string[],
+  ): void {
+    car.unloadTimer += dt;
+    if (car.unloadTimer < UNLOAD_TIME) return;
+
+    // Unload complete
+    const biz = businesses.find(b => b.id === car.targetBusinessId);
+    if (biz) {
+      if (biz.demandPins > 0) {
+        biz.demandPins--;
+        this.score++;
+        this.onDelivery?.();
+      }
+      if (car.assignedSlotIndex !== null) {
+        biz.freeSlot(car.assignedSlotIndex);
+      }
+
+      // Path home from connector (road entry point)
+      const home = houses.find(h => h.id === car.homeHouseId);
+      if (home) {
+        const homePath = this.pathfinder.findPath(biz.connectorPos, home.pos);
+        if (homePath) {
+          car.state = CarState.GoingHome;
+          car.targetBusinessId = null;
+          car.assignedSlotIndex = null;
+          car.unloadTimer = 0;
+          car.destination = home.pos;
+          car.path = homePath;
+          car.pathIndex = 0;
+          car.segmentProgress = 0;
+          // Snap car to connector cell center
+          const center = gridToPixelCenter(biz.connectorPos);
+          car.pixelPos = { ...center };
+          car.prevPixelPos = { ...center };
+          if (homePath.length >= 2) {
+            const initDir = getDirection(homePath[0], homePath[1]);
+            car.renderAngle = directionAngle(initDir);
+            car.prevRenderAngle = car.renderAngle;
+          }
+        } else {
+          // Can't find path home — strand at connector
+          car.state = CarState.Stranded;
+          car.targetBusinessId = null;
+          car.assignedSlotIndex = null;
+          car.unloadTimer = 0;
+          car.destination = home.pos;
+          car.path = [];
+          car.pathIndex = 0;
+          car.segmentProgress = 0;
+          const center = gridToPixelCenter(biz.connectorPos);
+          car.pixelPos = { ...center };
+          car.prevPixelPos = { ...center };
+        }
+      } else {
+        toRemove.push(car.id);
+      }
+    } else {
+      toRemove.push(car.id);
+    }
+  }
+
   private moveCars(dt: number, houses: House[], businesses: Business[]): void {
     const occupied = this.buildOccupancyMap();
     const intersectionMap = this.buildIntersectionMap();
@@ -563,6 +642,10 @@ export class CarSystem {
 
     for (const car of this.cars) {
       if (car.state === CarState.Idle || car.state === CarState.Stranded) continue;
+      if (car.state === CarState.Unloading) {
+        this.updateUnloadingCar(car, dt, houses, businesses, toRemove);
+        continue;
+      }
       this.updateSingleCar(car, dt, houses, businesses, occupied, intersectionMap, toRemove);
     }
 
@@ -572,36 +655,54 @@ export class CarSystem {
   private handleArrival(car: Car, houses: House[], businesses: Business[], toRemove: string[]): void {
     if (car.state === CarState.GoingToBusiness) {
       const biz = businesses.find(b => b.id === car.targetBusinessId);
-      if (biz && biz.demandPins > 0) {
-        biz.demandPins--;
-        this.score++;
-        this.onDelivery?.();
-      }
-
-      const dest = car.path[car.path.length - 1];
-      const home = houses.find(h => h.id === car.homeHouseId);
-      if (home) {
-        const homePath = this.pathfinder.findPath(dest, home.pos);
-        if (homePath) {
-          car.state = CarState.GoingHome;
-          car.targetBusinessId = null;
-          car.destination = home.pos;
-          car.path = homePath;
-          car.pathIndex = 0;
-          car.segmentProgress = 0;
-          if (homePath.length >= 2) {
-            const initDir = getDirection(homePath[0], homePath[1]);
-            car.renderAngle = directionAngle(initDir);
-            car.prevRenderAngle = car.renderAngle;
-          }
-        } else {
-          // Can't find path home — strand at business
-          car.state = CarState.Stranded;
-          car.targetBusinessId = null;
-          car.destination = home.pos;
+      if (biz) {
+        // Transition to unloading state
+        const slotIndex = biz.getFreeParkingSlot();
+        if (slotIndex !== null) {
+          biz.occupySlot(slotIndex, car.id);
+          car.state = CarState.Unloading;
+          car.assignedSlotIndex = slotIndex;
+          car.unloadTimer = 0;
           car.path = [];
           car.pathIndex = 0;
           car.segmentProgress = 0;
+
+          // Position car visually in one of 4 sub-positions within the parking lot cell
+          const lotCenter = gridToPixelCenter(biz.parkingLotPos);
+          const offset = PARKING_SLOT_OFFSETS[slotIndex];
+          car.pixelPos = { x: lotCenter.x + offset.x, y: lotCenter.y + offset.y };
+          car.prevPixelPos = { ...car.pixelPos };
+        } else {
+          // No free slot (shouldn't happen with dispatch capacity check, but handle gracefully)
+          // Just path home immediately
+          const home = houses.find(h => h.id === car.homeHouseId);
+          if (home) {
+            const homePath = this.pathfinder.findPath(biz.connectorPos, home.pos);
+            if (homePath) {
+              car.state = CarState.GoingHome;
+              car.targetBusinessId = null;
+              car.destination = home.pos;
+              car.path = homePath;
+              car.pathIndex = 0;
+              car.segmentProgress = 0;
+              const center = gridToPixelCenter(biz.connectorPos);
+              car.pixelPos = { ...center };
+              if (homePath.length >= 2) {
+                const initDir = getDirection(homePath[0], homePath[1]);
+                car.renderAngle = directionAngle(initDir);
+                car.prevRenderAngle = car.renderAngle;
+              }
+            } else {
+              car.state = CarState.Stranded;
+              car.targetBusinessId = null;
+              car.destination = home.pos;
+              car.path = [];
+              car.pathIndex = 0;
+              car.segmentProgress = 0;
+            }
+          } else {
+            toRemove.push(car.id);
+          }
         }
       } else {
         toRemove.push(car.id);

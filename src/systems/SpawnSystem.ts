@@ -1,7 +1,7 @@
 import type { Grid } from '../core/Grid';
 import { House } from '../entities/House';
 import { Business } from '../entities/Business';
-import { CellType, Direction, type GameColor, type GridPos } from '../types';
+import { CellType, type GameColor, type GridPos } from '../types';
 import {
   COLOR_UNLOCK_ORDER,
   COLOR_UNLOCK_INTERVAL,
@@ -17,9 +17,10 @@ import {
 } from '../constants';
 import { manhattanDist } from '../utils/math';
 
-interface Empty1x3 {
+interface EmptyLShape {
   pos: GridPos;
   orientation: 'horizontal' | 'vertical';
+  connectorSide: 'positive' | 'negative';
 }
 
 export class SpawnSystem {
@@ -54,12 +55,12 @@ export class SpawnSystem {
     const hy = Math.floor(GRID_ROWS * 0.5) + Math.floor(Math.random() * 3 - 1);
     this.spawnHouse({ gx: hx, gy: hy }, COLOR_UNLOCK_ORDER[0]);
 
-    // For initial business, find a 1x2 spot near desired location
+    // For initial business, find an L-shape spot near desired location
     const bx = Math.floor(GRID_COLS * 0.7) + Math.floor(Math.random() * 5 - 2);
     const by = Math.floor(GRID_ROWS * 0.5) + Math.floor(Math.random() * 3 - 1);
-    const spot = this.findEmpty1x3Near({ gx: bx, gy: by }, 5);
+    const spot = this.findEmptyLShapeNear({ gx: bx, gy: by }, 5);
     if (spot) {
-      this.spawnBusiness(spot.pos, COLOR_UNLOCK_ORDER[0], spot.orientation);
+      this.spawnBusiness(spot.pos, COLOR_UNLOCK_ORDER[0], spot.orientation, spot.connectorSide);
     }
   }
 
@@ -119,18 +120,18 @@ export class SpawnSystem {
   private trySpawnBusinessForColor(color: GameColor): void {
     const sameColorHouses = this.houses.filter(h => h.color === color);
 
-    let spot: Empty1x3 | null = null;
+    let spot: EmptyLShape | null = null;
 
     if (sameColorHouses.length > 0) {
-      spot = this.findEmpty1x3FarFrom(sameColorHouses.map(h => h.pos), MIN_BUSINESS_DISTANCE);
+      spot = this.findEmptyLShapeFarFrom(sameColorHouses.map(h => h.pos), MIN_BUSINESS_DISTANCE);
     }
 
     if (!spot) {
-      spot = this.findRandomEmpty1x3();
+      spot = this.findRandomEmptyLShape();
     }
 
     if (spot) {
-      this.spawnBusiness(spot.pos, color, spot.orientation);
+      this.spawnBusiness(spot.pos, color, spot.orientation, spot.connectorSide);
     }
   }
 
@@ -148,64 +149,66 @@ export class SpawnSystem {
     });
   }
 
-  private spawnBusiness(pos: GridPos, color: GameColor, orientation: 'horizontal' | 'vertical'): void {
-    // Body cells: pos and secondCell
-    const secondCell: GridPos = orientation === 'horizontal'
-      ? { gx: pos.gx + 1, gy: pos.gy }
-      : { gx: pos.gx, gy: pos.gy + 1 };
-
-    // Connector is always the 3rd cell at the far end
-    const connectorPos: GridPos = orientation === 'horizontal'
-      ? { gx: pos.gx + 2, gy: pos.gy }
-      : { gx: pos.gx, gy: pos.gy + 2 };
-
-    const connectorDir: Direction = orientation === 'horizontal'
-      ? Direction.Right
-      : Direction.Down;
-
-    const business = new Business(pos, color, orientation, connectorPos, connectorDir);
+  private spawnBusiness(
+    pos: GridPos, color: GameColor,
+    orientation: 'horizontal' | 'vertical',
+    connectorSide: 'positive' | 'negative',
+  ): void {
+    const business = new Business(pos, color, orientation, connectorSide);
     this.businesses.push(business);
 
-    const cellData = {
+    // Building cell
+    this.grid.setCell(pos.gx, pos.gy, {
       type: CellType.Business,
       entityId: business.id,
       color,
       hasBridge: false,
       bridgeAxis: null,
-      bridgeConnections: [] as never[],
-      connectorDir: null as Direction | null,
-    };
+      bridgeConnections: [],
+      connectorDir: null,
+    });
 
-    // Body cell 1
-    this.grid.setCell(pos.gx, pos.gy, { ...cellData });
-    // Body cell 2
-    this.grid.setCell(secondCell.gx, secondCell.gy, { ...cellData });
-    // Connector cell (3rd)
-    this.grid.setCell(connectorPos.gx, connectorPos.gy, { ...cellData, connectorDir });
+    // Parking lot cell
+    this.grid.setCell(business.parkingLotPos.gx, business.parkingLotPos.gy, {
+      type: CellType.ParkingLot,
+      entityId: business.id,
+      color,
+      hasBridge: false,
+      bridgeAxis: null,
+      bridgeConnections: [],
+      connectorDir: null,
+    });
+
+    // Connector cell: a Road cell owned by the business
+    // Pre-populate roadConnections with direction toward parking lot
+    const connToParkingDir = business.getConnectorToParkingDir();
+    this.grid.setCell(business.connectorPos.gx, business.connectorPos.gy, {
+      type: CellType.Road,
+      entityId: business.id,
+      color: null,
+      roadConnections: [connToParkingDir],
+      hasBridge: false,
+      bridgeAxis: null,
+      bridgeConnections: [],
+      connectorDir: null,
+    });
   }
 
-  private findEmpty1x3Near(center: GridPos, radius: number): Empty1x3 | null {
-    const candidates: Empty1x3[] = [];
+  private findEmptyLShapeNear(center: GridPos, radius: number): EmptyLShape | null {
+    const candidates: EmptyLShape[] = [];
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         const gx = center.gx + dx;
         const gy = center.gy + dy;
-        // Try horizontal (3 cells)
-        if (this.isCellEmpty(gx, gy) && this.isCellEmpty(gx + 1, gy) && this.isCellEmpty(gx + 2, gy)) {
-          candidates.push({ pos: { gx, gy }, orientation: 'horizontal' });
-        }
-        // Try vertical (3 cells)
-        if (this.isCellEmpty(gx, gy) && this.isCellEmpty(gx, gy + 1) && this.isCellEmpty(gx, gy + 2)) {
-          candidates.push({ pos: { gx, gy }, orientation: 'vertical' });
-        }
+        this.tryLShapeCandidates(gx, gy, candidates);
       }
     }
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  private findEmpty1x3FarFrom(positions: GridPos[], minDist: number): Empty1x3 | null {
-    const candidates = this.getAllEmpty1x3();
+  private findEmptyLShapeFarFrom(positions: GridPos[], minDist: number): EmptyLShape | null {
+    const candidates = this.getAllEmptyLShapes();
     const far = candidates.filter(spot => {
       return positions.every(p => manhattanDist(spot.pos, p) >= minDist);
     });
@@ -213,25 +216,56 @@ export class SpawnSystem {
     return far[Math.floor(Math.random() * far.length)];
   }
 
-  private findRandomEmpty1x3(): Empty1x3 | null {
-    const candidates = this.getAllEmpty1x3();
+  private findRandomEmptyLShape(): EmptyLShape | null {
+    const candidates = this.getAllEmptyLShapes();
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  private getAllEmpty1x3(): Empty1x3[] {
-    const results: Empty1x3[] = [];
+  private getAllEmptyLShapes(): EmptyLShape[] {
+    const results: EmptyLShape[] = [];
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
-        if (this.isCellEmpty(gx, gy) && this.isCellEmpty(gx + 1, gy) && this.isCellEmpty(gx + 2, gy)) {
-          results.push({ pos: { gx, gy }, orientation: 'horizontal' });
-        }
-        if (this.isCellEmpty(gx, gy) && this.isCellEmpty(gx, gy + 1) && this.isCellEmpty(gx, gy + 2)) {
-          results.push({ pos: { gx, gy }, orientation: 'vertical' });
-        }
+        this.tryLShapeCandidates(gx, gy, results);
       }
     }
     return results;
+  }
+
+  private tryLShapeCandidates(gx: number, gy: number, results: EmptyLShape[]): void {
+    // For each building position, try 2 orientations x 2 connector sides
+    const orientations: Array<'horizontal' | 'vertical'> = ['horizontal', 'vertical'];
+    const sides: Array<'positive' | 'negative'> = ['positive', 'negative'];
+
+    for (const orientation of orientations) {
+      for (const connectorSide of sides) {
+        // Compute the 3 cell positions
+        let parkingLot: GridPos;
+        let connector: GridPos;
+
+        if (orientation === 'horizontal') {
+          parkingLot = { gx: gx + 1, gy };
+          connector = {
+            gx: gx + 1,
+            gy: gy + (connectorSide === 'positive' ? 1 : -1),
+          };
+        } else {
+          parkingLot = { gx, gy: gy + 1 };
+          connector = {
+            gx: gx + (connectorSide === 'positive' ? 1 : -1),
+            gy: gy + 1,
+          };
+        }
+
+        if (
+          this.isCellEmpty(gx, gy) &&
+          this.isCellEmpty(parkingLot.gx, parkingLot.gy) &&
+          this.isCellEmpty(connector.gx, connector.gy)
+        ) {
+          results.push({ pos: { gx, gy }, orientation, connectorSide });
+        }
+      }
+    }
   }
 
   private isCellEmpty(gx: number, gy: number): boolean {
