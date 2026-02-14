@@ -97,20 +97,41 @@ export class RoadDrawer {
         }
       } else if (this.lastGridPos && (gridPos.gx !== this.lastGridPos.gx || gridPos.gy !== this.lastGridPos.gy)) {
         if (this.mode === 'connector-drag' && this.draggingHouse) {
-          // Check if dragged to an adjacent cell of the house
           const house = this.draggingHouse;
           const dx = gridPos.gx - house.pos.gx;
           const dy = gridPos.gy - house.pos.gy;
-          if (Math.abs(dx) + Math.abs(dy) === 1) {
-            let newDir: Direction;
-            if (dx === 1) newDir = Direction.Right;
-            else if (dx === -1) newDir = Direction.Left;
-            else if (dy === 1) newDir = Direction.Down;
-            else newDir = Direction.Up;
 
-            if (newDir !== house.connectorDir) {
-              this.relocateHouseConnector(house, newDir);
-            }
+          // Determine direction from house toward cursor
+          let newDir: Direction;
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            newDir = dx >= 0 ? Direction.Right : Direction.Left;
+          } else {
+            newDir = dy >= 0 ? Direction.Down : Direction.Up;
+          }
+
+          if (newDir !== house.connectorDir) {
+            this.relocateHouseConnector(house, newDir);
+          }
+
+          // Transition to place mode starting from the connector cell
+          const connectorPos = house.connectorPos;
+          this.mode = 'place';
+          this.prevPlacedPos = { ...connectorPos };
+          this.lastBuiltPos = { ...connectorPos };
+          this.draggingHouse = null;
+
+          // If cursor is beyond the connector cell, place roads from connector to cursor
+          if (gridPos.gx !== connectorPos.gx || gridPos.gy !== connectorPos.gy) {
+            this.bresenhamLine(connectorPos.gx, connectorPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+              // Skip the connector cell itself (already placed)
+              if (x === connectorPos.gx && y === connectorPos.gy) return;
+              this.tryPlace(x, y);
+              if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
+                this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
+              }
+              this.prevPlacedPos = { gx: x, gy: y };
+            });
+            this.lastBuiltPos = { ...gridPos };
           }
         } else if (this.mode === 'place') {
           this.bresenhamLine(this.lastGridPos.gx, this.lastGridPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
