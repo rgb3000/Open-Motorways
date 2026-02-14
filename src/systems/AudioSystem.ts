@@ -12,7 +12,7 @@ export class AudioSystem {
   private bass!: Tone.FMSynth;
   private bassPart!: Tone.Part;
   private chimeSynth!: Tone.PolySynth;
-  private returnSynth!: Tone.Synth;
+  private returnSynth!: Tone.PolySynth;
   private hatsActive = false;
   private hatsCycleLoop!: Tone.Loop;
   private initialized = false;
@@ -130,7 +130,7 @@ export class AudioSystem {
     }).toDestination();
 
     // Home-return ping — soft ascending two-note sound
-    this.returnSynth = new Tone.Synth({
+    this.returnSynth = new Tone.PolySynth(Tone.Synth, {
       volume: -10,
       oscillator: { type: 'sine' },
       envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.15 },
