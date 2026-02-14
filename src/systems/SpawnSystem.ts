@@ -245,10 +245,10 @@ export class SpawnSystem {
   private getSpawnBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
     if (this.isInnerSpawnPhase()) {
       return {
-        minX: Math.floor(GRID_COLS * 0.4),
-        maxX: Math.floor(GRID_COLS * 0.6) - 1,
-        minY: Math.floor(GRID_ROWS * 0.4),
-        maxY: Math.floor(GRID_ROWS * 0.6) - 1,
+        minX: Math.floor(GRID_COLS * 0.37),
+        maxX: Math.floor(GRID_COLS * 0.63) - 1,
+        minY: Math.floor(GRID_ROWS * 0.37),
+        maxY: Math.floor(GRID_ROWS * 0.63) - 1,
       };
     }
     return { minX: 0, maxX: GRID_COLS - 1, minY: 0, maxY: GRID_ROWS - 1 };
