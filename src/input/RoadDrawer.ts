@@ -73,7 +73,7 @@ export class RoadDrawer {
           if (this.input.state.shiftDown && this.lastBuiltPos) {
             // Shift-click: build L-shaped road from lastBuiltPos to clicked cell
             let prev = { ...this.lastBuiltPos };
-            this.manhattanLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+            this.shortestLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
               this.tryPlace(x, y);
               if (prev.gx !== x || prev.gy !== y) {
                 this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
@@ -275,17 +275,22 @@ export class RoadDrawer {
     }
   }
 
-  private manhattanLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {
-    const sx = x0 < x1 ? 1 : -1;
-    const sy = y0 < y1 ? 1 : -1;
+  private shortestLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {
+    const sx = x0 < x1 ? 1 : x0 > x1 ? -1 : 0;
+    const sy = y0 < y1 ? 1 : y0 > y1 ? -1 : 0;
     let x = x0;
     let y = y0;
-    // Walk horizontally first
+    // Walk diagonally while both axes need covering (Chebyshev-optimal)
+    while (x !== x1 && y !== y1) {
+      callback(x, y);
+      x += sx;
+      y += sy;
+    }
+    // Then walk straight along remaining axis
     while (x !== x1) {
       callback(x, y);
       x += sx;
     }
-    // Then walk vertically
     while (y !== y1) {
       callback(x, y);
       y += sy;

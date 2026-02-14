@@ -6,7 +6,7 @@ import type { Grid } from '../core/Grid';
 import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, BEZIER_KAPPA, UNLOAD_TIME, PARKING_EXIT_DELAY } from '../constants';
 import { CellType, Direction, LaneId, TrafficLevel } from '../types';
 import type { GridPos } from '../types';
-import { gridToPixelCenter, manhattanDist, pixelToGrid, cubicBezier, cubicBezierTangent } from '../utils/math';
+import { gridToPixelCenter, manhattanDist, pixelToGrid, cubicBezier, cubicBezierTangent, isDiagonal } from '../utils/math';
 import {
   getDirection, directionToLane, directionAngle, unitVector,
   isOpposite, isPerpendicularAxis, YIELD_TO_DIRECTION,
@@ -38,6 +38,10 @@ function getTrafficLevel(grid: Grid, path: GridPos[], pathIndex: number): Traffi
   // Derive level from entry direction
   const prevTile = path[pathIndex - 1];
   const entryDir = getDirection(prevTile, tile);
+
+  // Diagonal directions are always ground level (no diagonal bridges)
+  if (isDiagonal(entryDir)) return TrafficLevel.Ground;
+
   const isHorizontal = entryDir === Direction.Left || entryDir === Direction.Right;
   const isBridgeHorizontal = cell.bridgeAxis === 'horizontal';
 
@@ -513,7 +517,8 @@ export class CarSystem {
       && isIntersection(this.grid, nextTile.gx, nextTile.gy);
     const effectiveSpeed = (isCurrentIntersection || isNextIntersection)
       ? CAR_SPEED * INTERSECTION_SPEED_MULTIPLIER : CAR_SPEED;
-    const tileDistance = effectiveSpeed * dt;
+    const segmentLength = isDiagonal(dir) ? Math.SQRT2 : 1;
+    const tileDistance = (effectiveSpeed * dt) / segmentLength;
     let newProgress = car.segmentProgress + tileDistance;
 
     newProgress = this.applyCollisionAndYield(

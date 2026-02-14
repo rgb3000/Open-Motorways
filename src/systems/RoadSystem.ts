@@ -2,6 +2,7 @@ import type { Grid } from '../core/Grid';
 import { OPPOSITE_DIR } from '../core/Grid';
 import { CellType, Direction } from '../types';
 import { isOpposite } from '../utils/direction';
+import { isDiagonal } from '../utils/math';
 
 export class RoadSystem {
   private dirty = false;
@@ -85,10 +86,11 @@ export class RoadSystem {
     if (!cell || cell.type !== CellType.Road) return false;
     if (cell.hasBridge) return false;
 
-    // Must be a straight road: exactly 2 opposite connections
+    // Must be a straight road: exactly 2 opposite connections, cardinal only
     const conns = cell.roadConnections;
     if (conns.length !== 2) return false;
     if (!isOpposite(conns[0], conns[1])) return false;
+    if (conns.some(c => isDiagonal(c))) return false;
 
     // Determine road axis and bridge axis (perpendicular)
     const isHorizontalRoad = conns[0] === Direction.Left || conns[0] === Direction.Right;
@@ -189,17 +191,21 @@ export class RoadSystem {
     if (cell1.type === CellType.Empty || cell1.type === CellType.Business || cell1.type === CellType.House) return false;
     if (cell2.type === CellType.Empty || cell2.type === CellType.Business || cell2.type === CellType.House) return false;
 
-    // Must be orthogonal neighbors
+    // Must be adjacent (cardinal or diagonal): Chebyshev distance = 1
     const dx = gx2 - gx1;
     const dy = gy2 - gy1;
-    if (Math.abs(dx) + Math.abs(dy) !== 1) return false;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== 1) return false;
 
     // Determine directions
     let dir: Direction;
-    if (dx === 1) dir = Direction.Right;
-    else if (dx === -1) dir = Direction.Left;
-    else if (dy === 1) dir = Direction.Down;
-    else dir = Direction.Up;
+    if (dx === 1 && dy === 0) dir = Direction.Right;
+    else if (dx === -1 && dy === 0) dir = Direction.Left;
+    else if (dx === 0 && dy === 1) dir = Direction.Down;
+    else if (dx === 0 && dy === -1) dir = Direction.Up;
+    else if (dx === 1 && dy === -1) dir = Direction.UpRight;
+    else if (dx === -1 && dy === -1) dir = Direction.UpLeft;
+    else if (dx === 1 && dy === 1) dir = Direction.DownRight;
+    else dir = Direction.DownLeft;
 
     const oppDir = OPPOSITE_DIR[dir];
 

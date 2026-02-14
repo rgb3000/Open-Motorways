@@ -32,6 +32,10 @@ export const Direction = {
   Down: 1,
   Left: 2,
   Right: 3,
+  UpLeft: 4,
+  UpRight: 5,
+  DownLeft: 6,
+  DownRight: 7,
 } as const;
 export type Direction = (typeof Direction)[keyof typeof Direction];
 
@@ -40,6 +44,10 @@ export const LaneId = {
   HorizontalLeft: 1,
   VerticalDown: 2,
   VerticalUp: 3,
+  DiagDownRight: 4,
+  DiagUpLeft: 5,
+  DiagDownLeft: 6,
+  DiagUpRight: 7,
 } as const;
 export type LaneId = (typeof LaneId)[keyof typeof LaneId];
 
