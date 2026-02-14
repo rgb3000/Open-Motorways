@@ -31,16 +31,6 @@ export class RoadSystem {
       bridgeConnections: [],
     });
 
-    // Auto-connect to all valid neighbors
-    for (const dir of this.grid.getAllDirections()) {
-      const neighbor = this.grid.getNeighbor(gx, gy, dir);
-      if (!neighbor) continue;
-      const t = neighbor.cell.type;
-      if (t === CellType.Road || t === CellType.House || t === CellType.Business) {
-        this.connectRoads(gx, gy, neighbor.gx, neighbor.gy);
-      }
-    }
-
     this.dirty = true;
     return true;
   }

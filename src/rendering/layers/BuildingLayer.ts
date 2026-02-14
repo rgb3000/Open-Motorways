@@ -105,52 +105,23 @@ export class BuildingLayer {
     tower2.castShadow = true;
     group.add(tower2);
 
-    // Connector block: rounded outside corners
+    // Connector block: full tile-sized grey block at the connector cell
     const connMat = new THREE.MeshStandardMaterial({ color: 0xBDBDBD });
     const connSize = TILE_SIZE * 0.75;
     const connHeight = 2.5;
-    const connRadius = 2.5;
-    const half = connSize / 2;
-
-    // Build a 2D shape with 2 rounded outside corners
-    // The body side stays square, the outside gets rounded
-    const connShape = new THREE.Shape();
-    if (isHorizontal) {
-      // Body is to the left (-x), outside is to the right (+x)
-      connShape.moveTo(-half, -half);
-      connShape.lineTo(half - connRadius, -half);
-      connShape.quadraticCurveTo(half, -half, half, -half + connRadius);
-      connShape.lineTo(half, half - connRadius);
-      connShape.quadraticCurveTo(half, half, half - connRadius, half);
-      connShape.lineTo(-half, half);
-      connShape.lineTo(-half, -half);
-    } else {
-      // Body is to the top (-y in shape / -z in 3D), outside is bottom (+y / +z)
-      connShape.moveTo(-half, -half);
-      connShape.lineTo(half, -half);
-      connShape.lineTo(half, half - connRadius);
-      connShape.quadraticCurveTo(half, half, half - connRadius, half);
-      connShape.lineTo(-half + connRadius, half);
-      connShape.quadraticCurveTo(-half, half, -half, half - connRadius);
-      connShape.lineTo(-half, -half);
-    }
-
-    const connGeom = new THREE.ExtrudeGeometry(connShape, {
-      depth: connHeight,
-      bevelEnabled: false,
-    });
-    // ExtrudeGeometry extrudes along Z; rotate so it goes along Y (up)
-    connGeom.rotateX(-Math.PI / 2);
-
+    const connGeom = new THREE.BoxGeometry(connSize, connHeight, connSize);
     const conn = new THREE.Mesh(connGeom, connMat);
 
+    // Offset from body center to connector cell center (1.5 tiles from anchor, body center is at 0.5 tiles offset)
     let connOffsetX = 0, connOffsetZ = 0;
     if (isHorizontal) {
+      // Connector is at gx+2, body center is between gx and gx+1 => offset = +1 tile
       connOffsetX = TILE_SIZE;
     } else {
+      // Connector is at gy+2, body center is between gy and gy+1 => offset = +1 tile
       connOffsetZ = TILE_SIZE;
     }
-    conn.position.set(connOffsetX, 0, connOffsetZ);
+    conn.position.set(connOffsetX, connHeight / 2, connOffsetZ);
     conn.castShadow = true;
     group.add(conn);
 
