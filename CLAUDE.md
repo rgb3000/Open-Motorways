@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Conventions
+
+Do not include a `Co-Authored-By` line in commit messages.
+
 ## Project Overview
 
 Open Motorways is an open-source Mini Motorways clone built with TypeScript, Three.js, React, and Tone.js. Players draw roads to connect color-matched houses and businesses on a grid. Cars pathfind along roads to deliver goods; unmet demand causes game over.
