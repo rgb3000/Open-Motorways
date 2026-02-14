@@ -185,7 +185,6 @@ export class Game {
     await this.musicSystem.init();
     await this.soundEffects.init();
     this.musicSystem.startMusic();
-    this.carSystem.onDelivery = () => this.soundEffects.playDeliveryChime();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
@@ -228,7 +227,6 @@ export class Game {
     await this.musicSystem.init();
     await this.soundEffects.init();
     this.musicSystem.startMusic();
-    this.carSystem.onDelivery = () => this.soundEffects.playDeliveryChime();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
