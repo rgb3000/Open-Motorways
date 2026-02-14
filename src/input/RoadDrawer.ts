@@ -11,7 +11,7 @@ export interface MoneyInterface {
   refund(amount: number): void;
 }
 
-type DrawMode = 'none' | 'place' | 'connect';
+type DrawMode = 'none' | 'place';
 
 export class RoadDrawer {
   private lastGridPos: GridPos | null = null;
@@ -24,7 +24,6 @@ export class RoadDrawer {
   private money: MoneyInterface;
 
   private mode: DrawMode = 'none';
-  private connectOrigin: GridPos | null = null;
   private prevPlacedPos: GridPos | null = null;
 
   constructor(input: InputHandler, roadSystem: RoadSystem, grid: Grid, getActiveTool: () => ToolType, money: MoneyInterface) {
@@ -45,11 +44,10 @@ export class RoadDrawer {
         const cell = this.grid.getCell(gridPos.gx, gridPos.gy);
         const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.House || cell.type === CellType.Business);
 
+        this.mode = 'place';
         if (isOccupied) {
-          this.mode = 'connect';
-          this.connectOrigin = { ...gridPos };
+          this.prevPlacedPos = { ...gridPos };
         } else {
-          this.mode = 'place';
           this.prevPlacedPos = null;
           this.tryPlace(gridPos.gx, gridPos.gy);
           this.prevPlacedPos = { ...gridPos };
@@ -62,14 +60,6 @@ export class RoadDrawer {
               this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
             }
             this.prevPlacedPos = { gx: x, gy: y };
-          });
-        } else if (this.mode === 'connect' && this.connectOrigin) {
-          this.bresenhamLine(this.lastGridPos.gx, this.lastGridPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
-            if (this.connectOrigin && (this.connectOrigin.gx !== x || this.connectOrigin.gy !== y)) {
-              if (this.roadSystem.connectRoads(this.connectOrigin.gx, this.connectOrigin.gy, x, y)) {
-                this.connectOrigin = { gx: x, gy: y };
-              }
-            }
           });
         }
         this.lastGridPos = { ...gridPos };
@@ -91,7 +81,6 @@ export class RoadDrawer {
     if (!leftDown && !rightDown) {
       this.lastGridPos = null;
       this.mode = 'none';
-      this.connectOrigin = null;
       this.prevPlacedPos = null;
     }
 
