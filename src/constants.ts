@@ -23,6 +23,8 @@ export const CAR_SPEED = 2; // tiles per second
 export const LANE_OFFSET = 3.0;   // px from tile center to lane center
 export const CAR_WIDTH = 5.0;     // px (narrow dimension, perpendicular to travel)
 export const CAR_LENGTH = 8.0;    // px (long dimension, along travel direction)
+export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
+export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
 
 // Spawning
 export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color

@@ -22,6 +22,7 @@ export class Car {
   path: GridPos[] = [];
   pathIndex = 0;
   segmentProgress = 0; // 0..1 between current and next tile
+  intersectionWaitTime = 0;
 
   // Rendering interpolation
   pixelPos: PixelPos;

@@ -3,7 +3,7 @@ import type { Business } from '../entities/Business';
 import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
-import { CAR_SPEED, LANE_OFFSET } from '../constants';
+import { CAR_SPEED, LANE_OFFSET, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT } from '../constants';
 import { CellType, Direction, LaneId } from '../types';
 import type { GridPos, PixelPos } from '../types';
 import { gridToPixelCenter, manhattanDist, pixelToGrid } from '../utils/math';
@@ -37,6 +37,35 @@ function laneOffset(dir: Direction): PixelPos {
 
 function occupancyKey(gx: number, gy: number, lane: LaneId): string {
   return `${gx},${gy},${lane}`;
+}
+
+function isIntersection(grid: Grid, gx: number, gy: number): boolean {
+  const cell = grid.getCell(gx, gy);
+  if (!cell || cell.type !== CellType.Road) return false;
+  return cell.roadConnections.length >= 3;
+}
+
+const YIELD_TO_DIRECTION: Record<Direction, Direction> = {
+  [Direction.Up]: Direction.Left,
+  [Direction.Right]: Direction.Up,
+  [Direction.Down]: Direction.Right,
+  [Direction.Left]: Direction.Down,
+};
+
+function isPerpendicularAxis(d1: Direction, d2: Direction): boolean {
+  const isH1 = d1 === Direction.Left || d1 === Direction.Right;
+  const isH2 = d2 === Direction.Left || d2 === Direction.Right;
+  return isH1 !== isH2;
+}
+
+function tileKey(gx: number, gy: number): string {
+  return `${gx},${gy}`;
+}
+
+interface IntersectionEntry {
+  carId: string;
+  entryDirection: Direction;
+  inIntersection: boolean;
 }
 
 export class CarSystem {
@@ -227,6 +256,48 @@ export class CarSystem {
       occupied.set(occupancyKey(occupiedTile.gx, occupiedTile.gy, lane), car.id);
     }
 
+    // Phase 1.5: Build intersection approach map
+    const intersectionMap = new Map<string, IntersectionEntry[]>();
+
+    for (const car of this.cars) {
+      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.path.length < 2) continue;
+
+      const curTile = car.path[car.pathIndex];
+      const nextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
+      const nxtTile = car.path[nextIdx];
+
+      if (car.segmentProgress >= 0.5 && car.pathIndex + 1 < car.path.length) {
+        // Case A: car center is past midpoint, check if next tile is intersection
+        if (isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
+          const dir = getDirection(curTile, nxtTile);
+          const key = tileKey(nxtTile.gx, nxtTile.gy);
+          const list = intersectionMap.get(key) ?? [];
+          list.push({ carId: car.id, entryDirection: dir, inIntersection: true });
+          intersectionMap.set(key, list);
+        }
+      } else if (car.segmentProgress < 0.5) {
+        // Case B: car center before midpoint, check if current tile is intersection
+        if (isIntersection(this.grid, curTile.gx, curTile.gy)) {
+          const dir = car.pathIndex > 0
+            ? getDirection(car.path[car.pathIndex - 1], curTile)
+            : getDirection(curTile, nxtTile);
+          const key = tileKey(curTile.gx, curTile.gy);
+          const list = intersectionMap.get(key) ?? [];
+          list.push({ carId: car.id, entryDirection: dir, inIntersection: true });
+          intersectionMap.set(key, list);
+        }
+
+        // Case C: car approaching, check if next tile is intersection
+        if (car.pathIndex + 1 < car.path.length && isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
+          const dir = getDirection(curTile, nxtTile);
+          const key = tileKey(nxtTile.gx, nxtTile.gy);
+          const list = intersectionMap.get(key) ?? [];
+          list.push({ carId: car.id, entryDirection: dir, inIntersection: false });
+          intersectionMap.set(key, list);
+        }
+      }
+    }
+
     // Phase 2: Move with collision
     const toRemove: string[] = [];
 
@@ -255,7 +326,12 @@ export class CarSystem {
         occupied.delete(oldKey);
       }
 
-      const tileDistance = CAR_SPEED * dt;
+      const isCurrentIntersection = isIntersection(this.grid, currentTile.gx, currentTile.gy);
+      const isNextIntersection = car.pathIndex + 1 < car.path.length
+        && isIntersection(this.grid, nextTile.gx, nextTile.gy);
+      const effectiveSpeed = (isCurrentIntersection || isNextIntersection)
+        ? CAR_SPEED * INTERSECTION_SPEED_MULTIPLIER : CAR_SPEED;
+      const tileDistance = effectiveSpeed * dt;
       let newProgress = car.segmentProgress + tileDistance;
 
       // Check collision when crossing into next tile
@@ -279,6 +355,44 @@ export class CarSystem {
         if (blocker && blocker !== car.id) {
           newProgress = Math.min(newProgress, 0.45);
         }
+      }
+
+      // Intersection yield check (yield-to-right / rechts-vor-links)
+      if (isNextIntersection && car.segmentProgress < 0.5) {
+        const myDir = dir;
+        const intKey = tileKey(nextTile.gx, nextTile.gy);
+        const entries = intersectionMap.get(intKey);
+        let mustYield = false;
+
+        if (entries) {
+          for (const other of entries) {
+            if (other.carId === car.id) continue;
+
+            // Rule 1: perpendicular car already IN intersection → wait
+            if (other.inIntersection && isPerpendicularAxis(myDir, other.entryDirection)) {
+              mustYield = true;
+              break;
+            }
+
+            // Rule 2: car approaching/in from my yield-to direction → yield
+            if (other.entryDirection === YIELD_TO_DIRECTION[myDir]) {
+              mustYield = true;
+              break;
+            }
+          }
+        }
+
+        if (mustYield) {
+          car.intersectionWaitTime += dt;
+          if (car.intersectionWaitTime < INTERSECTION_DEADLOCK_TIMEOUT) {
+            newProgress = Math.min(newProgress, 0.45);
+          }
+          // else: timeout expired → let car through (deadlock breaker)
+        } else {
+          car.intersectionWaitTime = 0;
+        }
+      } else {
+        car.intersectionWaitTime = 0;
       }
 
       car.segmentProgress = newProgress;
