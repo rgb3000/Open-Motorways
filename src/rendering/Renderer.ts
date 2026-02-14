@@ -118,30 +118,42 @@ export class Renderer {
   onWheel(e: WheelEvent): void {
     e.preventDefault();
 
-    // World point under cursor before zoom change
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
-    const ndcX = (sx / this.viewportWidth) * 2 - 1;
-    const ndcY = (sy / this.viewportHeight) * 2 - 1;
+    if (e.ctrlKey) {
+      // Ctrl+scroll / pinch-to-zoom: keep zoom behavior
+      const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const ndcX = (sx / this.viewportWidth) * 2 - 1;
+      const ndcY = (sy / this.viewportHeight) * 2 - 1;
 
-    const worldX = this.cameraCenterX + ndcX * this.camera.right;
-    const worldZ = this.cameraCenterZ + ndcY * this.camera.top;
+      const worldX = this.cameraCenterX + ndcX * this.camera.right;
+      const worldZ = this.cameraCenterZ + ndcY * this.camera.top;
 
-    // Adjust target zoom
-    const direction = e.deltaY > 0 ? -1 : 1;
-    this.targetZoom = clamp(
-      this.targetZoom * (1 + direction * ZOOM_STEP),
-      MIN_ZOOM,
-      MAX_ZOOM,
-    );
+      const direction = e.deltaY > 0 ? -1 : 1;
+      this.targetZoom = clamp(
+        this.targetZoom * (1 + direction * ZOOM_STEP),
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
 
-    // Compute new frustum half-sizes at target zoom
-    const { halfW, halfH } = this.computeHalfSizes(this.targetZoom);
+      const { halfW, halfH } = this.computeHalfSizes(this.targetZoom);
+      this.cameraTargetX = worldX - ndcX * halfW;
+      this.cameraTargetZ = worldZ - ndcY * halfH;
+    } else {
+      // Normal scroll: pan the camera
+      const panScale = 1 / this.currentZoom;
+      this.cameraTargetX += e.deltaX * panScale;
+      this.cameraTargetZ += e.deltaY * panScale;
+    }
+  }
 
-    // Adjust camera target so world point stays under cursor
-    this.cameraTargetX = worldX - ndcX * halfW;
-    this.cameraTargetZ = worldZ - ndcY * halfH;
+  panBy(dx: number, dz: number): void {
+    this.cameraTargetX += dx;
+    this.cameraTargetZ += dz;
+  }
+
+  getCurrentZoom(): number {
+    return this.currentZoom;
   }
 
   zoomByKey(direction: 1 | -1): void {
