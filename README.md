@@ -2,6 +2,8 @@
 
 An open-source adaptation of [Mini Motorways](https://store.steampowered.com/app/1127500/Mini_Motorways/) built with TypeScript, Three.js, and React.
 
+**[Play the Demo](https://rgb3000.github.io/Open-Motorways/)**
+
 > **Warning:** This project is in a very early stage of development. Expect bugs, glitches, and missing features.
 
 ## Tech Stack
