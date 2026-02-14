@@ -76,7 +76,7 @@ export class RoadDrawer {
             this.shortestLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
               this.tryPlace(x, y);
               if (prev.gx !== x || prev.gy !== y) {
-                this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
+                this.placeAndConnectDiagonal(prev, { gx: x, gy: y });
               }
               prev = { gx: x, gy: y };
             });
@@ -127,7 +127,7 @@ export class RoadDrawer {
               if (x === connectorPos.gx && y === connectorPos.gy) return;
               this.tryPlace(x, y);
               if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
-                this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
+                this.placeAndConnectDiagonal(this.prevPlacedPos, { gx: x, gy: y });
               }
               this.prevPlacedPos = { gx: x, gy: y };
             });
@@ -137,7 +137,7 @@ export class RoadDrawer {
           this.bresenhamLine(this.lastGridPos.gx, this.lastGridPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
             this.tryPlace(x, y);
             if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
-              this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
+              this.placeAndConnectDiagonal(this.prevPlacedPos, { gx: x, gy: y });
             }
             this.prevPlacedPos = { gx: x, gy: y };
           });
@@ -260,6 +260,29 @@ export class RoadDrawer {
         this.money.spend(ROAD_COST);
         this.onRoadPlace?.();
       }
+    }
+  }
+
+  private placeAndConnectDiagonal(prev: GridPos, current: GridPos): void {
+    const dx = current.gx - prev.gx;
+    const dy = current.gy - prev.gy;
+
+    if (Math.abs(dx) === 1 && Math.abs(dy) === 1) {
+      // Diagonal step: place auxiliary cell at intermediate position (horizontal first)
+      const auxGx = prev.gx + dx;
+      const auxGy = prev.gy;
+
+      this.tryPlace(auxGx, auxGy);
+
+      // Connect prev → aux (cardinal horizontal)
+      this.roadSystem.connectRoads(prev.gx, prev.gy, auxGx, auxGy);
+      // Connect aux → current (cardinal vertical)
+      this.roadSystem.connectRoads(auxGx, auxGy, current.gx, current.gy);
+      // Also place diagonal connection for pathfinding
+      this.roadSystem.connectRoads(prev.gx, prev.gy, current.gx, current.gy);
+    } else {
+      // Cardinal step: connect directly
+      this.roadSystem.connectRoads(prev.gx, prev.gy, current.gx, current.gy);
     }
   }
 

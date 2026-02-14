@@ -168,65 +168,6 @@ export class RoadLayer {
     return pts;
   }
 
-  private buildDiagonalArmGeom(
-    geoms: THREE.BufferGeometry[],
-    cx: number, cz: number,
-    rh: number, half: number, dir: Direction,
-    height: number, yOffset: number,
-  ): void {
-    // Each diagonal arm is a quadrilateral from the road body to the tile corner.
-    // Inner points sit on the road body boundary; outer points on the tile boundary.
-    let innerLeft: { x: number; z: number };
-    let outerLeft: { x: number; z: number };
-    let outerRight: { x: number; z: number };
-    let innerRight: { x: number; z: number };
-
-    switch (dir) {
-      case Direction.UpRight:
-        innerLeft = { x: 0, z: -rh };
-        outerLeft = { x: half - rh, z: -half };
-        outerRight = { x: half, z: -half + rh };
-        innerRight = { x: rh, z: 0 };
-        break;
-      case Direction.DownRight:
-        innerLeft = { x: rh, z: 0 };
-        outerLeft = { x: half, z: half - rh };
-        outerRight = { x: half - rh, z: half };
-        innerRight = { x: 0, z: rh };
-        break;
-      case Direction.DownLeft:
-        innerLeft = { x: 0, z: rh };
-        outerLeft = { x: -half + rh, z: half };
-        outerRight = { x: -half, z: half - rh };
-        innerRight = { x: -rh, z: 0 };
-        break;
-      case Direction.UpLeft:
-        innerLeft = { x: -rh, z: 0 };
-        outerLeft = { x: -half, z: -half + rh };
-        outerRight = { x: -half + rh, z: -half };
-        innerRight = { x: 0, z: -rh };
-        break;
-      default:
-        return;
-    }
-
-    // Build shape in CCW order (THREE.js convention): innerRight, outerRight, outerLeft, innerLeft
-    const shape = new THREE.Shape();
-    shape.moveTo(innerRight.x, -innerRight.z);
-    shape.lineTo(outerRight.x, -outerRight.z);
-    shape.lineTo(outerLeft.x, -outerLeft.z);
-    shape.lineTo(innerLeft.x, -innerLeft.z);
-
-    const geom = new THREE.ExtrudeGeometry(shape, {
-      depth: height,
-      bevelEnabled: false,
-      curveSegments: 1,
-    });
-    geom.rotateX(-Math.PI / 2);
-    geom.translate(cx, yOffset, cz);
-    geoms.push(geom);
-  }
-
   private buildRoundedCellShape(
     geoms: THREE.BufferGeometry[],
     cx: number, cz: number,
@@ -237,12 +178,6 @@ export class RoadLayer {
     const cardinalConns = conns.filter(d => d === Direction.Up || d === Direction.Down || d === Direction.Left || d === Direction.Right);
     const pts = this.buildOutlinePoints(cardinalConns, rh, half);
     if (pts.length < 3) return;
-
-    // Build diagonal arm extensions
-    for (const dir of conns) {
-      if (dir < 4) continue;
-      this.buildDiagonalArmGeom(geoms, cx, cz, rh, half, dir, height, yOffset);
-    }
 
     const armLen = half - rh;
     const Rconvex = Math.min(ROAD_CORNER_RADIUS, rh * 0.9);
