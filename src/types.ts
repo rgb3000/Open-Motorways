@@ -70,4 +70,5 @@ export interface Cell {
   hasBridge: boolean;
   bridgeAxis: 'horizontal' | 'vertical' | null;
   bridgeConnections: Direction[];
+  connectorDir: Direction | null;
 }

@@ -201,19 +201,19 @@ export class CarSystem {
 
       const availableHouses = houses
         .filter(h => h.color === biz.color && h.availableCars > 0)
-        .sort((a, b) => manhattanDist(a.pos, biz.pos) - manhattanDist(b.pos, biz.pos));
+        .sort((a, b) => manhattanDist(a.pos, biz.connectorPos) - manhattanDist(b.pos, biz.connectorPos));
 
       let dispatched = 0;
       for (const house of availableHouses) {
         if (dispatched >= neededCars) break;
 
-        const path = this.pathfinder.findPath(house.pos, biz.pos);
+        const path = this.pathfinder.findPath(house.pos, biz.connectorPos);
         if (!path) continue;
 
         const car = new Car(house.id, house.color, house.pos);
         car.state = CarState.GoingToBusiness;
         car.targetBusinessId = biz.id;
-        car.destination = biz.pos;
+        car.destination = biz.connectorPos;
         car.path = path;
         car.pathIndex = 0;
         car.segmentProgress = 0;

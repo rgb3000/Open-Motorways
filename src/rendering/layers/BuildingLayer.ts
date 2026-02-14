@@ -22,7 +22,7 @@ export class BuildingLayer {
     // Add meshes for new businesses
     for (const biz of businesses) {
       if (!this.businessMeshes.has(biz.id)) {
-        const { group, pins } = this.createBusinessMesh(biz.pos.gx, biz.pos.gy, biz.color);
+        const { group, pins } = this.createBusinessMesh(biz);
         scene.add(group);
         this.businessMeshes.set(biz.id, group);
         this.demandPinRefs.set(biz.id, pins);
@@ -68,25 +68,96 @@ export class BuildingLayer {
     return group;
   }
 
-  private createBusinessMesh(gx: number, gy: number, color: GameColor): { group: THREE.Group; pins: THREE.Mesh[] } {
+  private createBusinessMesh(biz: Business): { group: THREE.Group; pins: THREE.Mesh[] } {
     const group = new THREE.Group();
-    const hexColor = COLOR_MAP[color];
+    const hexColor = COLOR_MAP[biz.color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
-    const radius = TILE_SIZE * 0.38;
-    const height = 4;
+    const bodyHeight = 4;
+    const isHorizontal = biz.orientation === 'horizontal';
 
-    // Body (cylinder)
-    const bodyGeom = new THREE.CylinderGeometry(radius, radius, height, 16);
+    // Main body: box spanning 2 body cells (NOT including connector)
+    const bodyWidth = isHorizontal ? TILE_SIZE * 2 * 0.75 : TILE_SIZE * 0.75;
+    const bodyDepth = isHorizontal ? TILE_SIZE * 0.75 : TILE_SIZE * 2 * 0.75;
+    const bodyGeom = new THREE.BoxGeometry(bodyWidth, bodyHeight, bodyDepth);
     const body = new THREE.Mesh(bodyGeom, mat);
-    body.position.y = height / 2;
+    body.position.y = bodyHeight / 2;
     body.castShadow = true;
     group.add(body);
 
-    // Demand pins (pre-create all 8, toggle visibility)
+    // Towers: 2 small boxes on top of the body, one per body cell
+    const towerSize = TILE_SIZE * 0.25;
+    const towerHeight = 3.5;
+    const towerGeom = new THREE.BoxGeometry(towerSize, towerHeight, towerSize);
+    const towerMat = new THREE.MeshStandardMaterial({ color: hexColor });
+
+    // Tower positions relative to body center (one per body cell)
+    const towerOffset = isHorizontal ? TILE_SIZE * 0.35 : 0;
+    const towerOffsetZ = isHorizontal ? 0 : TILE_SIZE * 0.35;
+
+    const tower1 = new THREE.Mesh(towerGeom, towerMat);
+    tower1.position.set(-towerOffset, bodyHeight + towerHeight / 2, -towerOffsetZ);
+    tower1.castShadow = true;
+    group.add(tower1);
+
+    const tower2 = new THREE.Mesh(towerGeom, towerMat);
+    tower2.position.set(towerOffset, bodyHeight + towerHeight / 2, towerOffsetZ);
+    tower2.castShadow = true;
+    group.add(tower2);
+
+    // Connector block: rounded outside corners
+    const connMat = new THREE.MeshStandardMaterial({ color: 0xBDBDBD });
+    const connSize = TILE_SIZE * 0.75;
+    const connHeight = 2.5;
+    const connRadius = 2.5;
+    const half = connSize / 2;
+
+    // Build a 2D shape with 2 rounded outside corners
+    // The body side stays square, the outside gets rounded
+    const connShape = new THREE.Shape();
+    if (isHorizontal) {
+      // Body is to the left (-x), outside is to the right (+x)
+      connShape.moveTo(-half, -half);
+      connShape.lineTo(half - connRadius, -half);
+      connShape.quadraticCurveTo(half, -half, half, -half + connRadius);
+      connShape.lineTo(half, half - connRadius);
+      connShape.quadraticCurveTo(half, half, half - connRadius, half);
+      connShape.lineTo(-half, half);
+      connShape.lineTo(-half, -half);
+    } else {
+      // Body is to the top (-y in shape / -z in 3D), outside is bottom (+y / +z)
+      connShape.moveTo(-half, -half);
+      connShape.lineTo(half, -half);
+      connShape.lineTo(half, half - connRadius);
+      connShape.quadraticCurveTo(half, half, half - connRadius, half);
+      connShape.lineTo(-half + connRadius, half);
+      connShape.quadraticCurveTo(-half, half, -half, half - connRadius);
+      connShape.lineTo(-half, -half);
+    }
+
+    const connGeom = new THREE.ExtrudeGeometry(connShape, {
+      depth: connHeight,
+      bevelEnabled: false,
+    });
+    // ExtrudeGeometry extrudes along Z; rotate so it goes along Y (up)
+    connGeom.rotateX(-Math.PI / 2);
+
+    const conn = new THREE.Mesh(connGeom, connMat);
+
+    let connOffsetX = 0, connOffsetZ = 0;
+    if (isHorizontal) {
+      connOffsetX = TILE_SIZE;
+    } else {
+      connOffsetZ = TILE_SIZE;
+    }
+    conn.position.set(connOffsetX, 0, connOffsetZ);
+    conn.castShadow = true;
+    group.add(conn);
+
+    // Demand pins: ring around body center
     const pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
     const pinGeom = new THREE.SphereGeometry(3, 8, 8);
-    const ringRadius = radius + 6;
+    const ringRadius = Math.max(bodyWidth, bodyDepth) / 2 + 6;
     const pins: THREE.Mesh[] = [];
 
     for (let i = 0; i < MAX_DEMAND_PINS; i++) {
@@ -103,9 +174,15 @@ export class BuildingLayer {
       pins.push(pin);
     }
 
-    // Position in world
-    const px = gx * TILE_SIZE + TILE_SIZE / 2;
-    const py = gy * TILE_SIZE + TILE_SIZE / 2;
+    // Position: midpoint of the 2 body cells (connector hangs off one end)
+    let px: number, py: number;
+    if (isHorizontal) {
+      px = biz.pos.gx * TILE_SIZE + TILE_SIZE;
+      py = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
+    } else {
+      px = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
+      py = biz.pos.gy * TILE_SIZE + TILE_SIZE;
+    }
     group.position.set(px, 0, py);
 
     return { group, pins };

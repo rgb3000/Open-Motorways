@@ -1,4 +1,5 @@
 import type { Grid } from '../core/Grid';
+import { OPPOSITE_DIR } from '../core/Grid';
 import { CellType, Direction, TrafficLevel, type GridPos } from '../types';
 import { gridPosEqual, gridPosKey, manhattanDist } from '../utils/math';
 import { PriorityQueue } from '../utils/PriorityQueue';
@@ -111,6 +112,11 @@ export class Pathfinder {
         const isDestination = nx === to.gx && ny === to.gy;
         if (cell.type === CellType.Empty) continue;
         if ((cell.type === CellType.House || cell.type === CellType.Business) && !isDestination) continue;
+
+        // Business destination: can only enter from the connector direction
+        if (isDestination && cell.type === CellType.Business && cell.connectorDir !== null) {
+          if (dir !== OPPOSITE_DIR[cell.connectorDir]) continue;
+        }
 
         // Determine level when entering the neighbor cell
         let nextLevel: TrafficLevel = TrafficLevel.Ground;

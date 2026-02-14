@@ -23,7 +23,7 @@ export class Grid {
   constructor() {
     this.cells = new Array(this.cols * this.rows);
     for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, hasBridge: false, bridgeAxis: null, bridgeConnections: [] };
+      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, hasBridge: false, bridgeAxis: null, bridgeConnections: [], connectorDir: null };
     }
   }
 
@@ -69,8 +69,14 @@ export class Grid {
     const results: { dir: Direction; gx: number; gy: number }[] = [];
     for (const dir of [Direction.Up, Direction.Down, Direction.Left, Direction.Right]) {
       const n = this.getNeighbor(gx, gy, dir);
-      if (n && (n.cell.type === CellType.Road || n.cell.type === CellType.House || n.cell.type === CellType.Business)) {
+      if (!n) continue;
+      if (n.cell.type === CellType.Road || n.cell.type === CellType.House) {
         results.push({ dir, gx: n.gx, gy: n.gy });
+      } else if (n.cell.type === CellType.Business) {
+        // Only include the connector side of a business
+        if (n.cell.connectorDir === OPPOSITE_DIR[dir]) {
+          results.push({ dir, gx: n.gx, gy: n.gy });
+        }
       }
     }
     return results;

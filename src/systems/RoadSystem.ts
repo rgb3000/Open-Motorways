@@ -31,6 +31,16 @@ export class RoadSystem {
       bridgeConnections: [],
     });
 
+    // Auto-connect to all valid neighbors
+    for (const dir of this.grid.getAllDirections()) {
+      const neighbor = this.grid.getNeighbor(gx, gy, dir);
+      if (!neighbor) continue;
+      const t = neighbor.cell.type;
+      if (t === CellType.Road || t === CellType.House || t === CellType.Business) {
+        this.connectRoads(gx, gy, neighbor.gx, neighbor.gy);
+      }
+    }
+
     this.dirty = true;
     return true;
   }
@@ -60,6 +70,7 @@ export class RoadSystem {
       hasBridge: false,
       bridgeAxis: null,
       bridgeConnections: [],
+      connectorDir: null,
     });
 
     this.dirty = true;
@@ -187,6 +198,14 @@ export class RoadSystem {
     else dir = Direction.Up;
 
     const oppDir = OPPOSITE_DIR[dir];
+
+    // Validate business connector: only allow connection through the connector side
+    if (cell1.type === CellType.Business) {
+      if (cell1.connectorDir === null || cell1.connectorDir !== dir) return false;
+    }
+    if (cell2.type === CellType.Business) {
+      if (cell2.connectorDir === null || cell2.connectorDir !== oppDir) return false;
+    }
 
     if (!cell1.roadConnections.includes(dir)) {
       cell1.roadConnections.push(dir);
