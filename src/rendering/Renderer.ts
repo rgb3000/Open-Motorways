@@ -30,6 +30,7 @@ export class Renderer {
   private offCtx: CanvasRenderingContext2D;
   private groundTexture: THREE.CanvasTexture;
   private groundDirty = false;
+  private dpr: number;
 
   // Zoom state
   private currentZoom = 1;
@@ -77,10 +78,11 @@ export class Renderer {
     this.scene.add(dirLight);
     this.scene.add(dirLight.target);
 
-    // Offscreen canvas for terrain + roads
+    // Offscreen canvas for terrain + roads (scaled by DPR for sharp rendering)
+    this.dpr = Math.max(Math.min(window.devicePixelRatio || 1, 2), 1) * 2;
     this.offscreenCanvas = document.createElement('canvas');
-    this.offscreenCanvas.width = CANVAS_WIDTH;
-    this.offscreenCanvas.height = CANVAS_HEIGHT;
+    this.offscreenCanvas.width = CANVAS_WIDTH * this.dpr;
+    this.offscreenCanvas.height = CANVAS_HEIGHT * this.dpr;
     this.offCtx = this.offscreenCanvas.getContext('2d')!;
 
     // Layers
@@ -90,13 +92,14 @@ export class Renderer {
     this.carLayer = new CarLayer();
 
     // Render initial ground state
+    this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.terrainLayer.render(this.offCtx);
     this.roadLayer.render(this.offCtx);
 
     // Ground plane
     this.groundTexture = new THREE.CanvasTexture(this.offscreenCanvas);
-    this.groundTexture.minFilter = THREE.NearestFilter;
-    this.groundTexture.magFilter = THREE.NearestFilter;
+    this.groundTexture.minFilter = THREE.LinearFilter;
+    this.groundTexture.magFilter = THREE.LinearFilter;
 
     const groundMat = new THREE.MeshStandardMaterial({ map: this.groundTexture });
     const groundGeom = new THREE.PlaneGeometry(CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -175,6 +178,7 @@ export class Renderer {
 
     // Update ground texture if dirty
     if (this.groundDirty) {
+      this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       this.terrainLayer.render(this.offCtx);
       this.roadLayer.render(this.offCtx);
       this.groundTexture.needsUpdate = true;
