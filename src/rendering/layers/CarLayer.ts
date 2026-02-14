@@ -19,6 +19,7 @@ export class CarLayer {
   private carGeometry: THREE.BoxGeometry;
   private loadGeometry: THREE.BoxGeometry;
   private loadMaterial: THREE.MeshStandardMaterial;
+  private activeCarIds = new Set<string>();
 
   constructor() {
     this.carGeometry = new THREE.BoxGeometry(CAR_LENGTH, 2, CAR_WIDTH);
@@ -36,7 +37,8 @@ export class CarLayer {
   }
 
   update(scene: THREE.Scene, cars: Car[], alpha: number): void {
-    const activeCars = new Set<string>();
+    const activeCars = this.activeCarIds;
+    activeCars.clear();
 
     for (const car of cars) {
       activeCars.add(car.id);

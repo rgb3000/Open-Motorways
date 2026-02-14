@@ -68,8 +68,8 @@ export class Renderer {
     );
     dirLight.target.position.set(CANVAS_WIDTH / 2, 0, CANVAS_HEIGHT / 2);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.set(4096, 4096);
-    dirLight.shadow.radius = 8;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    dirLight.shadow.radius = 3;
     dirLight.shadow.camera.left = -CANVAS_WIDTH / 2;
     dirLight.shadow.camera.right = CANVAS_WIDTH / 2;
     dirLight.shadow.camera.top = CANVAS_HEIGHT / 2;
@@ -80,7 +80,7 @@ export class Renderer {
     this.scene.add(dirLight.target);
 
     // Offscreen canvas for terrain (scaled by DPR for sharp rendering)
-    this.dpr = Math.max(Math.min(window.devicePixelRatio || 1, 2), 1) * 2;
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.offscreenCanvas = document.createElement('canvas');
     this.offscreenCanvas.width = CANVAS_WIDTH * this.dpr;
     this.offscreenCanvas.height = CANVAS_HEIGHT * this.dpr;

@@ -43,11 +43,12 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.webglRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.webglRenderer.setPixelRatio(2);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    this.webglRenderer = new THREE.WebGLRenderer({ canvas, antialias: !isSafari });
+    this.webglRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.webglRenderer.setSize(window.innerWidth, window.innerHeight);
     this.webglRenderer.shadowMap.enabled = true;
-    this.webglRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.webglRenderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.grid = new Grid();
     this.roadSystem = new RoadSystem(this.grid);
