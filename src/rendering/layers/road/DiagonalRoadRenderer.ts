@@ -121,6 +121,14 @@ export class DiagonalRoadRenderer {
     return strip;
   }
 
+  private hasCardinalConnection(gx: number, gy: number): boolean {
+    const cell = this.grid.getCell(gx, gy);
+    if (!cell) return false;
+    return cell.roadConnections.some(
+      d => d === Direction.Up || d === Direction.Down || d === Direction.Left || d === Direction.Right,
+    );
+  }
+
   private buildRibbonGeometry(
     strip: Strip,
     geoms: THREE.BufferGeometry[],
@@ -160,29 +168,48 @@ export class DiagonalRoadRenderer {
       z: lastCenter.z + dirZ * roadHalf,
     };
 
-    // Build shape as a rectangle along the strip axis
-    // Shape is in XY plane: x = along perpendicular, y = along strip direction (mapped from world z via -z)
-    // We'll use a simpler approach: build the shape in world XZ, then extrude
+    // Only apply rounded caps at free ends (no cardinal connection)
+    const capStart = !this.hasCardinalConnection(cells[0].gx, cells[0].gy);
+    const capEnd = !this.hasCardinalConnection(cells[cells.length - 1].gx, cells[cells.length - 1].gy);
+
+    // Build shape: capsule caps at free ends, flat edges at cardinal junctions
+    // Shape is in XY plane (x stays x, y = -z for consistency with ExtrudeGeometry)
     const shape = new THREE.Shape();
 
-    // Left edge of ribbon (perpendicular offset -roadHalf)
+    // Perpendicular angle in shape space (x, -z)
+    const perpAngle = Math.atan2(-perpZ, perpX);
+
+    // Corner points
     const p1x = extStart.x + perpX * roadHalf;
     const p1z = extStart.z + perpZ * roadHalf;
-    // Right edge at start
     const p2x = extStart.x - perpX * roadHalf;
     const p2z = extStart.z - perpZ * roadHalf;
-    // Right edge at end
     const p3x = extEnd.x - perpX * roadHalf;
     const p3z = extEnd.z - perpZ * roadHalf;
-    // Left edge at end
-    const p4x = extEnd.x + perpX * roadHalf;
-    const p4z = extEnd.z + perpZ * roadHalf;
 
-    // Shape in XY plane (x stays x, y = -z for consistency with ExtrudeGeometry)
+    // p1 (left-start)
     shape.moveTo(p1x, -p1z);
-    shape.lineTo(p2x, -p2z);
+
+    // Start end: semicircular cap or flat edge
+    if (capStart) {
+      shape.absarc(extStart.x, -extStart.z, roadHalf, perpAngle, perpAngle + Math.PI, true);
+    } else {
+      shape.lineTo(p2x, -p2z);
+    }
+
+    // Straight edge from p2 to p3 (right side)
     shape.lineTo(p3x, -p3z);
-    shape.lineTo(p4x, -p4z);
+
+    // End end: semicircular cap or flat edge
+    if (capEnd) {
+      shape.absarc(extEnd.x, -extEnd.z, roadHalf, perpAngle + Math.PI, perpAngle, true);
+    } else {
+      const p4x = extEnd.x + perpX * roadHalf;
+      const p4z = extEnd.z + perpZ * roadHalf;
+      shape.lineTo(p4x, -p4z);
+    }
+
+    // Close path: straight edge from p4 back to p1 (left side)
     shape.closePath();
 
     const geom = new THREE.ExtrudeGeometry(shape, {
