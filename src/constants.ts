@@ -51,6 +51,7 @@ export const GRID_LINE_COLOR = '#E8E3DB';
 export const ROAD_COLOR = '#9E9E9E';
 export const ROAD_OUTLINE_COLOR = '#757575';
 export const ROAD_LANE_DIVIDER_COLOR = '#B0B0B0';
+export const ROAD_CORNER_RADIUS = 3.0; // px
 export const UI_TEXT_COLOR = '#333333';
 export const GAME_OVER_OVERLAY = 'rgba(0, 0, 0, 0.6)';
 

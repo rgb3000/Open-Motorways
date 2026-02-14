@@ -17,6 +17,8 @@ export class Car {
   targetBusinessId: string | null = null;
   destination: GridPos | null = null;
   direction: Direction | null = null;
+  renderAngle = 0;      // radians: 0=Right, PI/2=Down, PI=Left, -PI/2=Up
+  prevRenderAngle = 0;  // previous frame's angle for render interpolation
 
   // Path
   path: GridPos[] = [];

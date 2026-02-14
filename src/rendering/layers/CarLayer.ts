@@ -1,7 +1,13 @@
 import type { Car } from '../../entities/Car';
-import { Direction } from '../../types';
 import { COLOR_MAP, CAR_WIDTH, CAR_LENGTH } from '../../constants';
 import { lerp } from '../../utils/math';
+
+function lerpAngle(a: number, b: number, t: number): number {
+  let diff = b - a;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  return a + diff * t;
+}
 
 export class CarLayer {
   render(ctx: CanvasRenderingContext2D, cars: Car[], alpha: number): void {
@@ -10,19 +16,22 @@ export class CarLayer {
       const x = lerp(car.prevPixelPos.x, car.pixelPos.x, alpha);
       const y = lerp(car.prevPixelPos.y, car.pixelPos.y, alpha);
 
-      // Direction-aware dimensions
-      const isVertical = car.direction === Direction.Up || car.direction === Direction.Down;
-      const w = isVertical ? CAR_WIDTH : CAR_LENGTH;
-      const h = isVertical ? CAR_LENGTH : CAR_WIDTH;
+      const angle = lerpAngle(car.prevRenderAngle, car.renderAngle, alpha);
 
-      // Car body
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+
+      // Car body (drawn horizontally: length along X axis)
       ctx.fillStyle = COLOR_MAP[car.color];
-      ctx.fillRect(x - w / 2, y - h / 2, w, h);
+      ctx.fillRect(-CAR_LENGTH / 2, -CAR_WIDTH / 2, CAR_LENGTH, CAR_WIDTH);
 
       // Dark outline
       ctx.strokeStyle = 'rgba(0,0,0,0.3)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+      ctx.strokeRect(-CAR_LENGTH / 2, -CAR_WIDTH / 2, CAR_LENGTH, CAR_WIDTH);
+
+      ctx.restore();
     }
   }
 }

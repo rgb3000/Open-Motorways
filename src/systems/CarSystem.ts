@@ -3,7 +3,7 @@ import type { Business } from '../entities/Business';
 import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
-import { CAR_SPEED, LANE_OFFSET, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT } from '../constants';
+import { CAR_SPEED, LANE_OFFSET, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT } from '../constants';
 import { CellType, Direction, LaneId } from '../types';
 import type { GridPos, PixelPos } from '../types';
 import { gridToPixelCenter, manhattanDist, pixelToGrid } from '../utils/math';
@@ -60,6 +60,71 @@ function isPerpendicularAxis(d1: Direction, d2: Direction): boolean {
 
 function tileKey(gx: number, gy: number): string {
   return `${gx},${gy}`;
+}
+
+function directionAngle(dir: Direction): number {
+  switch (dir) {
+    case Direction.Right: return 0;
+    case Direction.Down:  return Math.PI / 2;
+    case Direction.Left:  return Math.PI;
+    case Direction.Up:    return -Math.PI / 2;
+  }
+}
+
+function isOpposite(d1: Direction, d2: Direction): boolean {
+  return (d1 === Direction.Up && d2 === Direction.Down) ||
+         (d1 === Direction.Down && d2 === Direction.Up) ||
+         (d1 === Direction.Left && d2 === Direction.Right) ||
+         (d1 === Direction.Right && d2 === Direction.Left);
+}
+
+function unitVector(dir: Direction): PixelPos {
+  switch (dir) {
+    case Direction.Right: return { x: 1, y: 0 };
+    case Direction.Down:  return { x: 0, y: 1 };
+    case Direction.Left:  return { x: -1, y: 0 };
+    case Direction.Up:    return { x: 0, y: -1 };
+  }
+}
+
+function laneIntersection(cx: number, cy: number, dir1: Direction, dir2: Direction): PixelPos {
+  let x = cx;
+  let y = cy;
+  for (const d of [dir1, dir2]) {
+    const off = laneOffset(d);
+    if (d === Direction.Left || d === Direction.Right) {
+      y = cy + off.y;
+    } else {
+      x = cx + off.x;
+    }
+  }
+  return { x, y };
+}
+
+function cubicBezier(
+  p0x: number, p0y: number, p1x: number, p1y: number,
+  p2x: number, p2y: number, p3x: number, p3y: number, t: number,
+): { x: number; y: number } {
+  const u = 1 - t;
+  const uu = u * u;
+  const uuu = uu * u;
+  const tt = t * t;
+  const ttt = tt * t;
+  return {
+    x: uuu * p0x + 3 * uu * t * p1x + 3 * u * tt * p2x + ttt * p3x,
+    y: uuu * p0y + 3 * uu * t * p1y + 3 * u * tt * p2y + ttt * p3y,
+  };
+}
+
+function cubicBezierTangent(
+  p0x: number, p0y: number, p1x: number, p1y: number,
+  p2x: number, p2y: number, p3x: number, p3y: number, t: number,
+): { x: number; y: number } {
+  const u = 1 - t;
+  return {
+    x: 3 * u * u * (p1x - p0x) + 6 * u * t * (p2x - p1x) + 3 * t * t * (p3x - p2x),
+    y: 3 * u * u * (p1y - p0y) + 6 * u * t * (p2y - p1y) + 3 * t * t * (p3y - p2y),
+  };
 }
 
 interface IntersectionEntry {
@@ -230,6 +295,12 @@ export class CarSystem {
         car.pathIndex = 0;
         car.segmentProgress = 0;
 
+        if (path.length >= 2) {
+          const initDir = getDirection(path[0], path[1]);
+          car.renderAngle = directionAngle(initDir);
+          car.prevRenderAngle = car.renderAngle;
+        }
+
         house.availableCars--;
         this.cars.push(car);
         carsEnRoute.set(biz.id, (carsEnRoute.get(biz.id) ?? 0) + 1);
@@ -305,6 +376,7 @@ export class CarSystem {
       if (car.state === CarState.Idle || car.state === CarState.Stranded) continue;
 
       car.prevPixelPos = { ...car.pixelPos };
+      car.prevRenderAngle = car.renderAngle;
 
       if (car.path.length < 2) {
         // Degenerate path — reroute instead of treating as arrival
@@ -427,32 +499,95 @@ export class CarSystem {
         car.pixelPos = { ...center };
         this.handleArrival(car, houses, businesses, toRemove);
       } else {
-        // Interpolate position with lane offset
+        // Interpolate position with lane offset and Bezier curves for turns
         const curTile = car.path[car.pathIndex];
         const nxtTile = car.path[Math.min(car.pathIndex + 1, car.path.length - 1)];
         const curDir = getDirection(curTile, nxtTile);
         car.direction = curDir;
 
+        const pathIndex = car.pathIndex;
+        const t = car.segmentProgress;
+        const half = TILE_SIZE / 2;
         const currentCenter = gridToPixelCenter(curTile);
         const nextCenter = gridToPixelCenter(nxtTile);
-        const t = car.segmentProgress;
 
-        const baseX = currentCenter.x + (nextCenter.x - currentCenter.x) * t;
-        const baseY = currentCenter.y + (nextCenter.y - currentCenter.y) * t;
+        // Determine entry and exit directions for turn detection
+        const entryDir = pathIndex > 0 ? getDirection(car.path[pathIndex - 1], curTile) : curDir;
+        const exitDir = pathIndex + 2 < car.path.length ? getDirection(nxtTile, car.path[pathIndex + 2]) : curDir;
+        const turningAtStart = entryDir !== curDir && !isOpposite(entryDir, curDir);
+        const turningAtEnd = exitDir !== curDir && !isOpposite(exitDir, curDir);
 
-        // Lane offset with ramping at endpoints
-        const offset = laneOffset(curDir);
-        let offsetScale = 1.0;
-        if (car.pathIndex === 0) {
-          offsetScale = t;
-        } else if (car.pathIndex === car.path.length - 2) {
-          offsetScale = 1.0 - t;
+        const isFirstSegment = pathIndex === 0;
+        const isLastSegment = pathIndex === car.path.length - 2;
+
+        if (turningAtStart || turningAtEnd) {
+          // Bezier curve for turns
+          let p0x: number, p0y: number, tangentDir0: Direction;
+          let p3x: number, p3y: number, tangentDir3: Direction;
+
+          if (isFirstSegment) {
+            p0x = currentCenter.x;
+            p0y = currentCenter.y;
+            tangentDir0 = curDir;
+          } else if (turningAtStart) {
+            const li = laneIntersection(currentCenter.x, currentCenter.y, entryDir, curDir);
+            p0x = li.x;
+            p0y = li.y;
+            tangentDir0 = entryDir;
+          } else {
+            const off = laneOffset(curDir);
+            p0x = currentCenter.x + off.x;
+            p0y = currentCenter.y + off.y;
+            tangentDir0 = curDir;
+          }
+
+          if (isLastSegment) {
+            p3x = nextCenter.x;
+            p3y = nextCenter.y;
+            tangentDir3 = curDir;
+          } else if (turningAtEnd) {
+            const li = laneIntersection(nextCenter.x, nextCenter.y, curDir, exitDir);
+            p3x = li.x;
+            p3y = li.y;
+            tangentDir3 = exitDir;
+          } else {
+            const off = laneOffset(curDir);
+            p3x = nextCenter.x + off.x;
+            p3y = nextCenter.y + off.y;
+            tangentDir3 = curDir;
+          }
+
+          const u0 = unitVector(tangentDir0);
+          const u3 = unitVector(tangentDir3);
+          const p1x = p0x + u0.x * half;
+          const p1y = p0y + u0.y * half;
+          const p2x = p3x - u3.x * half;
+          const p2y = p3y - u3.y * half;
+
+          const pos = cubicBezier(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
+          const tang = cubicBezierTangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
+
+          car.pixelPos = { x: pos.x, y: pos.y };
+          car.renderAngle = Math.atan2(tang.y, tang.x);
+        } else {
+          // Straight segment — linear interpolation with lane offset
+          const baseX = currentCenter.x + (nextCenter.x - currentCenter.x) * t;
+          const baseY = currentCenter.y + (nextCenter.y - currentCenter.y) * t;
+
+          const offset = laneOffset(curDir);
+          let offsetScale = 1.0;
+          if (isFirstSegment) {
+            offsetScale = t;
+          } else if (isLastSegment) {
+            offsetScale = 1.0 - t;
+          }
+
+          car.pixelPos = {
+            x: baseX + offset.x * offsetScale,
+            y: baseY + offset.y * offsetScale,
+          };
+          car.renderAngle = directionAngle(curDir);
         }
-
-        car.pixelPos = {
-          x: baseX + offset.x * offsetScale,
-          y: baseY + offset.y * offsetScale,
-        };
       }
 
       // Register car in new occupancy position
@@ -488,6 +623,11 @@ export class CarSystem {
           car.path = homePath;
           car.pathIndex = 0;
           car.segmentProgress = 0;
+          if (homePath.length >= 2) {
+            const initDir = getDirection(homePath[0], homePath[1]);
+            car.renderAngle = directionAngle(initDir);
+            car.prevRenderAngle = car.renderAngle;
+          }
         } else {
           // Can't find path home — strand at business
           car.state = CarState.Stranded;
