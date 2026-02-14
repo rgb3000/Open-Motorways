@@ -78,7 +78,7 @@ export class Renderer {
     this.scene.add(dirLight);
     this.scene.add(dirLight.target);
 
-    // Offscreen canvas for terrain + roads (scaled by DPR for sharp rendering)
+    // Offscreen canvas for terrain (scaled by DPR for sharp rendering)
     this.dpr = Math.max(Math.min(window.devicePixelRatio || 1, 2), 1) * 2;
     this.offscreenCanvas = document.createElement('canvas');
     this.offscreenCanvas.width = CANVAS_WIDTH * this.dpr;
@@ -91,10 +91,9 @@ export class Renderer {
     this.buildingLayer = new BuildingLayer();
     this.carLayer = new CarLayer();
 
-    // Render initial ground state
+    // Render initial ground state (terrain only, roads are 3D)
     this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.terrainLayer.render(this.offCtx);
-    this.roadLayer.render(this.offCtx);
 
     // Ground plane
     this.groundTexture = new THREE.CanvasTexture(this.offscreenCanvas);
@@ -176,12 +175,14 @@ export class Renderer {
     // Smooth zoom/pan animation
     this.updateCamera();
 
-    // Update ground texture if dirty
+    // Update ground texture if dirty (terrain only)
     if (this.groundDirty) {
       this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       this.terrainLayer.render(this.offCtx);
-      this.roadLayer.render(this.offCtx);
       this.groundTexture.needsUpdate = true;
+
+      // Rebuild 3D road meshes
+      this.roadLayer.update(this.scene);
       this.groundDirty = false;
     }
 
@@ -194,6 +195,7 @@ export class Renderer {
   }
 
   dispose(): void {
+    this.roadLayer.dispose(this.scene);
     this.buildingLayer.dispose(this.scene);
     this.carLayer.dispose(this.scene);
 

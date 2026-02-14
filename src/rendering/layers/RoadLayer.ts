@@ -1,12 +1,28 @@
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Grid } from '../../core/Grid';
 import { CellType, Direction } from '../../types';
 import {
-  GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_OUTLINE_COLOR, ROAD_LANE_DIVIDER_COLOR, ROAD_CORNER_RADIUS,
-  BRIDGE_COLOR, BRIDGE_OUTLINE_COLOR, BRIDGE_BARRIER_COLOR, BRIDGE_SHADOW_COLOR,
+  GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_OUTLINE_COLOR,
+  BRIDGE_COLOR, BRIDGE_OUTLINE_COLOR, BRIDGE_BARRIER_COLOR, BRIDGE_Y_POSITION,
 } from '../../constants';
+
+const ROAD_HEIGHT = 1.0;
+const ROAD_WIDTH_RATIO = 0.45;
+const BRIDGE_HEIGHT = 1.5;
+const BRIDGE_WIDTH_RATIO = 0.7;
 
 export class RoadLayer {
   private grid: Grid;
+  private roadMesh: THREE.Mesh | null = null;
+  private outlineMesh: THREE.Mesh | null = null;
+  private bridgeGroup: THREE.Group | null = null;
+
+  private roadMat = new THREE.MeshStandardMaterial({ color: ROAD_COLOR });
+  private outlineMat = new THREE.MeshStandardMaterial({ color: ROAD_OUTLINE_COLOR });
+  private bridgeMat = new THREE.MeshStandardMaterial({ color: BRIDGE_COLOR });
+  private bridgeOutlineMat = new THREE.MeshStandardMaterial({ color: BRIDGE_OUTLINE_COLOR });
+  private bridgeBarrierMat = new THREE.MeshStandardMaterial({ color: BRIDGE_BARRIER_COLOR });
 
   constructor(grid: Grid) {
     this.grid = grid;
@@ -25,54 +41,25 @@ export class RoadLayer {
     return cell.type === CellType.Road || (cell.type === CellType.Business && cell.connectorDir !== null);
   }
 
-  render(ctx: CanvasRenderingContext2D): void {
+  update(scene: THREE.Scene): void {
+    // Remove old meshes
+    this.clearFromScene(scene);
+
     const half = TILE_SIZE / 2;
-    const roadWidth = TILE_SIZE * 0.6;
-    const roadHalf = roadWidth / 2;
+    const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
+    const outlineExtra = 1;
+
+    const roadGeoms: THREE.BufferGeometry[] = [];
+    const outlineGeoms: THREE.BufferGeometry[] = [];
 
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
         if (!cell || !this.isRoadOrConnector(cell)) continue;
+        if (cell.hasBridge) continue; // bridges rendered separately
 
-        const px = gx * TILE_SIZE;
-        const py = gy * TILE_SIZE;
-        const cx = px + half;
-        const cy = py + half;
-
-        // For connector cells, always include the arm toward the business body
-        let conns = cell.roadConnections;
-        if (cell.type === CellType.Business && cell.connectorDir !== null) {
-          const towardBiz = this.oppositeDir(cell.connectorDir);
-          conns = conns.includes(towardBiz) ? conns : [towardBiz, ...conns];
-        }
-
-        // Draw road outline
-        ctx.fillStyle = ROAD_OUTLINE_COLOR;
-        this.buildRoadPath(ctx, cx, cy, roadHalf + 1, conns, half, ROAD_CORNER_RADIUS + 1);
-        ctx.fill();
-
-        // Draw road fill
-        ctx.fillStyle = ROAD_COLOR;
-        this.buildRoadPath(ctx, cx, cy, roadHalf, conns, half, ROAD_CORNER_RADIUS);
-        ctx.fill();
-      }
-    }
-
-    // Lane divider pass
-    ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = ROAD_LANE_DIVIDER_COLOR;
-    ctx.lineWidth = 1;
-
-    for (let gy = 0; gy < GRID_ROWS; gy++) {
-      for (let gx = 0; gx < GRID_COLS; gx++) {
-        const cell = this.grid.getCell(gx, gy);
-        if (!cell || !this.isRoadOrConnector(cell)) continue;
-
-        const px = gx * TILE_SIZE;
-        const py = gy * TILE_SIZE;
-        const cx = px + half;
-        const cy = py + half;
+        const cx = gx * TILE_SIZE + half;
+        const cz = gy * TILE_SIZE + half;
 
         let conns = cell.roadConnections;
         if (cell.type === CellType.Business && cell.connectorDir !== null) {
@@ -80,266 +67,232 @@ export class RoadLayer {
           conns = conns.includes(towardBiz) ? conns : [towardBiz, ...conns];
         }
 
-        this.drawLaneDivider(ctx, cx, cy, roadHalf, conns, half);
+        // Road fill geometry
+        this.buildCellGeometries(roadGeoms, cx, cz, roadHalf, conns, half, ROAD_HEIGHT, 0);
+        // Outline geometry (slightly larger, slightly lower)
+        this.buildCellGeometries(outlineGeoms, cx, cz, roadHalf + outlineExtra, conns, half, ROAD_HEIGHT, -0.01);
       }
     }
 
-    ctx.setLineDash([]);
+    // Also include road cells that have bridges (the ground-level road part)
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const cell = this.grid.getCell(gx, gy);
+        if (!cell || !cell.hasBridge) continue;
 
-    // Bridge rendering pass (on top of roads)
-    this.renderBridges(ctx);
+        const cx = gx * TILE_SIZE + half;
+        const cz = gy * TILE_SIZE + half;
+        const conns = cell.roadConnections;
+
+        // Ground-level road (perpendicular to bridge axis)
+        const groundConns = cell.bridgeAxis === 'horizontal'
+          ? conns.filter(d => d === Direction.Up || d === Direction.Down)
+          : conns.filter(d => d === Direction.Left || d === Direction.Right);
+
+        if (groundConns.length > 0) {
+          this.buildCellGeometries(roadGeoms, cx, cz, roadHalf, groundConns, half, ROAD_HEIGHT, 0);
+          this.buildCellGeometries(outlineGeoms, cx, cz, roadHalf + outlineExtra, groundConns, half, ROAD_HEIGHT, -0.01);
+        }
+      }
+    }
+
+    // Create merged meshes
+    if (outlineGeoms.length > 0) {
+      const merged = mergeGeometries(outlineGeoms, false);
+      if (merged) {
+        this.outlineMesh = new THREE.Mesh(merged, this.outlineMat);
+        this.outlineMesh.castShadow = true;
+        this.outlineMesh.receiveShadow = true;
+        scene.add(this.outlineMesh);
+      }
+    }
+
+    if (roadGeoms.length > 0) {
+      const merged = mergeGeometries(roadGeoms, false);
+      if (merged) {
+        this.roadMesh = new THREE.Mesh(merged, this.roadMat);
+        this.roadMesh.castShadow = true;
+        this.roadMesh.receiveShadow = true;
+        scene.add(this.roadMesh);
+      }
+    }
+
+    // Bridges
+    this.buildBridges(scene);
+
+    // Dispose temp geometries
+    for (const g of roadGeoms) g.dispose();
+    for (const g of outlineGeoms) g.dispose();
   }
 
-  private renderBridges(ctx: CanvasRenderingContext2D): void {
+  private buildCellGeometries(
+    geoms: THREE.BufferGeometry[],
+    cx: number, cz: number,
+    rh: number, conns: Direction[], half: number,
+    height: number, yOffset: number,
+  ): void {
+    const y = height / 2 + yOffset;
+
+    // Center box
+    const centerGeom = new THREE.BoxGeometry(rh * 2, height, rh * 2);
+    centerGeom.translate(cx, y, cz);
+    geoms.push(centerGeom);
+
+    // Arms
+    for (const dir of conns) {
+      let w: number, d: number, ox: number, oz: number;
+      const armLen = half - rh;
+
+      switch (dir) {
+        case Direction.Up:
+          w = rh * 2; d = armLen;
+          ox = cx; oz = cz - rh - armLen / 2;
+          break;
+        case Direction.Down:
+          w = rh * 2; d = armLen;
+          ox = cx; oz = cz + rh + armLen / 2;
+          break;
+        case Direction.Left:
+          w = armLen; d = rh * 2;
+          ox = cx - rh - armLen / 2; oz = cz;
+          break;
+        case Direction.Right:
+          w = armLen; d = rh * 2;
+          ox = cx + rh + armLen / 2; oz = cz;
+          break;
+      }
+
+      const armGeom = new THREE.BoxGeometry(w, height, d);
+      armGeom.translate(ox, y, oz);
+      geoms.push(armGeom);
+    }
+  }
+
+  private buildBridges(scene: THREE.Scene): void {
     const half = TILE_SIZE / 2;
-    const bridgeWidth = TILE_SIZE * 0.7;
-    const bridgeHalf = bridgeWidth / 2;
+    const bridgeHalf = TILE_SIZE * BRIDGE_WIDTH_RATIO / 2;
+    const outlineExtra = 1;
+
+    const bridgeGeoms: THREE.BufferGeometry[] = [];
+    const bridgeOutlineGeoms: THREE.BufferGeometry[] = [];
+    const barrierGeoms: THREE.BufferGeometry[] = [];
+
+    const bridgeY = BRIDGE_Y_POSITION;
 
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
         if (!cell || !cell.hasBridge || !cell.bridgeAxis) continue;
 
-        const px = gx * TILE_SIZE;
-        const py = gy * TILE_SIZE;
-        const cx = px + half;
-        const cy = py + half;
+        const cx = gx * TILE_SIZE + half;
+        const cz = gy * TILE_SIZE + half;
         const isHorizontal = cell.bridgeAxis === 'horizontal';
 
-        // Shadow
-        ctx.fillStyle = BRIDGE_SHADOW_COLOR;
-        if (isHorizontal) {
-          ctx.fillRect(cx - half - 1, cy - bridgeHalf + 2, TILE_SIZE + 2, bridgeWidth);
-        } else {
-          ctx.fillRect(cx - bridgeHalf + 2, cy - half - 1, bridgeWidth, TILE_SIZE + 2);
-        }
+        // Bridge body
+        const bw = isHorizontal ? TILE_SIZE : bridgeHalf * 2;
+        const bd = isHorizontal ? bridgeHalf * 2 : TILE_SIZE;
+        const bodyGeom = new THREE.BoxGeometry(bw, BRIDGE_HEIGHT, bd);
+        bodyGeom.translate(cx, bridgeY + BRIDGE_HEIGHT / 2, cz);
+        bridgeGeoms.push(bodyGeom);
 
-        // Bridge outline
-        ctx.fillStyle = BRIDGE_OUTLINE_COLOR;
-        if (isHorizontal) {
-          ctx.fillRect(cx - half - 1, cy - bridgeHalf - 1, TILE_SIZE + 2, bridgeWidth + 2);
-        } else {
-          ctx.fillRect(cx - bridgeHalf - 1, cy - half - 1, bridgeWidth + 2, TILE_SIZE + 2);
-        }
+        // Outline
+        const ow = bw + outlineExtra * 2;
+        const od = bd + outlineExtra * 2;
+        const outGeom = new THREE.BoxGeometry(ow, BRIDGE_HEIGHT, od);
+        outGeom.translate(cx, bridgeY + BRIDGE_HEIGHT / 2 - 0.01, cz);
+        bridgeOutlineGeoms.push(outGeom);
 
-        // Bridge fill
-        ctx.fillStyle = BRIDGE_COLOR;
-        if (isHorizontal) {
-          ctx.fillRect(cx - half, cy - bridgeHalf, TILE_SIZE, bridgeWidth);
-        } else {
-          ctx.fillRect(cx - bridgeHalf, cy - half, bridgeWidth, TILE_SIZE);
-        }
-
-        // Side barrier lines
-        ctx.strokeStyle = BRIDGE_BARRIER_COLOR;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([]);
+        // Side barriers
+        const barrierHeight = 2;
+        const barrierThickness = 1.5;
 
         if (isHorizontal) {
-          // Top barrier
-          ctx.beginPath();
-          ctx.moveTo(cx - half, cy - bridgeHalf);
-          ctx.lineTo(cx + half, cy - bridgeHalf);
-          ctx.stroke();
-          // Bottom barrier
-          ctx.beginPath();
-          ctx.moveTo(cx - half, cy + bridgeHalf);
-          ctx.lineTo(cx + half, cy + bridgeHalf);
-          ctx.stroke();
+          // Top and bottom barriers
+          const bt = new THREE.BoxGeometry(TILE_SIZE, barrierHeight, barrierThickness);
+          bt.translate(cx, bridgeY + BRIDGE_HEIGHT + barrierHeight / 2, cz - bridgeHalf);
+          barrierGeoms.push(bt);
+          const bb = new THREE.BoxGeometry(TILE_SIZE, barrierHeight, barrierThickness);
+          bb.translate(cx, bridgeY + BRIDGE_HEIGHT + barrierHeight / 2, cz + bridgeHalf);
+          barrierGeoms.push(bb);
         } else {
-          // Left barrier
-          ctx.beginPath();
-          ctx.moveTo(cx - bridgeHalf, cy - half);
-          ctx.lineTo(cx - bridgeHalf, cy + half);
-          ctx.stroke();
-          // Right barrier
-          ctx.beginPath();
-          ctx.moveTo(cx + bridgeHalf, cy - half);
-          ctx.lineTo(cx + bridgeHalf, cy + half);
-          ctx.stroke();
+          const bl = new THREE.BoxGeometry(barrierThickness, barrierHeight, TILE_SIZE);
+          bl.translate(cx - bridgeHalf, bridgeY + BRIDGE_HEIGHT + barrierHeight / 2, cz);
+          barrierGeoms.push(bl);
+          const br = new THREE.BoxGeometry(barrierThickness, barrierHeight, TILE_SIZE);
+          br.translate(cx + bridgeHalf, bridgeY + BRIDGE_HEIGHT + barrierHeight / 2, cz);
+          barrierGeoms.push(br);
         }
 
-        // Lane divider on bridge
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = ROAD_LANE_DIVIDER_COLOR;
-        ctx.lineWidth = 1;
-
-        if (isHorizontal) {
-          ctx.beginPath();
-          ctx.moveTo(cx - half, cy);
-          ctx.lineTo(cx + half, cy);
-          ctx.stroke();
-        } else {
-          ctx.beginPath();
-          ctx.moveTo(cx, cy - half);
-          ctx.lineTo(cx, cy + half);
-          ctx.stroke();
-        }
-
-        ctx.setLineDash([]);
       }
+    }
+
+    this.bridgeGroup = new THREE.Group();
+
+    if (bridgeOutlineGeoms.length > 0) {
+      const merged = mergeGeometries(bridgeOutlineGeoms, false);
+      if (merged) {
+        const mesh = new THREE.Mesh(merged, this.bridgeOutlineMat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.bridgeGroup.add(mesh);
+      }
+    }
+
+    if (bridgeGeoms.length > 0) {
+      const merged = mergeGeometries(bridgeGeoms, false);
+      if (merged) {
+        const mesh = new THREE.Mesh(merged, this.bridgeMat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.bridgeGroup.add(mesh);
+      }
+    }
+
+    if (barrierGeoms.length > 0) {
+      const merged = mergeGeometries(barrierGeoms, false);
+      if (merged) {
+        const mesh = new THREE.Mesh(merged, this.bridgeBarrierMat);
+        mesh.castShadow = true;
+        this.bridgeGroup.add(mesh);
+      }
+    }
+
+    scene.add(this.bridgeGroup);
+
+    // Dispose temp geometries
+    for (const g of [...bridgeGeoms, ...bridgeOutlineGeoms, ...barrierGeoms]) {
+      g.dispose();
     }
   }
 
-  private drawLaneDivider(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    roadHalf: number,
-    conns: Direction[],
-    half: number,
-  ): void {
-    const hasUp = conns.includes(Direction.Up);
-    const hasDown = conns.includes(Direction.Down);
-    const hasLeft = conns.includes(Direction.Left);
-    const hasRight = conns.includes(Direction.Right);
-    const hasVertical = hasUp || hasDown;
-    const hasHorizontal = hasLeft || hasRight;
-
-    // Check for L-turn: exactly 2 perpendicular connections
-    const isLTurn = conns.length === 2 && hasVertical && hasHorizontal;
-
-    if (isLTurn) {
-      // Draw quarter-circle arc for L-turn
-      const arcRadius = half;
-      ctx.beginPath();
-
-      if (hasUp && hasRight) {
-        // Arc center at top-right corner of tile
-        ctx.arc(cx + half, cy - half, arcRadius, Math.PI, Math.PI / 2, true);
-      } else if (hasUp && hasLeft) {
-        // Arc center at top-left corner of tile
-        ctx.arc(cx - half, cy - half, arcRadius, 0, Math.PI / 2, false);
-      } else if (hasDown && hasRight) {
-        // Arc center at bottom-right corner of tile
-        ctx.arc(cx + half, cy + half, arcRadius, Math.PI, 3 * Math.PI / 2, false);
-      } else if (hasDown && hasLeft) {
-        // Arc center at bottom-left corner of tile
-        ctx.arc(cx - half, cy + half, arcRadius, 0, -Math.PI / 2, true);
-      }
-
-      ctx.stroke();
-    } else {
-      // Straight-line dividers for non-L-turn tiles
-      if (hasVertical) {
-        const top = hasUp ? cy - half : cy - roadHalf;
-        const bottom = hasDown ? cy + half : cy + roadHalf;
-        ctx.beginPath();
-        ctx.moveTo(cx, top);
-        ctx.lineTo(cx, bottom);
-        ctx.stroke();
-      }
-
-      if (hasHorizontal) {
-        const left = hasLeft ? cx - half : cx - roadHalf;
-        const right = hasRight ? cx + half : cx + roadHalf;
-        ctx.beginPath();
-        ctx.moveTo(left, cy);
-        ctx.lineTo(right, cy);
-        ctx.stroke();
-      }
+  private clearFromScene(scene: THREE.Scene): void {
+    if (this.roadMesh) {
+      scene.remove(this.roadMesh);
+      this.roadMesh.geometry.dispose();
+      this.roadMesh = null;
+    }
+    if (this.outlineMesh) {
+      scene.remove(this.outlineMesh);
+      this.outlineMesh.geometry.dispose();
+      this.outlineMesh = null;
+    }
+    if (this.bridgeGroup) {
+      this.bridgeGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+        }
+      });
+      scene.remove(this.bridgeGroup);
+      this.bridgeGroup = null;
     }
   }
 
-  private buildRoadPath(
-    ctx: CanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    rh: number,
-    conns: Direction[],
-    half: number,
-    radius: number,
-  ): void {
-    const hasUp = conns.includes(Direction.Up);
-    const hasDown = conns.includes(Direction.Down);
-    const hasLeft = conns.includes(Direction.Left);
-    const hasRight = conns.includes(Direction.Right);
-
-    // A corner is convex (should be rounded) when neither adjacent arm is present
-    const roundTL = !hasUp && !hasLeft;
-    const roundTR = !hasUp && !hasRight;
-    const roundBR = !hasDown && !hasRight;
-    const roundBL = !hasDown && !hasLeft;
-
-    // Build vertices clockwise around the road shape
-    // Each vertex: [x, y, isConvex]
-    type Vertex = [number, number, boolean];
-    const verts: Vertex[] = [];
-
-    // Top-left region
-    if (hasLeft) {
-      // Left arm extends: top-left goes to tile edge
-      verts.push([cx - half, cy - rh, false]);
-    }
-    // Top-left corner of center square
-    verts.push([cx - rh, cy - rh, roundTL]);
-
-    // Top edge
-    if (hasUp) {
-      verts.push([cx - rh, cy - half, false]);
-      verts.push([cx + rh, cy - half, false]);
-    }
-
-    // Top-right corner of center square
-    verts.push([cx + rh, cy - rh, roundTR]);
-
-    // Top-right region
-    if (hasRight) {
-      verts.push([cx + half, cy - rh, false]);
-    }
-
-    // Right edge
-    if (hasRight) {
-      verts.push([cx + half, cy + rh, false]);
-    }
-
-    // Bottom-right corner of center square
-    verts.push([cx + rh, cy + rh, roundBR]);
-
-    // Bottom edge
-    if (hasDown) {
-      verts.push([cx + rh, cy + half, false]);
-      verts.push([cx - rh, cy + half, false]);
-    }
-
-    // Bottom-left corner of center square
-    verts.push([cx - rh, cy + rh, roundBL]);
-
-    // Left edge
-    if (hasLeft) {
-      verts.push([cx - half, cy + rh, false]);
-    }
-
-    // Rotate list so it starts with a non-convex vertex for clean arcTo usage
-    let startIdx = 0;
-    for (let i = 0; i < verts.length; i++) {
-      if (!verts[i][2]) {
-        startIdx = i;
-        break;
-      }
-    }
-    const rotated: Vertex[] = [];
-    for (let i = 0; i < verts.length; i++) {
-      rotated.push(verts[(startIdx + i) % verts.length]);
-    }
-
-    // Clamp radius to avoid overshooting on short edges
-    const r = Math.min(radius, rh);
-
-    ctx.beginPath();
-    ctx.moveTo(rotated[0][0], rotated[0][1]);
-
-    for (let i = 1; i < rotated.length; i++) {
-      const [vx, vy, convex] = rotated[i];
-      if (convex) {
-        // Next vertex after this convex one (wrapping)
-        const [nx, ny] = rotated[(i + 1) % rotated.length];
-        ctx.arcTo(vx, vy, nx, ny, r);
-      } else {
-        ctx.lineTo(vx, vy);
-      }
-    }
-
-    ctx.closePath();
+  dispose(scene: THREE.Scene): void {
+    this.clearFromScene(scene);
+    this.roadMat.dispose();
+    this.outlineMat.dispose();
+    this.bridgeMat.dispose();
+    this.bridgeOutlineMat.dispose();
+    this.bridgeBarrierMat.dispose();
   }
 }
