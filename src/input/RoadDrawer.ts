@@ -26,6 +26,9 @@ export class RoadDrawer {
   private mode: DrawMode = 'none';
   private prevPlacedPos: GridPos | null = null;
 
+  onRoadPlace: (() => void) | null = null;
+  onRoadDelete: (() => void) | null = null;
+
   constructor(input: InputHandler, roadSystem: RoadSystem, grid: Grid, getActiveTool: () => ToolType, money: MoneyInterface) {
     this.input = input;
     this.roadSystem = roadSystem;
@@ -95,13 +98,16 @@ export class RoadDrawer {
       // Bridge tool: try placing bridge first, fall back to road on empty cells
       if (this.money.canAfford(BRIDGE_COST) && this.roadSystem.placeBridge(gx, gy)) {
         this.money.spend(BRIDGE_COST);
+        this.onRoadPlace?.();
       } else if (this.money.canAfford(ROAD_COST) && this.roadSystem.placeRoad(gx, gy)) {
         this.money.spend(ROAD_COST);
+        this.onRoadPlace?.();
       }
     } else {
       if (!this.money.canAfford(ROAD_COST)) return;
       if (this.roadSystem.placeRoad(gx, gy)) {
         this.money.spend(ROAD_COST);
+        this.onRoadPlace?.();
       }
     }
   }
@@ -111,8 +117,10 @@ export class RoadDrawer {
     const result = this.roadSystem.removeBridgeOrRoad(gx, gy);
     if (result === 'bridge') {
       this.money.refund(BRIDGE_REFUND);
+      this.onRoadDelete?.();
     } else if (result === 'road') {
       this.money.refund(ROAD_REFUND);
+      this.onRoadDelete?.();
     }
   }
 

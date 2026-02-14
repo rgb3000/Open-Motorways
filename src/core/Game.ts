@@ -132,6 +132,8 @@ export class Game {
     this.audioSystem.startMusic();
     this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.audioSystem.playHomeReturn(); };
+    this.roadDrawer.onRoadPlace = () => this.audioSystem.playRoadPlace();
+    this.roadDrawer.onRoadDelete = () => this.audioSystem.playRoadDelete();
     this.state = GameState.Playing;
   }
 
@@ -167,6 +169,8 @@ export class Game {
     this.audioSystem.startMusic();
     this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.audioSystem.playHomeReturn(); };
+    this.roadDrawer.onRoadPlace = () => this.audioSystem.playRoadPlace();
+    this.roadDrawer.onRoadDelete = () => this.audioSystem.playRoadDelete();
     this.state = GameState.Playing;
   }
 

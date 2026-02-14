@@ -13,6 +13,8 @@ export class AudioSystem {
   private bassPart!: Tone.Part;
   private chimeSynth!: Tone.PolySynth;
   private returnSynth!: Tone.PolySynth;
+  private placeSynth!: Tone.Synth;
+  private deleteSynth!: Tone.Synth;
   private hatsActive = false;
   private hatsCycleLoop!: Tone.Loop;
   private initialized = false;
@@ -136,6 +138,20 @@ export class AudioSystem {
       envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.15 },
     }).toDestination();
 
+    // Road place — short quiet tick
+    this.placeSynth = new Tone.Synth({
+      volume: -18,
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 },
+    }).toDestination();
+
+    // Road delete — slightly lower descending blip
+    this.deleteSynth = new Tone.Synth({
+      volume: -16,
+      oscillator: { type: 'square' },
+      envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.03 },
+    }).toDestination();
+
     Tone.getTransport().bpm.value = 125;
     this.initialized = true;
   }
@@ -162,6 +178,17 @@ export class AudioSystem {
     this.returnSynth.triggerAttackRelease('G5', '16n', now + 0.1);
   }
 
+  playRoadPlace(): void {
+    if (!this.initialized) return;
+    this.placeSynth.triggerAttackRelease('C6', 0.04);
+  }
+
+  playRoadDelete(): void {
+    if (!this.initialized) return;
+    const now = Tone.now();
+    this.deleteSynth.triggerAttackRelease('A4', 0.05, now);
+  }
+
   dispose(): void {
     if (!this.initialized) return;
     this.stopMusic();
@@ -176,6 +203,8 @@ export class AudioSystem {
     this.bass.dispose();
     this.chimeSynth.dispose();
     this.returnSynth.dispose();
+    this.placeSynth.dispose();
+    this.deleteSynth.dispose();
     this.distortion.dispose();
     this.drumCompress.dispose();
     this.initialized = false;
