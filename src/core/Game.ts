@@ -10,7 +10,8 @@ import { RoadSystem } from '../systems/RoadSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { DemandSystem } from '../systems/DemandSystem';
 import { CarSystem } from '../systems/CarSystem';
-import { AudioSystem } from '../systems/AudioSystem';
+import { MusicSystem } from '../systems/MusicSystem';
+import { SoundEffectSystem } from '../systems/SoundEffectSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
 import { STARTING_MONEY, DELIVERY_REWARD } from '../constants';
 
@@ -26,7 +27,8 @@ export class Game {
   private demandSystem: DemandSystem;
   private carSystem: CarSystem;
   private pathfinder: Pathfinder;
-  private audioSystem: AudioSystem = new AudioSystem();
+  private musicSystem: MusicSystem = new MusicSystem();
+  private soundEffects: SoundEffectSystem = new SoundEffectSystem();
   private state: GameState = GameState.WaitingToStart;
   private elapsedTime = 0;
   private money = STARTING_MONEY;
@@ -128,27 +130,29 @@ export class Game {
 
   async startGame(): Promise<void> {
     if (this.state !== GameState.WaitingToStart) return;
-    await this.audioSystem.init();
-    this.audioSystem.startMusic();
-    this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
-    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.audioSystem.playHomeReturn(); };
-    this.roadDrawer.onRoadPlace = () => this.audioSystem.playRoadPlace();
-    this.roadDrawer.onRoadDelete = () => this.audioSystem.playRoadDelete();
+    await this.musicSystem.init();
+    await this.soundEffects.init();
+    this.musicSystem.startMusic();
+    this.carSystem.onDelivery = () => this.soundEffects.playDeliveryChime();
+    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
+    this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
+    this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
     this.state = GameState.Playing;
   }
 
   togglePause(): void {
     if (this.state === GameState.Playing) {
       this.state = GameState.Paused;
-      this.audioSystem.stopMusic();
+      this.musicSystem.stopMusic();
     } else if (this.state === GameState.Paused) {
       this.state = GameState.Playing;
-      this.audioSystem.startMusic();
+      this.musicSystem.startMusic();
     }
   }
 
   async restart(): Promise<void> {
-    this.audioSystem.dispose();
+    this.musicSystem.dispose();
+    this.soundEffects.dispose();
     this.renderer.dispose();
     this.grid = new Grid();
     this.roadSystem = new RoadSystem(this.grid);
@@ -164,13 +168,15 @@ export class Game {
     this.activeTool = ToolType.Road;
     this.toolChangeCallback?.(this.activeTool);
     this.spawnSystem.spawnInitial();
-    this.audioSystem = new AudioSystem();
-    await this.audioSystem.init();
-    this.audioSystem.startMusic();
-    this.carSystem.onDelivery = () => this.audioSystem.playDeliveryChime();
-    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.audioSystem.playHomeReturn(); };
-    this.roadDrawer.onRoadPlace = () => this.audioSystem.playRoadPlace();
-    this.roadDrawer.onRoadDelete = () => this.audioSystem.playRoadDelete();
+    this.musicSystem = new MusicSystem();
+    this.soundEffects = new SoundEffectSystem();
+    await this.musicSystem.init();
+    await this.soundEffects.init();
+    this.musicSystem.startMusic();
+    this.carSystem.onDelivery = () => this.soundEffects.playDeliveryChime();
+    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
+    this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
+    this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
     this.state = GameState.Playing;
   }
 
@@ -197,7 +203,7 @@ export class Game {
 
     if (this.demandSystem.isGameOver) {
       this.state = GameState.GameOver;
-      this.audioSystem.stopMusic();
+      this.musicSystem.stopMusic();
     }
   }
 
