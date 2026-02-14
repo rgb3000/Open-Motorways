@@ -46,6 +46,7 @@ export class Renderer {
 
     // Scene
     this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0xefefef);
 
     // Camera — orthographic, top-down (frustum set by updateFrustum)
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);

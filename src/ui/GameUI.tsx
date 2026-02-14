@@ -51,12 +51,10 @@ function HUD({ score, time, state, onPause }: { score: number; time: string; sta
           onClick={onPause}
           style={{
             pointerEvents: 'auto',
-            background: 'rgba(0,0,0,0.4)',
-            color: '#fff',
+            background: 'none',
+            color: '#000',
             border: 'none',
-            borderRadius: 4,
-            padding: '4px 10px',
-            font: 'bold 14px monospace',
+            padding: 0,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
