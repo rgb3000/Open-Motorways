@@ -42,10 +42,10 @@ export const SPAWN_INTERVAL_DECAY = 0.95;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
 
 // Money
-export const STARTING_MONEY = 200;
+export const STARTING_MONEY = 400;
 export const ROAD_COST = 10;
 export const BRIDGE_COST = 20;
-export const DELIVERY_REWARD = 100;
+export const DELIVERY_REWARD = 50;
 export const ROAD_REFUND = 10;
 export const BRIDGE_REFUND = 20;
 
