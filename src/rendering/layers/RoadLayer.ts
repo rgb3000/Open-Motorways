@@ -9,6 +9,7 @@ import {
 
 const ROAD_HEIGHT = 0.4;
 const ROAD_WIDTH_RATIO = 0.6;
+const ROAD_CORNER_RADIUS = 10;
 const BRIDGE_HEIGHT = 1.5;
 const BRIDGE_WIDTH_RATIO = 0.7;
 
@@ -68,9 +69,9 @@ export class RoadLayer {
         }
 
         // Road fill geometry
-        this.buildCellGeometries(roadGeoms, cx, cz, roadHalf, conns, half, ROAD_HEIGHT, 0);
+        this.buildRoundedCellShape(roadGeoms, cx, cz, roadHalf, conns, half, ROAD_HEIGHT, 0);
         // Outline geometry (slightly larger, slightly lower)
-        this.buildCellGeometries(outlineGeoms, cx, cz, roadHalf + outlineExtra, conns, half, ROAD_HEIGHT, -0.01);
+        this.buildRoundedCellShape(outlineGeoms, cx, cz, roadHalf + outlineExtra, conns, half, ROAD_HEIGHT, -0.01);
       }
     }
 
@@ -90,8 +91,8 @@ export class RoadLayer {
           : conns.filter(d => d === Direction.Left || d === Direction.Right);
 
         if (groundConns.length > 0) {
-          this.buildCellGeometries(roadGeoms, cx, cz, roadHalf, groundConns, half, ROAD_HEIGHT, 0);
-          this.buildCellGeometries(outlineGeoms, cx, cz, roadHalf + outlineExtra, groundConns, half, ROAD_HEIGHT, -0.01);
+          this.buildRoundedCellShape(roadGeoms, cx, cz, roadHalf, groundConns, half, ROAD_HEIGHT, 0);
+          this.buildRoundedCellShape(outlineGeoms, cx, cz, roadHalf + outlineExtra, groundConns, half, ROAD_HEIGHT, -0.01);
         }
       }
     }
@@ -125,47 +126,133 @@ export class RoadLayer {
     for (const g of outlineGeoms) g.dispose();
   }
 
-  private buildCellGeometries(
+  private buildOutlinePoints(
+    conns: Direction[], rh: number, half: number,
+  ): { x: number; z: number; round: boolean }[] {
+    const up = conns.includes(Direction.Up);
+    const right = conns.includes(Direction.Right);
+    const down = conns.includes(Direction.Down);
+    const left = conns.includes(Direction.Left);
+
+    const pts: { x: number; z: number; round: boolean }[] = [];
+
+    // NW corner
+    if (left && up) pts.push({ x: -rh, z: -rh, round: false });
+    else if (!left && !up) pts.push({ x: -rh, z: -rh, round: true });
+
+    // Up arm
+    if (up) {
+      pts.push({ x: -rh, z: -half, round: false });
+      pts.push({ x: rh, z: -half, round: false });
+    }
+
+    // NE corner
+    if (up && right) pts.push({ x: rh, z: -rh, round: false });
+    else if (!up && !right) pts.push({ x: rh, z: -rh, round: true });
+
+    // Right arm
+    if (right) {
+      pts.push({ x: half, z: -rh, round: false });
+      pts.push({ x: half, z: rh, round: false });
+    }
+
+    // SE corner
+    if (right && down) pts.push({ x: rh, z: rh, round: false });
+    else if (!right && !down) pts.push({ x: rh, z: rh, round: true });
+
+    // Down arm
+    if (down) {
+      pts.push({ x: rh, z: half, round: false });
+      pts.push({ x: -rh, z: half, round: false });
+    }
+
+    // SW corner
+    if (down && left) pts.push({ x: -rh, z: rh, round: false });
+    else if (!down && !left) pts.push({ x: -rh, z: rh, round: true });
+
+    // Left arm
+    if (left) {
+      pts.push({ x: -half, z: rh, round: false });
+      pts.push({ x: -half, z: -rh, round: false });
+    }
+
+    return pts;
+  }
+
+  private buildRoundedCellShape(
     geoms: THREE.BufferGeometry[],
     cx: number, cz: number,
     rh: number, conns: Direction[], half: number,
     height: number, yOffset: number,
   ): void {
-    const y = height / 2 + yOffset;
+    const pts = this.buildOutlinePoints(conns, rh, half);
+    if (pts.length < 3) return;
 
-    // Center box
-    const centerGeom = new THREE.BoxGeometry(rh * 2, height, rh * 2);
-    centerGeom.translate(cx, y, cz);
-    geoms.push(centerGeom);
+    const R = Math.min(ROAD_CORNER_RADIUS, rh * 0.45);
+    const shape = new THREE.Shape();
+    const n = pts.length;
 
-    // Arms
-    for (const dir of conns) {
-      let w: number, d: number, ox: number, oz: number;
-      const armLen = half - rh;
+    for (let i = 0; i < n; i++) {
+      const pt = pts[i];
+      // Shape coords: sx = world x, sy = -world z
+      const psx = pt.x;
+      const psy = -pt.z;
 
-      switch (dir) {
-        case Direction.Up:
-          w = rh * 2; d = armLen;
-          ox = cx; oz = cz - rh - armLen / 2;
-          break;
-        case Direction.Down:
-          w = rh * 2; d = armLen;
-          ox = cx; oz = cz + rh + armLen / 2;
-          break;
-        case Direction.Left:
-          w = armLen; d = rh * 2;
-          ox = cx - rh - armLen / 2; oz = cz;
-          break;
-        case Direction.Right:
-          w = armLen; d = rh * 2;
-          ox = cx + rh + armLen / 2; oz = cz;
-          break;
+      if (!pt.round) {
+        if (i === 0) shape.moveTo(psx, psy);
+        else shape.lineTo(psx, psy);
+        continue;
       }
 
-      const armGeom = new THREE.BoxGeometry(w, height, d);
-      armGeom.translate(ox, y, oz);
-      geoms.push(armGeom);
+      // Rounded convex corner: replace sharp vertex with quadratic curve
+      const prev = pts[(i - 1 + n) % n];
+      const next = pts[(i + 1) % n];
+
+      // Direction vectors from corner toward adjacent vertices
+      const toPrevX = prev.x - pt.x;
+      const toPrevZ = prev.z - pt.z;
+      const toPrevLen = Math.sqrt(toPrevX * toPrevX + toPrevZ * toPrevZ);
+
+      const toNextX = next.x - pt.x;
+      const toNextZ = next.z - pt.z;
+      const toNextLen = Math.sqrt(toNextX * toNextX + toNextZ * toNextZ);
+
+      // Tangent points: R distance from corner along each edge
+      const t1x = pt.x + (toPrevX / toPrevLen) * R;
+      const t1z = pt.z + (toPrevZ / toPrevLen) * R;
+      const t2x = pt.x + (toNextX / toNextLen) * R;
+      const t2z = pt.z + (toNextZ / toNextLen) * R;
+
+      if (i === 0) shape.moveTo(t1x, -t1z);
+      else shape.lineTo(t1x, -t1z);
+
+      shape.quadraticCurveTo(psx, psy, t2x, -t2z);
     }
+
+    // Close: if first point was rounded, line back to its t1
+    if (pts[0].round) {
+      const prev = pts[n - 1];
+      const first = pts[0];
+      const toPrevX = prev.x - first.x;
+      const toPrevZ = prev.z - first.z;
+      const toPrevLen = Math.sqrt(toPrevX * toPrevX + toPrevZ * toPrevZ);
+      shape.lineTo(
+        first.x + (toPrevX / toPrevLen) * R,
+        -(first.z + (toPrevZ / toPrevLen) * R),
+      );
+    }
+
+    const geom = new THREE.ExtrudeGeometry(shape, {
+      depth: height,
+      bevelEnabled: false,
+      curveSegments: 6,
+    });
+
+    // Shape is in XY plane, extruded along Z.
+    // Rotate -90° around X so: XY→XZ (road surface), Z→Y (height)
+    geom.rotateX(-Math.PI / 2);
+    geom.translate(cx, yOffset, cz);
+    geoms.push(geom);
   }
 
   private buildBridges(scene: THREE.Scene): void {
