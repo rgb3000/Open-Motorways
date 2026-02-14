@@ -4,10 +4,17 @@ import type { House } from '../entities/House';
 import type { Business } from '../entities/Business';
 import type { Car } from '../entities/Car';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../constants';
+import { lerp, clamp } from '../utils/math';
 import { TerrainLayer } from './layers/TerrainLayer';
 import { RoadLayer } from './layers/RoadLayer';
 import { BuildingLayer } from './layers/BuildingLayer';
 import { CarLayer } from './layers/CarLayer';
+
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 4;
+const ZOOM_LERP = 0.1;
+const ZOOM_STEP = 0.02;
+const KEY_ZOOM_STEP = 0.08;
 
 export class Renderer {
   private scene: THREE.Scene;
@@ -24,21 +31,27 @@ export class Renderer {
   private groundTexture: THREE.CanvasTexture;
   private groundDirty = false;
 
+  // Zoom state
+  private currentZoom = 1;
+  private targetZoom = 1;
+  private cameraCenterX = CANVAS_WIDTH / 2;
+  private cameraCenterZ = CANVAS_HEIGHT / 2;
+  private cameraTargetX = CANVAS_WIDTH / 2;
+  private cameraTargetZ = CANVAS_HEIGHT / 2;
+  private viewportWidth = CANVAS_WIDTH;
+  private viewportHeight = CANVAS_HEIGHT;
+
   constructor(webglRenderer: THREE.WebGLRenderer, grid: Grid) {
     this.webglRenderer = webglRenderer;
 
     // Scene
     this.scene = new THREE.Scene();
 
-    // Camera — orthographic, top-down, matching pixel coords
-    this.camera = new THREE.OrthographicCamera(
-      -CANVAS_WIDTH / 2, CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2, -CANVAS_HEIGHT / 2,
-      0.1, 1000,
-    );
-    this.camera.position.set(CANVAS_WIDTH / 2, 100, CANVAS_HEIGHT / 2);
+    // Camera — orthographic, top-down (frustum set by updateFrustum)
+    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
     this.camera.up.set(0, 0, -1);
-    this.camera.lookAt(CANVAS_WIDTH / 2, 0, CANVAS_HEIGHT / 2);
+    this.updateFrustum();
+    this.updateCameraPosition();
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.7);
@@ -47,13 +60,13 @@ export class Renderer {
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(
       CANVAS_WIDTH / 2 - 150,
-      200,
+      60,
       CANVAS_HEIGHT / 2 - 150,
     );
     dirLight.target.position.set(CANVAS_WIDTH / 2, 0, CANVAS_HEIGHT / 2);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.set(2048, 2048);
-    dirLight.shadow.radius = 4;
+    dirLight.shadow.mapSize.set(4096, 4096);
+    dirLight.shadow.radius = 8;
     dirLight.shadow.camera.left = -CANVAS_WIDTH / 2;
     dirLight.shadow.camera.right = CANVAS_WIDTH / 2;
     dirLight.shadow.camera.top = CANVAS_HEIGHT / 2;
@@ -93,6 +106,59 @@ export class Renderer {
     this.scene.add(ground);
   }
 
+  resize(width: number, height: number): void {
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+    this.updateFrustum();
+  }
+
+  onWheel(e: WheelEvent): void {
+    e.preventDefault();
+
+    // World point under cursor before zoom change
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const ndcX = (sx / this.viewportWidth) * 2 - 1;
+    const ndcY = (sy / this.viewportHeight) * 2 - 1;
+
+    const worldX = this.cameraCenterX + ndcX * this.camera.right;
+    const worldZ = this.cameraCenterZ + ndcY * this.camera.top;
+
+    // Adjust target zoom
+    const direction = e.deltaY > 0 ? -1 : 1;
+    this.targetZoom = clamp(
+      this.targetZoom * (1 + direction * ZOOM_STEP),
+      MIN_ZOOM,
+      MAX_ZOOM,
+    );
+
+    // Compute new frustum half-sizes at target zoom
+    const { halfW, halfH } = this.computeHalfSizes(this.targetZoom);
+
+    // Adjust camera target so world point stays under cursor
+    this.cameraTargetX = worldX - ndcX * halfW;
+    this.cameraTargetZ = worldZ - ndcY * halfH;
+  }
+
+  zoomByKey(direction: 1 | -1): void {
+    this.targetZoom = clamp(
+      this.targetZoom * (1 + direction * KEY_ZOOM_STEP),
+      MIN_ZOOM,
+      MAX_ZOOM,
+    );
+  }
+
+  screenToWorld(screenX: number, screenY: number): { x: number; z: number } {
+    const ndcX = (screenX / this.viewportWidth) * 2 - 1;
+    const ndcY = (screenY / this.viewportHeight) * 2 - 1;
+
+    const worldX = this.cameraCenterX + ndcX * this.camera.right;
+    const worldZ = this.cameraCenterZ + ndcY * this.camera.top;
+
+    return { x: worldX, z: worldZ };
+  }
+
   markGroundDirty(): void {
     this.groundDirty = true;
   }
@@ -103,6 +169,9 @@ export class Renderer {
     businesses: Business[],
     cars: Car[],
   ): void {
+    // Smooth zoom/pan animation
+    this.updateCamera();
+
     // Update ground texture if dirty
     if (this.groundDirty) {
       this.terrainLayer.render(this.offCtx);
@@ -138,5 +207,62 @@ export class Renderer {
     this.scene.clear();
 
     this.groundTexture.dispose();
+  }
+
+  private computeHalfSizes(zoom: number): { halfW: number; halfH: number } {
+    const worldAspect = CANVAS_WIDTH / CANVAS_HEIGHT;
+    const viewAspect = this.viewportWidth / this.viewportHeight;
+
+    let halfW: number;
+    let halfH: number;
+
+    if (viewAspect > worldAspect) {
+      // Viewport wider than world — height constrains
+      halfH = CANVAS_HEIGHT / 2;
+      halfW = halfH * viewAspect;
+    } else {
+      // Viewport taller than world — width constrains
+      halfW = CANVAS_WIDTH / 2;
+      halfH = halfW / viewAspect;
+    }
+
+    halfW /= zoom;
+    halfH /= zoom;
+
+    return { halfW, halfH };
+  }
+
+  private updateFrustum(): void {
+    const { halfW, halfH } = this.computeHalfSizes(this.currentZoom);
+
+    this.camera.left = -halfW;
+    this.camera.right = halfW;
+    this.camera.top = halfH;
+    this.camera.bottom = -halfH;
+    this.camera.updateProjectionMatrix();
+  }
+
+  private updateCameraPosition(): void {
+    this.camera.position.set(this.cameraCenterX, 100, this.cameraCenterZ);
+    this.camera.lookAt(this.cameraCenterX, 0, this.cameraCenterZ);
+  }
+
+  private updateCamera(): void {
+    this.currentZoom = lerp(this.currentZoom, this.targetZoom, ZOOM_LERP);
+    if (Math.abs(this.currentZoom - this.targetZoom) < 0.001) {
+      this.currentZoom = this.targetZoom;
+    }
+
+    this.cameraCenterX = lerp(this.cameraCenterX, this.cameraTargetX, ZOOM_LERP);
+    this.cameraCenterZ = lerp(this.cameraCenterZ, this.cameraTargetZ, ZOOM_LERP);
+    if (Math.abs(this.cameraCenterX - this.cameraTargetX) < 0.01) {
+      this.cameraCenterX = this.cameraTargetX;
+    }
+    if (Math.abs(this.cameraCenterZ - this.cameraTargetZ) < 0.01) {
+      this.cameraCenterZ = this.cameraTargetZ;
+    }
+
+    this.updateFrustum();
+    this.updateCameraPosition();
   }
 }

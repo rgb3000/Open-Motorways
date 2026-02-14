@@ -18,18 +18,16 @@ export class InputHandler {
     canvasY: 0,
   };
 
-  private scaleX = 1;
-  private scaleY = 1;
   private canvas: HTMLCanvasElement;
+  private screenToWorld: (sx: number, sy: number) => { x: number; z: number };
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    screenToWorld: (sx: number, sy: number) => { x: number; z: number },
+  ) {
     this.canvas = canvas;
+    this.screenToWorld = screenToWorld;
     this.bindEvents();
-  }
-
-  updateScale(scaleX: number, scaleY: number): void {
-    this.scaleX = scaleX;
-    this.scaleY = scaleY;
   }
 
   private bindEvents(): void {
@@ -42,11 +40,15 @@ export class InputHandler {
 
   private updatePosition(e: MouseEvent): void {
     const rect = this.canvas.getBoundingClientRect();
-    this.state.canvasX = (e.clientX - rect.left) * this.scaleX;
-    this.state.canvasY = (e.clientY - rect.top) * this.scaleY;
+    const world = this.screenToWorld(
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+    );
+    this.state.canvasX = world.x;
+    this.state.canvasY = world.z;
     this.state.gridPos = {
-      gx: Math.floor(this.state.canvasX / TILE_SIZE),
-      gy: Math.floor(this.state.canvasY / TILE_SIZE),
+      gx: Math.floor(world.x / TILE_SIZE),
+      gy: Math.floor(world.z / TILE_SIZE),
     };
   }
 
