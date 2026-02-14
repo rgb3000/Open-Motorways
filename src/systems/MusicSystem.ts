@@ -36,13 +36,13 @@ export class MusicSystem {
     // Hats
     this.hats = new Tone.MetalSynth({
       volume: -10,
-      frequency: 200,
       envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
       harmonicity: 5.1,
       modulationIndex: 32,
       resonance: 4000,
       octaves: 1.5,
     }).chain(this.distortion, this.drumCompress);
+    this.hats.frequency.value = 200;
 
     // Hats play for ~4 bars then rest for ~28 bars (~1 min cycle at 125bpm)
     this.hatsActive = false;
