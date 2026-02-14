@@ -1,8 +1,8 @@
 import { GameColor } from './types';
 
 // Grid
-export const GRID_COLS = 40;
-export const GRID_ROWS = 25;
+export const GRID_COLS = 80;
+export const GRID_ROWS = 50;
 export const TILE_SIZE = 24;
 export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;  // 960
 export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE; // 600
