@@ -98,6 +98,7 @@ export class RoadLayer {
 
   dispose(scene: THREE.Scene): void {
     this.clearFromScene(scene);
+    this.cellRenderer.clearCache();
     this.roadMat.dispose();
     this.outlineMat.dispose();
   }

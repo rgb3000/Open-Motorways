@@ -25,6 +25,81 @@ export class BuildingLayer {
   private businessMeshes = new Map<string, THREE.Group>();
   private demandPinRefs = new Map<string, THREE.Mesh[]>();
 
+  // Cached prototype geometries (created once, cloned on spawn)
+  private houseBodyGeom: THREE.ExtrudeGeometry;
+  private houseRoofGeom: THREE.ConeGeometry;
+  private housePlateGeom: THREE.ExtrudeGeometry;
+  private bizBodyGeom: THREE.ExtrudeGeometry;
+  private bizTowerGeom: THREE.BoxGeometry;
+  private bizPlateGeomH: THREE.ExtrudeGeometry;
+  private bizPlateGeomV: THREE.ExtrudeGeometry;
+  private bizLotGeom: THREE.ExtrudeGeometry;
+  private bizSlotGeom: THREE.BoxGeometry;
+  private bizPinGeom: THREE.SphereGeometry;
+
+  // Cached shared materials
+  private plateMat = new THREE.MeshStandardMaterial({ color: '#777777' });
+  private lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
+  private slotMat = new THREE.MeshStandardMaterial({ color: '#AAAAAA' });
+  private pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
+
+  constructor() {
+    const size = TILE_SIZE * 0.75;
+    const height = 5;
+
+    // House body
+    const bodyShape = roundedRectShape(size, size, 2);
+    this.houseBodyGeom = new THREE.ExtrudeGeometry(bodyShape, { depth: height, bevelEnabled: false, curveSegments: 4 });
+    this.houseBodyGeom.rotateX(-Math.PI / 2);
+
+    // House roof
+    this.houseRoofGeom = new THREE.ConeGeometry(size / 2 * 1.1, 3, 4);
+
+    // House plate
+    const plateSize = TILE_SIZE - 2;
+    const plateShape = roundedRectShape(plateSize, plateSize, 3);
+    this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 0.4, bevelEnabled: false, curveSegments: 4 });
+    this.housePlateGeom.rotateX(-Math.PI / 2);
+
+    // Business body
+    const buildingSize = TILE_SIZE * 0.75;
+    const buildingHeight = 7;
+    const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
+    this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: false, curveSegments: 4 });
+    this.bizBodyGeom.rotateX(-Math.PI / 2);
+
+    // Business tower
+    const towerSize = TILE_SIZE * 0.3;
+    this.bizTowerGeom = new THREE.BoxGeometry(towerSize, 3, towerSize);
+
+    // Business plates (horizontal and vertical)
+    const plateInset = 2;
+    const plateLong = TILE_SIZE * 2 - plateInset;
+    const plateShort = TILE_SIZE - 2;
+    const plateH = roundedRectShape(plateLong, plateShort, 3);
+    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 0.4, bevelEnabled: false, curveSegments: 4 });
+    this.bizPlateGeomH.rotateX(-Math.PI / 2);
+    const plateV = roundedRectShape(plateShort, plateLong, 3);
+    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 0.4, bevelEnabled: false, curveSegments: 4 });
+    this.bizPlateGeomV.rotateX(-Math.PI / 2);
+
+    // Business lot
+    const lotSize = TILE_SIZE * 0.9;
+    const lotShape = roundedRectShape(lotSize, lotSize, 3);
+    this.bizLotGeom = new THREE.ExtrudeGeometry(lotShape, { depth: 0.15, bevelEnabled: false, curveSegments: 4 });
+    this.bizLotGeom.rotateX(-Math.PI / 2);
+
+    // Business slot markings
+    const slotW = lotSize * 0.4;
+    const slotD = lotSize * 0.4;
+    this.bizSlotGeom = new THREE.BoxGeometry(slotW, 0.05, slotD);
+
+    // Demand pins
+    this.bizPinGeom = new THREE.SphereGeometry(3, 8, 8);
+
+    this.initSharedResources();
+  }
+
   update(scene: THREE.Scene, houses: House[], businesses: Business[]): void {
     // Add or update meshes for houses
     for (const house of houses) {
@@ -35,12 +110,7 @@ export class BuildingLayer {
       if (this.houseMeshes.has(house.id)) {
         const oldGroup = this.houseMeshes.get(house.id)!;
         scene.remove(oldGroup);
-        oldGroup.traverse((obj) => {
-          if (obj instanceof THREE.Mesh) {
-            obj.geometry.dispose();
-            (obj.material as THREE.Material).dispose();
-          }
-        });
+        this.disposeGroup(oldGroup);
       }
 
       const group = this.createHouseMesh(house);
@@ -67,48 +137,31 @@ export class BuildingLayer {
   }
 
   private createHouseMesh(house: House): THREE.Group {
-    const gx = house.pos.gx;
-    const gy = house.pos.gy;
-    const color = house.color;
     const group = new THREE.Group();
-    const hexColor = COLOR_MAP[color];
+    const hexColor = COLOR_MAP[house.color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
-    const size = TILE_SIZE * 0.75;
-    const height = 5;
-
-    // Body (rounded corners)
-    const bodyShape = roundedRectShape(size, size, 2);
-    const bodyGeom = new THREE.ExtrudeGeometry(bodyShape, { depth: height, bevelEnabled: false, curveSegments: 4 });
-    bodyGeom.rotateX(-Math.PI / 2);
-    const body = new THREE.Mesh(bodyGeom, mat);
+    // Body (cloned from prototype)
+    const body = new THREE.Mesh(this.houseBodyGeom.clone(), mat);
     body.castShadow = true;
     group.add(body);
 
-    // Roof (cone with 4 sides = pyramid)
-    const roofHeight = 3;
-    const roofGeom = new THREE.ConeGeometry(size / 2 * 1.1, roofHeight, 4);
-    const roof = new THREE.Mesh(roofGeom, mat);
-    roof.position.y = height + roofHeight / 2;
-    roof.rotation.y = Math.PI / 4; // Align pyramid edges with box
+    // Roof (cloned from prototype)
+    const roof = new THREE.Mesh(this.houseRoofGeom.clone(), mat);
+    roof.position.y = 5 + 3 / 2;
+    roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     group.add(roof);
 
-    // Ground plate filling exactly 1 grid cell beneath the house
-    const plateSize = TILE_SIZE - 2;
-    const plateShape = roundedRectShape(plateSize, plateSize, 3);
-    const plateHeight = 0.4;
-    const plateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: plateHeight, bevelEnabled: false, curveSegments: 4 });
-    plateGeom.rotateX(-Math.PI / 2);
-    const plateMat = new THREE.MeshStandardMaterial({ color: '#777777' });
-    const plate = new THREE.Mesh(plateGeom, plateMat);
+    // Ground plate (cloned from prototype)
+    const plate = new THREE.Mesh(this.housePlateGeom.clone(), this.plateMat);
     plate.position.set(0, 0.05, 0);
     plate.receiveShadow = true;
     group.add(plate);
 
-    // Position in world: pixel center of tile
-    const px = gx * TILE_SIZE + TILE_SIZE / 2;
-    const pz = gy * TILE_SIZE + TILE_SIZE / 2;
+    // Position in world
+    const px = house.pos.gx * TILE_SIZE + TILE_SIZE / 2;
+    const pz = house.pos.gy * TILE_SIZE + TILE_SIZE / 2;
     group.position.set(px, 0, pz);
 
     return group;
@@ -119,66 +172,43 @@ export class BuildingLayer {
     const hexColor = COLOR_MAP[biz.color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
-    // Building: single-cell rounded box at biz.pos (taller than house)
     const buildingSize = TILE_SIZE * 0.75;
     const buildingHeight = 7;
     const buildingPx = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
     const buildingPz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
-    const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
-    const bodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: false, curveSegments: 4 });
-    bodyGeom.rotateX(-Math.PI / 2);
-    const body = new THREE.Mesh(bodyGeom, mat);
+
+    // Body (cloned from prototype)
+    const body = new THREE.Mesh(this.bizBodyGeom.clone(), mat);
     body.position.set(buildingPx, 0, buildingPz);
     body.castShadow = true;
     group.add(body);
 
-    // Tower on top of building
-    const towerSize = TILE_SIZE * 0.3;
-    const towerHeight = 3;
-    const towerGeom = new THREE.BoxGeometry(towerSize, towerHeight, towerSize);
-    const tower = new THREE.Mesh(towerGeom, mat);
-    tower.position.set(buildingPx, buildingHeight + towerHeight / 2, buildingPz);
+    // Tower (cloned from prototype)
+    const tower = new THREE.Mesh(this.bizTowerGeom.clone(), mat);
+    tower.position.set(buildingPx, buildingHeight + 3 / 2, buildingPz);
     tower.castShadow = true;
     group.add(tower);
 
-    // Background plate spanning building + parking lot (2x1 tiles)
-    const plateInset = 2; // 1px inset per side on long axis
-    const plateLong = TILE_SIZE * 2 - plateInset;
-    const plateShort = TILE_SIZE - 2;
+    // Background plate (use pre-built horizontal or vertical variant)
     const isHoriz = biz.orientation === 'horizontal';
-    const plateW = isHoriz ? plateLong : plateShort;
-    const plateH = isHoriz ? plateShort : plateLong;
-    const plateShape = roundedRectShape(plateW, plateH, 3);
-    const plateHeight = 0.4;
-    const plateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: plateHeight, bevelEnabled: false, curveSegments: 4 });
-    plateGeom.rotateX(-Math.PI / 2);
-    const plateMat = new THREE.MeshStandardMaterial({ color: '#777777' });
-    const plate = new THREE.Mesh(plateGeom, plateMat);
+    const plateProto = isHoriz ? this.bizPlateGeomH : this.bizPlateGeomV;
+    const plate = new THREE.Mesh(plateProto.clone(), this.plateMat);
     const lotCx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
     const lotCz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
     plate.position.set((buildingPx + lotCx) / 2, 0.05, (buildingPz + lotCz) / 2);
     plate.receiveShadow = true;
     group.add(plate);
 
-    // Parking lot: flat gray surface at biz.parkingLotPos
+    // Parking lot (cloned from prototype)
     const lotPx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
     const lotPz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
     const lotSize = TILE_SIZE * 0.9;
-    const lotHeight = 0.15;
-    const lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
-    const lotShape = roundedRectShape(lotSize, lotSize, 3);
-    const lotGeom = new THREE.ExtrudeGeometry(lotShape, { depth: lotHeight, bevelEnabled: false, curveSegments: 4 });
-    lotGeom.rotateX(-Math.PI / 2);
-    const lot = new THREE.Mesh(lotGeom, lotMat);
+    const lot = new THREE.Mesh(this.bizLotGeom.clone(), this.lotMat);
     lot.position.set(lotPx, 0, lotPz);
     lot.receiveShadow = true;
     group.add(lot);
 
-    // Parking slot markings (4 lighter rectangles)
-    const slotMat = new THREE.MeshStandardMaterial({ color: '#AAAAAA' });
-    const slotW = lotSize * 0.4;
-    const slotD = lotSize * 0.4;
-    const slotGeom = new THREE.BoxGeometry(slotW, 0.05, slotD);
+    // Parking slot markings (shared geometry + material)
     const offsets = [
       { x: -lotSize * 0.22, z: -lotSize * 0.22 },
       { x: lotSize * 0.22, z: -lotSize * 0.22 },
@@ -186,20 +216,17 @@ export class BuildingLayer {
       { x: lotSize * 0.22, z: lotSize * 0.22 },
     ];
     for (const off of offsets) {
-      const slot = new THREE.Mesh(slotGeom, slotMat);
-      slot.position.set(lotPx + off.x, lotHeight + 0.03, lotPz + off.z);
+      const slot = new THREE.Mesh(this.bizSlotGeom, this.slotMat);
+      slot.position.set(lotPx + off.x, 0.15 + 0.03, lotPz + off.z);
       group.add(slot);
     }
 
-    // Demand pins: ring around building cell center
-    const pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
-    const pinGeom = new THREE.SphereGeometry(3, 8, 8);
+    // Demand pins (shared geometry + material)
     const ringRadius = buildingSize / 2 + 6;
     const pins: THREE.Mesh[] = [];
-
     for (let i = 0; i < MAX_DEMAND_PINS; i++) {
       const angle = (i / MAX_DEMAND_PINS) * Math.PI * 2 - Math.PI / 2;
-      const pin = new THREE.Mesh(pinGeom, pinMat);
+      const pin = new THREE.Mesh(this.bizPinGeom, this.pinMat);
       pin.position.set(
         buildingPx + Math.cos(angle) * ringRadius,
         0.5,
@@ -214,27 +241,54 @@ export class BuildingLayer {
     return { group, pins };
   }
 
+  private sharedResources = new Set<THREE.Material | THREE.BufferGeometry>();
+
+  private initSharedResources(): void {
+    this.sharedResources.add(this.plateMat);
+    this.sharedResources.add(this.lotMat);
+    this.sharedResources.add(this.slotMat);
+    this.sharedResources.add(this.pinMat);
+    this.sharedResources.add(this.bizSlotGeom);
+    this.sharedResources.add(this.bizPinGeom);
+  }
+
+  private disposeGroup(group: THREE.Group): void {
+    group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        if (!this.sharedResources.has(obj.geometry)) obj.geometry.dispose();
+        const mat = obj.material as THREE.Material;
+        if (!this.sharedResources.has(mat)) mat.dispose();
+      }
+    });
+  }
+
   dispose(scene: THREE.Scene): void {
     for (const [, group] of this.houseMeshes) {
       scene.remove(group);
-      group.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          (obj.material as THREE.Material).dispose();
-        }
-      });
+      this.disposeGroup(group);
     }
     for (const [, group] of this.businessMeshes) {
       scene.remove(group);
-      group.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          (obj.material as THREE.Material).dispose();
-        }
-      });
+      this.disposeGroup(group);
     }
     this.houseMeshes.clear();
     this.businessMeshes.clear();
     this.demandPinRefs.clear();
+
+    // Dispose prototype geometries and shared materials
+    this.houseBodyGeom.dispose();
+    this.houseRoofGeom.dispose();
+    this.housePlateGeom.dispose();
+    this.bizBodyGeom.dispose();
+    this.bizTowerGeom.dispose();
+    this.bizPlateGeomH.dispose();
+    this.bizPlateGeomV.dispose();
+    this.bizLotGeom.dispose();
+    this.bizSlotGeom.dispose();
+    this.bizPinGeom.dispose();
+    this.plateMat.dispose();
+    this.lotMat.dispose();
+    this.slotMat.dispose();
+    this.pinMat.dispose();
   }
 }

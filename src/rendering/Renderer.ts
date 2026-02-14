@@ -30,6 +30,7 @@ export class Renderer {
   private offCtx: CanvasRenderingContext2D;
   private groundTexture: THREE.CanvasTexture;
   private groundDirty = false;
+  private roadRebuildScheduled = false;
   private dpr: number;
 
   // Zoom state
@@ -193,8 +194,14 @@ export class Renderer {
       this.terrainLayer.render(this.offCtx);
       this.groundTexture.needsUpdate = true;
 
-      // Rebuild 3D road meshes
-      this.roadLayer.update(this.scene);
+      // Defer road mesh rebuild to next frame to avoid frame hitch
+      if (!this.roadRebuildScheduled) {
+        this.roadRebuildScheduled = true;
+        setTimeout(() => {
+          this.roadLayer.update(this.scene);
+          this.roadRebuildScheduled = false;
+        }, 0);
+      }
       this.groundDirty = false;
     }
 

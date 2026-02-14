@@ -4,14 +4,42 @@ import { TILE_SIZE } from '../../../constants';
 import { ROAD_HEIGHT, ROAD_WIDTH_RATIO, ROAD_CORNER_RADIUS, ROAD_INNER_RADIUS } from './roadConstants';
 
 export class CellRoadRenderer {
+  // Cache keyed on connection bitmask -> prototype geometry (centered at origin)
+  private roadCache = new Map<number, THREE.BufferGeometry>();
+  private outlineCache = new Map<number, THREE.BufferGeometry>();
+
+  private connectionKey(connections: Direction[]): number {
+    let key = 0;
+    for (const d of connections) key |= (1 << d);
+    return key;
+  }
+
+  clearCache(): void {
+    for (const g of this.roadCache.values()) g.dispose();
+    for (const g of this.outlineCache.values()) g.dispose();
+    this.roadCache.clear();
+    this.outlineCache.clear();
+  }
+
   buildCellGeometries(
     geoms: THREE.BufferGeometry[],
     cx: number, cz: number,
     connections: Direction[],
   ): void {
-    const half = TILE_SIZE / 2;
-    const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
-    this.buildRoundedCellShape(geoms, cx, cz, roadHalf, connections, half, ROAD_HEIGHT, 0);
+    const key = this.connectionKey(connections);
+    let proto = this.roadCache.get(key);
+    if (!proto) {
+      const half = TILE_SIZE / 2;
+      const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
+      const temp: THREE.BufferGeometry[] = [];
+      this.buildRoundedCellShape(temp, 0, 0, roadHalf, connections, half, ROAD_HEIGHT, 0);
+      proto = temp[0];
+      if (!proto) return;
+      this.roadCache.set(key, proto);
+    }
+    const clone = proto.clone();
+    clone.translate(cx, 0, cz);
+    geoms.push(clone);
   }
 
   buildCellOutlineGeometries(
@@ -20,9 +48,20 @@ export class CellRoadRenderer {
     connections: Direction[],
     outlineExtra: number,
   ): void {
-    const half = TILE_SIZE / 2;
-    const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
-    this.buildRoundedCellShape(geoms, cx, cz, roadHalf + outlineExtra, connections, half, ROAD_HEIGHT, -0.01);
+    const key = this.connectionKey(connections);
+    let proto = this.outlineCache.get(key);
+    if (!proto) {
+      const half = TILE_SIZE / 2;
+      const roadHalf = TILE_SIZE * ROAD_WIDTH_RATIO / 2;
+      const temp: THREE.BufferGeometry[] = [];
+      this.buildRoundedCellShape(temp, 0, 0, roadHalf + outlineExtra, connections, half, ROAD_HEIGHT, -0.01);
+      proto = temp[0];
+      if (!proto) return;
+      this.outlineCache.set(key, proto);
+    }
+    const clone = proto.clone();
+    clone.translate(cx, 0, cz);
+    geoms.push(clone);
   }
 
   private buildOutlinePoints(
