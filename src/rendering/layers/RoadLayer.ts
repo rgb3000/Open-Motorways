@@ -218,7 +218,11 @@ export class RoadLayer {
         const neighbors: Array<{ neighbor: number; dir: Direction }> = [];
         for (const dir of cell.roadConnections) {
           const off = DIRECTION_OFFSETS[dir];
-          neighbors.push({ neighbor: cellKey(gx + off.dx, gy + off.dy), dir });
+          const nx = gx + off.dx;
+          const ny = gy + off.dy;
+          const nCell = this.grid.getCell(nx, ny);
+          if (!nCell || (nCell.type !== CellType.Road && nCell.type !== CellType.Connector)) continue;
+          neighbors.push({ neighbor: cellKey(nx, ny), dir });
         }
         adjacency.set(key, neighbors);
       }
@@ -340,6 +344,30 @@ export class RoadLayer {
       if (neighbors.length !== 2) continue;
       const chain = walkChain(node, neighbors[0].neighbor);
       if (chain) chains.push(chain);
+    }
+
+    // Extend chains that end at Connectors into their House/ParkingLot
+    for (const chain of chains) {
+      for (const endIdx of [0, chain.length - 1] as const) {
+        const key = chain[endIdx];
+        const gx = key % GRID_COLS;
+        const gy = Math.floor(key / GRID_COLS);
+        const cell = this.grid.getCell(gx, gy);
+        if (cell?.type !== CellType.Connector) continue;
+
+        for (const dir of cell.roadConnections) {
+          const off = DIRECTION_OFFSETS[dir];
+          const nx = gx + off.dx;
+          const ny = gy + off.dy;
+          const nCell = this.grid.getCell(nx, ny);
+          if (nCell?.type === CellType.House || nCell?.type === CellType.ParkingLot) {
+            const nKey = cellKey(nx, ny);
+            if (endIdx === 0) chain.unshift(nKey);
+            else chain.push(nKey);
+            break;
+          }
+        }
+      }
     }
 
     // Convert chains to pixel coords and draw with bezier smoothing

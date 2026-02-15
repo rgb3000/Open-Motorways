@@ -238,10 +238,33 @@ export class CarSystem {
     car.pathIndex = 0;
     car.segmentProgress = 0;
     if (path.length >= 2) {
-      const smooth = computeSmoothLanePath(path);
-      car.smoothPath = smooth.points;
-      car.smoothCumDist = smooth.cumDist;
-      car.smoothCellDist = smooth.cellDist;
+      // Trim Business cells from both ends before smoothing
+      // Keep Road, Connector, House, and ParkingLot cells for the smooth path
+      let startTrim = 0;
+      let endTrim = path.length;
+      while (startTrim < path.length) {
+        const cell = this.grid.getCell(path[startTrim].gx, path[startTrim].gy);
+        if (cell && cell.type !== CellType.Business) break;
+        startTrim++;
+      }
+      while (endTrim > startTrim) {
+        const cell = this.grid.getCell(path[endTrim - 1].gx, path[endTrim - 1].gy);
+        if (cell && cell.type !== CellType.Business) break;
+        endTrim--;
+      }
+      const smoothPath = path.slice(startTrim, endTrim);
+      if (smoothPath.length >= 2) {
+        const smooth = computeSmoothLanePath(smoothPath);
+        car.smoothPath = smooth.points;
+        car.smoothCumDist = smooth.cumDist;
+        // Pad cellDist to maintain pathIndex mapping: trimmed start cells get distance 0
+        const padded = new Array(startTrim).fill(0);
+        car.smoothCellDist = padded.concat(smooth.cellDist);
+      } else {
+        car.smoothPath = [];
+        car.smoothCumDist = [];
+        car.smoothCellDist = [];
+      }
     } else {
       car.smoothPath = [];
       car.smoothCumDist = [];
