@@ -41,6 +41,7 @@ export class Game {
   private undoSystem: UndoSystem;
   private canvas: HTMLCanvasElement;
   private onUndoStateChange: (() => void) | null = null;
+  private musicEnabled = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -174,7 +175,7 @@ export class Game {
     if (this.state !== GameState.WaitingToStart) return;
     await this.musicSystem.init();
     await this.soundEffects.init();
-    this.musicSystem.startMusic();
+    if (this.musicEnabled) this.musicSystem.startMusic();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
@@ -188,7 +189,7 @@ export class Game {
       this.musicSystem.stopMusic();
     } else if (this.state === GameState.Paused) {
       this.state = GameState.Playing;
-      this.musicSystem.startMusic();
+      if (this.musicEnabled) this.musicSystem.startMusic();
     }
   }
 
@@ -215,7 +216,7 @@ export class Game {
     this.soundEffects = new SoundEffectSystem();
     await this.musicSystem.init();
     await this.soundEffects.init();
-    this.musicSystem.startMusic();
+    if (this.musicEnabled) this.musicSystem.startMusic();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
@@ -238,6 +239,19 @@ export class Game {
 
   setOnUndoStateChange(cb: (() => void) | null): void {
     this.onUndoStateChange = cb;
+  }
+
+  setMusicEnabled(enabled: boolean): void {
+    this.musicEnabled = enabled;
+    if (!enabled) {
+      this.musicSystem.stopMusic();
+    } else if (this.state === GameState.Playing) {
+      this.musicSystem.startMusic();
+    }
+  }
+
+  isMusicEnabled(): boolean {
+    return this.musicEnabled;
   }
 
   private update(dt: number): void {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Pause, Play, Undo2 } from 'lucide-react';
+import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X } from 'lucide-react';
 import type { Game } from '../core/Game';
 import { GameState } from '../types';
 
@@ -9,6 +9,8 @@ export function GameUI({ game }: { game: Game }) {
   const [time, setTime] = useState(0);
   const [money, setMoney] = useState(game.getMoney());
   const [canUndo, setCanUndo] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   useEffect(() => {
     game.onStateUpdate((s, sc, t, m) => {
       setState(s);
@@ -21,6 +23,12 @@ export function GameUI({ game }: { game: Game }) {
     return () => game.setOnUndoStateChange(null);
   }, [game]);
   const handleUndo = useCallback(() => game.performUndo(), [game]);
+  const handleToggleMusic = useCallback(() => {
+    const next = !game.isMusicEnabled();
+    game.setMusicEnabled(next);
+    setMusicEnabled(next);
+  }, [game]);
+  const handleToggleSettings = useCallback(() => setSettingsOpen(o => !o), []);
 
   const minutes = Math.floor(time / 60);
   const seconds = Math.floor(time % 60);
@@ -28,7 +36,10 @@ export function GameUI({ game }: { game: Game }) {
 
   return (
     <div className="absolute inset-0 pointer-events-none">
-      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} />
+      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} onToggleSettings={handleToggleSettings} />
+      {settingsOpen && (
+        <SettingsOverlay onClose={handleToggleSettings} musicEnabled={musicEnabled} onToggleMusic={handleToggleMusic} />
+      )}
       {state === GameState.WaitingToStart && (
         <StartOverlay onStart={() => game.startGame()} />
       )}
@@ -39,7 +50,7 @@ export function GameUI({ game }: { game: Game }) {
   );
 }
 
-function HUD({ score, money, time, state, onPause, canUndo, onUndo }: { score: number; money: number; time: string; state: GameState; onPause: () => void; canUndo: boolean; onUndo: () => void }) {
+function HUD({ score, money, time, state, onPause, canUndo, onUndo, onToggleSettings }: { score: number; money: number; time: string; state: GameState; onPause: () => void; canUndo: boolean; onUndo: () => void; onToggleSettings: () => void }) {
   return (
     <div className="flex justify-between items-start p-2.5">
       <div className="flex flex-col gap-0.5">
@@ -67,6 +78,36 @@ function HUD({ score, money, time, state, onPause, canUndo, onUndo }: { score: n
           className="pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center text-black"
         >
           {state === GameState.Paused ? <Play size={18} /> : <Pause size={18} />}
+        </button>
+        <button
+          onClick={onToggleSettings}
+          className="pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center text-black"
+          title="Settings"
+        >
+          <Settings size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsOverlay({ onClose, musicEnabled, onToggleMusic }: { onClose: () => void; musicEnabled: boolean; onToggleMusic: () => void }) {
+  return (
+    <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center pointer-events-auto">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-[320px]">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-black font-bold font-mono text-2xl">Settings</h2>
+          <button onClick={onClose} className="bg-transparent border-none p-0 cursor-pointer text-black">
+            <X size={20} />
+          </button>
+        </div>
+        <button
+          onClick={onToggleMusic}
+          className="flex items-center gap-3 w-full bg-transparent border-none p-2 cursor-pointer text-black font-mono text-base rounded-lg hover:bg-gray-100"
+        >
+          {musicEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+          <span>Music</span>
+          <span className="ml-auto text-sm text-gray-500">{musicEnabled ? 'On' : 'Off'}</span>
         </button>
       </div>
     </div>
