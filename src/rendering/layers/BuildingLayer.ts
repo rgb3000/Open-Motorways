@@ -31,6 +31,7 @@ export class BuildingLayer {
   private housePlateGeom: THREE.ExtrudeGeometry;
   private bizBodyGeom: THREE.ExtrudeGeometry;
   private bizTowerGeom: THREE.BoxGeometry;
+  private bizChimneyGeom: THREE.ExtrudeGeometry;
   private bizPlateGeomH: THREE.ExtrudeGeometry;
   private bizPlateGeomV: THREE.ExtrudeGeometry;
   private bizLotGeom: THREE.ExtrudeGeometry;
@@ -38,8 +39,9 @@ export class BuildingLayer {
   private bizPinGeom: THREE.SphereGeometry;
 
   // Cached shared materials
-  private plateMat = new THREE.MeshStandardMaterial({ color: '#777777' });
+  private plateMat = new THREE.MeshStandardMaterial({ color: '#AAAAAA' });
   private lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
+  private chimneyMat = new THREE.MeshStandardMaterial({ color: '#666666' });
   private slotMat = new THREE.MeshStandardMaterial({ color: '#AAAAAA' });
   private pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
 
@@ -49,7 +51,7 @@ export class BuildingLayer {
 
     // House body
     const bodyShape = roundedRectShape(size, size, 2);
-    this.houseBodyGeom = new THREE.ExtrudeGeometry(bodyShape, { depth: height, bevelEnabled: false, curveSegments: 4 });
+    this.houseBodyGeom = new THREE.ExtrudeGeometry(bodyShape, { depth: height, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
     this.houseBodyGeom.rotateX(-Math.PI / 2);
 
     // House roof
@@ -58,29 +60,35 @@ export class BuildingLayer {
     // House plate
     const plateSize = TILE_SIZE - 2;
     const plateShape = roundedRectShape(plateSize, plateSize, 3);
-    this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 0.4, bevelEnabled: false, curveSegments: 4 });
+    this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 1.5, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
     // Business body
     const buildingSize = TILE_SIZE * 0.75;
     const buildingHeight = 7;
     const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
-    this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: false, curveSegments: 4 });
+    this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
     this.bizBodyGeom.rotateX(-Math.PI / 2);
 
     // Business tower
     const towerSize = TILE_SIZE * 0.3;
     this.bizTowerGeom = new THREE.BoxGeometry(towerSize, 3, towerSize);
 
+    // Business chimney
+    const chimneyShape = new THREE.Shape();
+    chimneyShape.absarc(0, 0, 5, 0, Math.PI * 2, false);
+    this.bizChimneyGeom = new THREE.ExtrudeGeometry(chimneyShape, { depth: 4, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2, curveSegments: 8 });
+    this.bizChimneyGeom.rotateX(-Math.PI / 2);
+
     // Business plates (horizontal and vertical)
     const plateInset = 2;
     const plateLong = TILE_SIZE * 2 - plateInset;
     const plateShort = TILE_SIZE - 2;
     const plateH = roundedRectShape(plateLong, plateShort, 3);
-    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 0.4, bevelEnabled: false, curveSegments: 4 });
+    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 1.5, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
     this.bizPlateGeomH.rotateX(-Math.PI / 2);
     const plateV = roundedRectShape(plateShort, plateLong, 3);
-    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 0.4, bevelEnabled: false, curveSegments: 4 });
+    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 1.5, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
     this.bizPlateGeomV.rotateX(-Math.PI / 2);
 
     // Business lot
@@ -156,6 +164,7 @@ export class BuildingLayer {
     // Ground plate (cloned from prototype)
     const plate = new THREE.Mesh(this.housePlateGeom.clone(), this.plateMat);
     plate.position.set(0, 0.05, 0);
+    plate.castShadow = true;
     plate.receiveShadow = true;
     group.add(plate);
 
@@ -181,13 +190,21 @@ export class BuildingLayer {
     const body = new THREE.Mesh(this.bizBodyGeom.clone(), mat);
     body.position.set(buildingPx, 0, buildingPz);
     body.castShadow = true;
+    body.receiveShadow = true;
     group.add(body);
 
     // Tower (cloned from prototype)
     const tower = new THREE.Mesh(this.bizTowerGeom.clone(), mat);
     tower.position.set(buildingPx, buildingHeight + 3 / 2, buildingPz);
     tower.castShadow = true;
+    tower.receiveShadow = true;
     group.add(tower);
+
+    // Chimney
+    const chimney = new THREE.Mesh(this.bizChimneyGeom, mat);
+    chimney.position.set(buildingPx + buildingSize * 0.25, buildingHeight + 2, buildingPz - buildingSize * 0.25);
+    chimney.castShadow = true;
+    group.add(chimney);
 
     // Background plate (use pre-built horizontal or vertical variant)
     const isHoriz = biz.orientation === 'horizontal';
@@ -196,6 +213,7 @@ export class BuildingLayer {
     const lotCx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
     const lotCz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
     plate.position.set((buildingPx + lotCx) / 2, 0.05, (buildingPz + lotCz) / 2);
+    plate.castShadow = true;
     plate.receiveShadow = true;
     group.add(plate);
 
@@ -248,6 +266,8 @@ export class BuildingLayer {
     this.sharedResources.add(this.lotMat);
     this.sharedResources.add(this.slotMat);
     this.sharedResources.add(this.pinMat);
+    this.sharedResources.add(this.chimneyMat);
+    this.sharedResources.add(this.bizChimneyGeom);
     this.sharedResources.add(this.bizSlotGeom);
     this.sharedResources.add(this.bizPinGeom);
   }
@@ -284,11 +304,13 @@ export class BuildingLayer {
     this.bizPlateGeomH.dispose();
     this.bizPlateGeomV.dispose();
     this.bizLotGeom.dispose();
+    this.bizChimneyGeom.dispose();
     this.bizSlotGeom.dispose();
     this.bizPinGeom.dispose();
     this.plateMat.dispose();
     this.lotMat.dispose();
     this.slotMat.dispose();
     this.pinMat.dispose();
+    this.chimneyMat.dispose();
   }
 }

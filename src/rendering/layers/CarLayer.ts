@@ -5,6 +5,21 @@ import { COLOR_MAP, CAR_WIDTH, CAR_LENGTH, GROUND_Y_POSITION } from '../../const
 import type { GameColor } from '../../types';
 import { lerp } from '../../utils/math';
 
+function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
+  const shape = new THREE.Shape();
+  const hw = w / 2, hh = h / 2;
+  shape.moveTo(-hw + r, -hh);
+  shape.lineTo(hw - r, -hh);
+  shape.quadraticCurveTo(hw, -hh, hw, -hh + r);
+  shape.lineTo(hw, hh - r);
+  shape.quadraticCurveTo(hw, hh, hw - r, hh);
+  shape.lineTo(-hw + r, hh);
+  shape.quadraticCurveTo(-hw, hh, -hw, hh - r);
+  shape.lineTo(-hw, -hh + r);
+  shape.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
+  return shape;
+}
+
 function lerpAngle(a: number, b: number, t: number): number {
   let diff = b - a;
   while (diff > Math.PI) diff -= 2 * Math.PI;
@@ -15,14 +30,19 @@ function lerpAngle(a: number, b: number, t: number): number {
 export class CarLayer {
   private meshes = new Map<string, THREE.Group>();
   private materialCache = new Map<GameColor, THREE.MeshStandardMaterial>();
-  private carGeometry: THREE.BoxGeometry;
-  private loadGeometry: THREE.BoxGeometry;
+  private carGeometry: THREE.ExtrudeGeometry;
+  private loadGeometry: THREE.ExtrudeGeometry;
   private loadMaterial: THREE.MeshStandardMaterial;
   private activeCarIds = new Set<string>();
 
   constructor() {
-    this.carGeometry = new THREE.BoxGeometry(CAR_LENGTH, 2, CAR_WIDTH);
-    this.loadGeometry = new THREE.BoxGeometry(4, 2, 3);
+    const carShape = roundedRectShape(CAR_LENGTH, CAR_WIDTH, 1);
+    this.carGeometry = new THREE.ExtrudeGeometry(carShape, { depth: 2, bevelEnabled: true, bevelThickness: 0.4, bevelSize: 0.4, bevelSegments: 2, curveSegments: 3 });
+    this.carGeometry.rotateX(-Math.PI / 2);
+
+    const loadShape = roundedRectShape(4, 3, 0.5);
+    this.loadGeometry = new THREE.ExtrudeGeometry(loadShape, { depth: 2, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2, curveSegments: 3 });
+    this.loadGeometry.rotateX(-Math.PI / 2);
     this.loadMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
   }
 

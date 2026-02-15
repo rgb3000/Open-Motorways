@@ -59,10 +59,10 @@ export class Renderer {
     this.updateCameraPosition();
 
     // Lighting
-    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
     this.scene.add(ambient);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
     dirLight.position.set(
       CANVAS_WIDTH / 2 - 150,
       60,
@@ -70,8 +70,8 @@ export class Renderer {
     );
     dirLight.target.position.set(CANVAS_WIDTH / 2, 0, CANVAS_HEIGHT / 2);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.set(2048, 2048);
-    dirLight.shadow.radius = 3;
+    dirLight.shadow.mapSize.set(4096, 4096);
+    dirLight.shadow.radius = 1;
     dirLight.shadow.camera.left = -CANVAS_WIDTH / 2;
     dirLight.shadow.camera.right = CANVAS_WIDTH / 2;
     dirLight.shadow.camera.top = CANVAS_HEIGHT / 2;
