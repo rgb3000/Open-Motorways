@@ -6,7 +6,9 @@ import { OPPOSITE_DIR } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { GridPos } from '../types';
 import { CellType, Direction } from '../types';
-import { GRID_COLS, GRID_ROWS, ROAD_COST, ROAD_REFUND, BRIDGE_REFUND } from '../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COST, ROAD_REFUND, BRIDGE_REFUND } from '../constants';
+
+const DRAG_THRESHOLD_SQ = (TILE_SIZE * 0.5) ** 2;
 
 export interface MoneyInterface {
   canAfford(cost: number): boolean;
@@ -105,8 +107,8 @@ export class RoadDrawer {
             this.lastBuiltPos = { ...gridPos };
           }
         }
-      } else if (this.lastGridPos && (gridPos.gx !== this.lastGridPos.gx || gridPos.gy !== this.lastGridPos.gy)) {
-        if (this.mode === 'connector-drag' && this.draggingHouse) {
+      } else if (this.lastGridPos) {
+        if (this.mode === 'connector-drag' && this.draggingHouse && (gridPos.gx !== this.lastGridPos.gx || gridPos.gy !== this.lastGridPos.gy)) {
           const house = this.draggingHouse;
           const dx = gridPos.gx - house.pos.gx;
           const dy = gridPos.gy - house.pos.gy;
@@ -129,53 +131,73 @@ export class RoadDrawer {
             newDir = Direction.UpLeft;
           }
 
-          if (newDir !== house.connectorDir) {
-            this.relocateHouseConnector(house, newDir);
-          }
+          const chebyshev = Math.max(Math.abs(dx), Math.abs(dy));
 
-          // Transition to place mode starting from the connector cell
-          const connectorPos = house.connectorPos;
-          this.mode = 'place';
-          this.prevPlacedPos = { ...connectorPos };
-          this.lastBuiltPos = { ...connectorPos };
-          this.draggingHouse = null;
+          if (chebyshev <= 1) {
+            // Still in immediate neighborhood — just update connector direction, stay in connector-drag
+            if (newDir !== house.connectorDir) {
+              this.relocateHouseConnector(house, newDir);
+            }
+            this.lastGridPos = { ...gridPos };
+          } else {
+            // Beyond immediate neighborhood — transition to place mode
+            if (newDir !== house.connectorDir) {
+              this.relocateHouseConnector(house, newDir);
+            }
 
-          // If cursor is beyond the connector cell, place roads from connector to cursor
-          if (gridPos.gx !== connectorPos.gx || gridPos.gy !== connectorPos.gy) {
-            let stopped1 = false;
-            this.bresenhamLine(connectorPos.gx, connectorPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
-              if (stopped1) return;
-              // Skip the connector cell itself (already placed)
-              if (x === connectorPos.gx && y === connectorPos.gy) return;
-              const c = this.grid.getCell(x, y);
-              if (c && c.type === CellType.House) {
-                if (this.tryConnectToHouse(x, y)) { stopped1 = true; return; }
-              }
-              this.tryPlace(x, y);
-              if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
-                this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
-              }
-              this.prevPlacedPos = { gx: x, gy: y };
-            });
-            this.lastBuiltPos = { ...gridPos };
+            const connectorPos = house.connectorPos;
+            this.mode = 'place';
+            this.prevPlacedPos = { ...connectorPos };
+            this.lastBuiltPos = { ...connectorPos };
+            this.draggingHouse = null;
+
+            // If cursor is beyond the connector cell, place roads from connector to cursor
+            if (gridPos.gx !== connectorPos.gx || gridPos.gy !== connectorPos.gy) {
+              let stopped1 = false;
+              this.bresenhamLine(connectorPos.gx, connectorPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+                if (stopped1) return;
+                if (x === connectorPos.gx && y === connectorPos.gy) return;
+                const c = this.grid.getCell(x, y);
+                if (c && c.type === CellType.House) {
+                  if (this.tryConnectToHouse(x, y)) { stopped1 = true; return; }
+                }
+                this.tryPlace(x, y);
+                if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
+                  this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
+                }
+                this.prevPlacedPos = { gx: x, gy: y };
+              });
+              this.lastBuiltPos = { ...gridPos };
+            }
+            this.lastGridPos = { ...gridPos };
           }
         } else if (this.mode === 'place') {
-          let stopped2 = false;
-          this.bresenhamLine(this.lastGridPos.gx, this.lastGridPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
-            if (stopped2) return;
-            const c = this.grid.getCell(x, y);
+          // Direction-based drag with threshold to enable diagonal drawing
+          const { canvasX, canvasY } = this.input.state;
+          let nextCell = this.computeNextDragCell(this.lastGridPos, canvasX, canvasY);
+          let steps = 0;
+          while (nextCell && steps < 100) {
+            steps++;
+            if (nextCell.gx < 0 || nextCell.gx >= GRID_COLS || nextCell.gy < 0 || nextCell.gy >= GRID_ROWS) break;
+            const c = this.grid.getCell(nextCell.gx, nextCell.gy);
             if (c && c.type === CellType.House) {
-              if (this.tryConnectToHouse(x, y)) { stopped2 = true; return; }
+              this.prevPlacedPos = this.lastGridPos;
+              if (this.tryConnectToHouse(nextCell.gx, nextCell.gy)) {
+                this.lastGridPos = { ...nextCell };
+                this.lastBuiltPos = { ...nextCell };
+                break;
+              }
             }
-            this.tryPlace(x, y);
-            if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
-              this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
+            this.tryPlace(nextCell.gx, nextCell.gy);
+            if (this.prevPlacedPos && (this.prevPlacedPos.gx !== nextCell.gx || this.prevPlacedPos.gy !== nextCell.gy)) {
+              this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, nextCell.gx, nextCell.gy);
             }
-            this.prevPlacedPos = { gx: x, gy: y };
-          });
-          this.lastBuiltPos = { ...gridPos };
+            this.prevPlacedPos = { ...nextCell };
+            this.lastGridPos = { ...nextCell };
+            this.lastBuiltPos = { ...nextCell };
+            nextCell = this.computeNextDragCell(this.lastGridPos, canvasX, canvasY);
+          }
         }
-        this.lastGridPos = { ...gridPos };
       }
     }
 
@@ -287,6 +309,38 @@ export class RoadDrawer {
 
     // Mark road system dirty to trigger repath and redraw
     this.roadSystem.markDirty();
+  }
+
+  private computeNextDragCell(lastPos: GridPos, canvasX: number, canvasY: number): GridPos | null {
+    // Center of the current cell in world coordinates
+    const cx = (lastPos.gx + 0.5) * TILE_SIZE;
+    const cy = (lastPos.gy + 0.5) * TILE_SIZE;
+    const dx = canvasX - cx;
+    const dy = canvasY - cy;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq < DRAG_THRESHOLD_SQ) return null;
+
+    // Quantize direction to 8-way
+    const adx = Math.abs(dx);
+    const ady = Math.abs(dy);
+    let dir: Direction;
+    if (adx > 2 * ady) {
+      dir = dx >= 0 ? Direction.Right : Direction.Left;
+    } else if (ady > 2 * adx) {
+      dir = dy >= 0 ? Direction.Down : Direction.Up;
+    } else if (dx > 0 && dy > 0) {
+      dir = Direction.DownRight;
+    } else if (dx > 0 && dy < 0) {
+      dir = Direction.UpRight;
+    } else if (dx < 0 && dy > 0) {
+      dir = Direction.DownLeft;
+    } else {
+      dir = Direction.UpLeft;
+    }
+
+    const off = this.grid.getDirectionOffset(dir);
+    return { gx: lastPos.gx + off.gx, gy: lastPos.gy + off.gy };
   }
 
   private tryPlace(gx: number, gy: number): void {

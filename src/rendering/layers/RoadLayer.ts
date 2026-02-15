@@ -27,7 +27,9 @@ export class RoadLayer {
   private group: THREE.Group | null = null;
 
   private lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+  private connectorLineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
   private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
 
   constructor(grid: Grid, getHouses: () => House[], getBusinesses: () => Business[]) {
@@ -90,7 +92,17 @@ export class RoadLayer {
         new THREE.Vector3(hcx, LINE_Y, hcz),
       ];
       const geom = new THREE.BufferGeometry().setFromPoints(points);
-      group.add(new THREE.Line(geom, this.lineMat));
+      group.add(new THREE.Line(geom, this.connectorLineMat));
+
+      const hCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+      hCircle1.rotation.x = -Math.PI / 2;
+      hCircle1.position.set(hcx, 10, hcz);
+      group.add(hCircle1);
+
+      const hCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+      hCircle2.rotation.x = -Math.PI / 2;
+      hCircle2.position.set(ccx, LINE_Y, ccz);
+      group.add(hCircle2);
     }
 
     // Connector lines: business connector → parking lot center
@@ -104,7 +116,17 @@ export class RoadLayer {
         new THREE.Vector3(pcx, LINE_Y, pcz),
       ];
       const geom = new THREE.BufferGeometry().setFromPoints(points);
-      group.add(new THREE.Line(geom, this.lineMat));
+      group.add(new THREE.Line(geom, this.connectorLineMat));
+
+      const bCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+      bCircle1.rotation.x = -Math.PI / 2;
+      bCircle1.position.set(pcx, LINE_Y, pcz);
+      group.add(bCircle1);
+
+      const bCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+      bCircle2.rotation.x = -Math.PI / 2;
+      bCircle2.position.set(ccx, LINE_Y, ccz);
+      group.add(bCircle2);
     }
 
     this.group = group;
@@ -126,7 +148,9 @@ export class RoadLayer {
   dispose(scene: THREE.Scene): void {
     this.clearFromScene(scene);
     this.lineMat.dispose();
+    this.connectorLineMat.dispose();
     this.circleMat.dispose();
+    this.connectorCircleMat.dispose();
     this.circleGeom.dispose();
   }
 }
