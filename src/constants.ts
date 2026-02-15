@@ -42,10 +42,16 @@ export const MIN_SPAWN_INTERVAL = 6;
 export const SPAWN_INTERVAL_DECAY = 0.95;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
 export const SPAWN_AREA_INTERVALS = [
-  { threshold: 0, inset: 0.30 },   // 0 entities: 40% of grid (center)
-  { threshold: 8, inset: 0.20 },   // 8 entities: 60% of grid
-  { threshold: 16, inset: 0.10 },  // 16 entities: 80% of grid
-  { threshold: 24, inset: 0.00 },  // 24 entities: full grid
+  { threshold: 0, inset: 0.45 },   //  0 entities: 10% of grid
+  { threshold: 4, inset: 0.40 },   //  4 entities: 20% of grid
+  { threshold: 8, inset: 0.35 },   //  8 entities: 30% of grid
+  { threshold: 12, inset: 0.30 },  // 12 entities: 40% of grid
+  { threshold: 16, inset: 0.25 },  // 16 entities: 50% of grid
+  { threshold: 20, inset: 0.20 },  // 20 entities: 60% of grid
+  { threshold: 24, inset: 0.15 },  // 24 entities: 70% of grid
+  { threshold: 28, inset: 0.10 },  // 28 entities: 80% of grid
+  { threshold: 32, inset: 0.05 },  // 32 entities: 90% of grid
+  { threshold: 36, inset: 0.00 },  // 36 entities: full grid
 ];
 
 // Money
