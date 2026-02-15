@@ -30,6 +30,11 @@ export class Car {
   intersectionWaitTime = 0;
   currentLevel: TrafficLevel = TrafficLevel.Ground;
 
+  // Smooth lane path (precomputed from road geometry)
+  smoothPath: { x: number; y: number }[] = [];
+  smoothCumDist: number[] = [];
+  smoothCellDist: number[] = [];
+
   // Parking
   assignedSlotIndex: number | null = null;
   unloadTimer = 0;

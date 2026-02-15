@@ -5,6 +5,7 @@ import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE, LANE_OFFSET, ROAD_HALF_WIDTH } from '../../constants';
 import { cubicBezier, lerp } from '../../utils/math';
+import { offsetChainCenters } from '../../utils/roadGeometry';
 
 const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
   [Direction.Up]: { dx: 0, dy: -1 },
@@ -86,92 +87,6 @@ function smoothPolyline(
   }
 
   return points;
-}
-
-/**
- * Offset each cell center in a chain by `offset` perpendicular to the travel direction,
- * using miter joins at corners for clean geometry.
- */
-function offsetChainCenters(
-  pixels: { x: number; y: number }[],
-  offset: number,
-  isLoop: boolean,
-): { x: number; y: number }[] {
-  const len = pixels.length;
-  const result: { x: number; y: number }[] = [];
-
-  for (let i = 0; i < len; i++) {
-    const curr = pixels[i];
-
-    if (!isLoop && i === 0) {
-      // First endpoint: perpendicular to first segment
-      const next = pixels[1];
-      const dx = next.x - curr.x;
-      const dy = next.y - curr.y;
-      const segLen = Math.sqrt(dx * dx + dy * dy);
-      if (segLen > 0) {
-        result.push({ x: curr.x + (-dy / segLen) * offset, y: curr.y + (dx / segLen) * offset });
-      } else {
-        result.push({ x: curr.x, y: curr.y });
-      }
-      continue;
-    }
-
-    if (!isLoop && i === len - 1) {
-      // Last endpoint: perpendicular to last segment
-      const prev = pixels[i - 1];
-      const dx = curr.x - prev.x;
-      const dy = curr.y - prev.y;
-      const segLen = Math.sqrt(dx * dx + dy * dy);
-      if (segLen > 0) {
-        result.push({ x: curr.x + (-dy / segLen) * offset, y: curr.y + (dx / segLen) * offset });
-      } else {
-        result.push({ x: curr.x, y: curr.y });
-      }
-      continue;
-    }
-
-    // Interior point (or any point in a loop): miter join
-    const prev = isLoop ? pixels[(i - 1 + len) % len] : pixels[i - 1];
-    const next = isLoop ? pixels[(i + 1) % len] : pixels[i + 1];
-
-    // Incoming and outgoing segment directions (normalized)
-    const dxIn = curr.x - prev.x;
-    const dyIn = curr.y - prev.y;
-    const lenIn = Math.sqrt(dxIn * dxIn + dyIn * dyIn);
-    const dirInX = lenIn > 0 ? dxIn / lenIn : 0;
-    const dirInY = lenIn > 0 ? dyIn / lenIn : 0;
-
-    const dxOut = next.x - curr.x;
-    const dyOut = next.y - curr.y;
-    const lenOut = Math.sqrt(dxOut * dxOut + dyOut * dyOut);
-    const dirOutX = lenOut > 0 ? dxOut / lenOut : 0;
-    const dirOutY = lenOut > 0 ? dyOut / lenOut : 0;
-
-    // Left perpendiculars
-    const perpInX = -dirInY;
-    const perpInY = dirInX;
-    const perpOutX = -dirOutY;
-    const perpOutY = dirOutX;
-
-    // Miter direction (sum of perpendiculars)
-    const miterX = perpInX + perpOutX;
-    const miterY = perpInY + perpOutY;
-    const miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
-
-    if (miterLen < 1e-6) {
-      // Degenerate (180-degree turn): just use perpIn
-      result.push({ x: curr.x + perpInX * offset, y: curr.y + perpInY * offset });
-    } else {
-      const miterNX = miterX / miterLen;
-      const miterNY = miterY / miterLen;
-      const dot = miterNX * perpInX + miterNY * perpInY;
-      const scale = dot > 1e-6 ? offset / dot : offset;
-      result.push({ x: curr.x + miterNX * scale, y: curr.y + miterNY * scale });
-    }
-  }
-
-  return result;
 }
 
 export class RoadLayer {

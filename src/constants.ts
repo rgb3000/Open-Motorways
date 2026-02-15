@@ -3,7 +3,7 @@ import { GameColor } from './types';
 // Grid
 export const GRID_COLS = 70;
 export const GRID_ROWS = 40;
-export const TILE_SIZE = 30;
+export const TILE_SIZE = 60;
 export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;  // 960
 export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE; // 600
 
@@ -19,10 +19,11 @@ export const DEMAND_INTERVAL_DECAY = 0.97; // multiplier per demand tick
 
 // Cars
 export const CARS_PER_HOUSE = 2;
-export const CAR_SPEED = 2; // tiles per second
-export const LANE_OFFSET = 3.0;   // px from tile center to lane center
-export const CAR_WIDTH = 5.0;     // px (narrow dimension, perpendicular to travel)
-export const CAR_LENGTH = 8.0;    // px (long dimension, along travel direction)
+export const CAR_SPEED = 1; // tiles per second
+export const ROAD_HALF_WIDTH = TILE_SIZE * 0.30; // road is 60% of tile width
+export const LANE_OFFSET = TILE_SIZE * 0.15;    // px from tile center to lane center
+export const CAR_WIDTH = TILE_SIZE * 0.08;       // px (narrow dimension, perpendicular to travel)
+export const CAR_LENGTH = TILE_SIZE * 0.13;      // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
 export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier approximation
@@ -63,7 +64,7 @@ export const COLOR_MAP: Record<GameColor, string> = {
 
 // Rendering colors
 export const BG_COLOR = '#F5F0E8';
-export const GRID_LINE_COLOR = '#E8E3DB';
+export const GRID_LINE_COLOR = '#D5CEC3';
 export const ROAD_COLOR = '#9E9E9E';
 export const ROAD_OUTLINE_COLOR = '#757575';
 export const ROAD_LANE_DIVIDER_COLOR = '#B0B0B0';
