@@ -3,7 +3,7 @@ import type { Grid } from '../../core/Grid';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR } from '../../constants';
 import { cubicBezier, lerp } from '../../utils/math';
 
 const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
@@ -20,8 +20,159 @@ const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
 const CIRCLE_RADIUS = 3;
 const CIRCLE_SEGMENTS = 16;
 const LINE_Y = 0.5;
-const BEZIER_SAMPLES = 8;
+const BEZIER_SAMPLES = 20;
 const SMOOTH_T = 0.75;
+
+const ROAD_SURFACE_Y = 0.3;
+const ROAD_HALF_WIDTH = TILE_SIZE * 0.3;
+
+/**
+ * Smooth the center line first, then offset perpendiculars from the dense
+ * smooth curve. This keeps the road exactly centered on the green line
+ * and avoids miter bulging at corners.
+ */
+function buildRoadShapeMesh(
+  pixels: { x: number; y: number }[],
+  isLoop: boolean,
+  halfWidth: number,
+  yLevel: number,
+  material: THREE.Material,
+): THREE.Mesh | null {
+  if (pixels.length < 2) return null;
+
+  // Smooth center line first (same as the green debug line)
+  const center = smoothPolyline(pixels, isLoop, yLevel);
+  const n = center.length;
+  if (n < 2) return null;
+
+  const leftPts: { x: number; z: number }[] = [];
+  const rightPts: { x: number; z: number }[] = [];
+
+  for (let i = 0; i < n; i++) {
+    // Compute tangent via central differences
+    let tx: number, tz: number;
+    if (i === 0) {
+      tx = center[1].x - center[0].x;
+      tz = center[1].z - center[0].z;
+    } else if (i === n - 1) {
+      tx = center[n - 1].x - center[n - 2].x;
+      tz = center[n - 1].z - center[n - 2].z;
+    } else {
+      tx = center[i + 1].x - center[i - 1].x;
+      tz = center[i + 1].z - center[i - 1].z;
+    }
+    const len = Math.sqrt(tx * tx + tz * tz);
+    if (len > 0) { tx /= len; tz /= len; }
+
+    // Perpendicular in XZ plane: rotate tangent 90°
+    const px = -tz, pz = tx;
+
+    leftPts.push({ x: center[i].x + px * halfWidth, z: center[i].z + pz * halfWidth });
+    rightPts.push({ x: center[i].x - px * halfWidth, z: center[i].z - pz * halfWidth });
+  }
+
+  // Remove backtracking on inner edges of tight corners.
+  // When curvature radius < halfWidth, inner offset points reverse direction.
+  // Detect this by checking if consecutive segments go backwards (negative dot product),
+  // remove those points, then insert a rounded arc to fill the gap.
+  const cleanAndRound = (pts: { x: number; z: number }[]) => {
+    if (pts.length < 3) return pts;
+
+    // Pass 1: remove backtracking points
+    const cleaned: { x: number; z: number }[] = [pts[0], pts[1]];
+    for (let i = 2; i < pts.length; i++) {
+      const a = cleaned[cleaned.length - 2];
+      const b = cleaned[cleaned.length - 1];
+      const c = pts[i];
+      const d1x = b.x - a.x, d1z = b.z - a.z;
+      const d2x = c.x - b.x, d2z = c.z - b.z;
+      const dot = d1x * d2x + d1z * d2z;
+      if (dot < 0) {
+        // Backtracking — replace previous point with current (skip the cusp)
+        cleaned[cleaned.length - 1] = c;
+      } else {
+        cleaned.push(c);
+      }
+    }
+
+    // Pass 2: detect remaining sharp angles and insert arc points
+    const result: { x: number; z: number }[] = [cleaned[0]];
+    for (let i = 1; i < cleaned.length - 1; i++) {
+      const a = cleaned[i - 1];
+      const b = cleaned[i];
+      const c = cleaned[i + 1];
+      const d1x = b.x - a.x, d1z = b.z - a.z;
+      const d2x = c.x - b.x, d2z = c.z - b.z;
+      const len1 = Math.sqrt(d1x * d1x + d1z * d1z);
+      const len2 = Math.sqrt(d2x * d2x + d2z * d2z);
+      if (len1 < 1e-6 || len2 < 1e-6) { result.push(b); continue; }
+      const cos = (d1x * d2x + d1z * d2z) / (len1 * len2);
+
+      if (cos < 0.5) {
+        // Sharp angle (<60°) — insert circular arc points
+        const radius = Math.min(len1, len2) * 0.4;
+        // Points on incoming/outgoing edges at radius distance from corner
+        const p1x = b.x - (d1x / len1) * radius;
+        const p1z = b.z - (d1z / len1) * radius;
+        const p2x = b.x + (d2x / len2) * radius;
+        const p2z = b.z + (d2z / len2) * radius;
+        // Arc center approximation: offset from corner toward the inside
+        const mx = (p1x + p2x) / 2;
+        const mz = (p1z + p2z) / 2;
+        // Insert arc via subdivision
+        const ARC_SEGS = 6;
+        for (let s = 0; s <= ARC_SEGS; s++) {
+          const t = s / ARC_SEGS;
+          // Quadratic bezier through p1, corner offset, p2
+          const u = 1 - t;
+          const qx = u * u * p1x + 2 * u * t * mx + t * t * p2x;
+          const qz = u * u * p1z + 2 * u * t * mz + t * t * p2z;
+          result.push({ x: qx, z: qz });
+        }
+      } else {
+        result.push(b);
+      }
+    }
+    result.push(cleaned[cleaned.length - 1]);
+    return result;
+  };
+
+  // Chaikin subdivision smoothing
+  const chaikinSmooth = (pts: { x: number; z: number }[], iterations: number) => {
+    let curr = pts;
+    for (let iter = 0; iter < iterations; iter++) {
+      const next: { x: number; z: number }[] = [curr[0]];
+      for (let i = 0; i < curr.length - 1; i++) {
+        const a = curr[i], b = curr[i + 1];
+        next.push({ x: a.x * 0.75 + b.x * 0.25, z: a.z * 0.75 + b.z * 0.25 });
+        next.push({ x: a.x * 0.25 + b.x * 0.75, z: a.z * 0.25 + b.z * 0.75 });
+      }
+      next.push(curr[curr.length - 1]);
+      curr = next;
+    }
+    return curr;
+  };
+
+  const smoothLeft = chaikinSmooth(cleanAndRound(leftPts), 3);
+  const smoothRight = chaikinSmooth(cleanAndRound(rightPts), 3);
+
+  // Build Shape in (worldX, -worldZ) space
+  const shape = new THREE.Shape();
+  shape.moveTo(smoothLeft[0].x, -smoothLeft[0].z);
+  for (let i = 1; i < smoothLeft.length; i++) {
+    shape.lineTo(smoothLeft[i].x, -smoothLeft[i].z);
+  }
+  for (let i = smoothRight.length - 1; i >= 0; i--) {
+    shape.lineTo(smoothRight[i].x, -smoothRight[i].z);
+  }
+
+  const geom = new THREE.ShapeGeometry(shape);
+  const mesh = new THREE.Mesh(geom, material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = yLevel;
+
+  return mesh;
+}
 
 /**
  * Bezier-smooth a polyline of pixel coordinates.
@@ -124,6 +275,7 @@ export class RoadLayer {
   private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
+  private roadSurfaceMat = new THREE.MeshBasicMaterial({ color: ROAD_COLOR, side: THREE.DoubleSide });
 
   constructor(grid: Grid, getHouses: () => House[], getBusinesses: () => Business[]) {
     this.grid = grid;
@@ -403,6 +555,12 @@ export class RoadLayer {
         return { x: gx * TILE_SIZE + half, y: gy * TILE_SIZE + half };
       });
 
+      // Road surface shape (offset raw positions, smooth each side independently)
+      const shapeMesh = buildRoadShapeMesh(pixels, isLoop, ROAD_HALF_WIDTH, ROAD_SURFACE_Y, this.roadSurfaceMat);
+      if (shapeMesh) {
+        group.add(shapeMesh);
+      }
+
       // Green center line: smooth the cell centers directly
       const points = smoothPolyline(pixels, isLoop, GREEN_Y);
 
@@ -420,7 +578,7 @@ export class RoadLayer {
     if (this.group) {
       scene.remove(this.group);
       this.group.traverse((obj) => {
-        if (obj instanceof THREE.Line) {
+        if (obj instanceof THREE.Line || obj instanceof THREE.Mesh) {
           obj.geometry.dispose();
         }
       });
@@ -436,5 +594,6 @@ export class RoadLayer {
     this.circleMat.dispose();
     this.connectorCircleMat.dispose();
     this.circleGeom.dispose();
+    this.roadSurfaceMat.dispose();
   }
 }
