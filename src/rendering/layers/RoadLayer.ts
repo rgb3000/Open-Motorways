@@ -30,6 +30,7 @@ export class RoadLayer {
   private lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
   private connectorLineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
   private pathLineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 3 });
+  private laneLineMat = new THREE.LineBasicMaterial({ color: 0x0088ff, linewidth: 2 });
   private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
@@ -289,6 +290,40 @@ export class RoadLayer {
       if (points.length >= 2) {
         const geom = new THREE.BufferGeometry().setFromPoints(points);
         group.add(new THREE.Line(geom, this.pathLineMat));
+
+        // Compute offset lane lines
+        const LANE_OFFSET = 5;
+        const LANE_Y = GREEN_Y + 0.1;
+        const leftPoints: THREE.Vector3[] = [];
+        const rightPoints: THREE.Vector3[] = [];
+
+        for (let i = 0; i < points.length; i++) {
+          let tx: number, tz: number;
+          if (i === 0) {
+            tx = points[1].x - points[0].x;
+            tz = points[1].z - points[0].z;
+          } else if (i === points.length - 1) {
+            tx = points[i].x - points[i - 1].x;
+            tz = points[i].z - points[i - 1].z;
+          } else {
+            tx = points[i + 1].x - points[i - 1].x;
+            tz = points[i + 1].z - points[i - 1].z;
+          }
+          const len = Math.sqrt(tx * tx + tz * tz);
+          if (len > 0) { tx /= len; tz /= len; }
+          const nx = -tz;
+          const nz = tx;
+
+          leftPoints.push(new THREE.Vector3(
+            points[i].x + nx * LANE_OFFSET, LANE_Y, points[i].z + nz * LANE_OFFSET
+          ));
+          rightPoints.push(new THREE.Vector3(
+            points[i].x - nx * LANE_OFFSET, LANE_Y, points[i].z - nz * LANE_OFFSET
+          ));
+        }
+
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftPoints), this.laneLineMat));
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightPoints), this.laneLineMat));
       }
     }
 
@@ -313,6 +348,7 @@ export class RoadLayer {
     this.lineMat.dispose();
     this.connectorLineMat.dispose();
     this.pathLineMat.dispose();
+    this.laneLineMat.dispose();
     this.circleMat.dispose();
     this.connectorCircleMat.dispose();
     this.circleGeom.dispose();
