@@ -35,6 +35,25 @@ function smoothPolyline(
   const points: THREE.Vector3[] = [];
   const len = pixels.length;
 
+  // Pre-scan to identify corners
+  const isCorner: boolean[] = new Array(len);
+  for (let i = 0; i < len; i++) {
+    if (!isLoop && (i === 0 || i === len - 1)) { isCorner[i] = false; continue; }
+    const prev = isLoop ? pixels[(i - 1 + len) % len] : pixels[i - 1];
+    const curr = pixels[i];
+    const next = isLoop ? pixels[(i + 1) % len] : pixels[i + 1];
+    const dxIn = curr.x - prev.x;
+    const dyIn = curr.y - prev.y;
+    const dxOut = next.x - curr.x;
+    const dyOut = next.y - curr.y;
+    const sameDir =
+      Math.sign(dxIn) === Math.sign(dxOut) &&
+      Math.sign(dyIn) === Math.sign(dyOut) &&
+      Math.abs(dxIn) > 0 === (Math.abs(dxOut) > 0) &&
+      Math.abs(dyIn) > 0 === (Math.abs(dyOut) > 0);
+    isCorner[i] = !sameDir;
+  }
+
   for (let i = 0; i < len; i++) {
     const curr = pixels[i];
 
@@ -60,10 +79,15 @@ function smoothPolyline(
     if (sameDirection) {
       points.push(new THREE.Vector3(curr.x, yLevel, curr.y));
     } else {
-      const pInX = lerp(prev.x, curr.x, 1 - SMOOTH_T);
-      const pInY = lerp(prev.y, curr.y, 1 - SMOOTH_T);
-      const pOutX = lerp(curr.x, next.x, SMOOTH_T);
-      const pOutY = lerp(curr.y, next.y, SMOOTH_T);
+      const prevIdx = isLoop ? (i - 1 + len) % len : i - 1;
+      const nextIdx = isLoop ? (i + 1) % len : i + 1;
+      const inT = isCorner[prevIdx] ? Math.min(SMOOTH_T, 0.5) : SMOOTH_T;
+      const outT = isCorner[nextIdx] ? Math.min(SMOOTH_T, 0.5) : SMOOTH_T;
+
+      const pInX = lerp(prev.x, curr.x, 1 - inT);
+      const pInY = lerp(prev.y, curr.y, 1 - inT);
+      const pOutX = lerp(curr.x, next.x, outT);
+      const pOutY = lerp(curr.y, next.y, outT);
 
       if (points.length > 0) {
         const last = points[points.length - 1];
