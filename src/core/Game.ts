@@ -26,7 +26,7 @@ export class Game {
   private roadSystem: RoadSystem;
   private spawnSystem: SpawnSystem;
   private demandSystem: DemandSystem;
-  private demandWarnTimer = 0;
+  private demandWarnPrevSin = 0;
   private carSystem: CarSystem;
   private pathfinder: Pathfinder;
   private musicSystem: MusicSystem = new MusicSystem();
@@ -203,7 +203,7 @@ export class Game {
     this.pathfinder = new Pathfinder(this.grid);
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
-    this.demandWarnTimer = 0;
+    this.demandWarnPrevSin = 0;
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.money = STARTING_MONEY;
     this.undoSystem = new UndoSystem(this.grid);
@@ -281,15 +281,16 @@ export class Game {
     }
 
     this.demandSystem.update(dt, this.spawnSystem.getBusinesses());
+    // Chirp in sync with pulse animation (sin wave crossing from negative to positive)
     const hasWarning = this.spawnSystem.getBusinesses().some(b => b.demandPins >= MAX_DEMAND_PINS - 2);
     if (hasWarning) {
-      this.demandWarnTimer += dt;
-      if (this.demandWarnTimer >= 5) {
-        this.demandWarnTimer = 0;
+      const sinVal = Math.sin(Date.now() * 0.006);
+      if (sinVal >= 0 && this.demandWarnPrevSin < 0) {
         this.soundEffects.playDemandWarning();
       }
+      this.demandWarnPrevSin = sinVal;
     } else {
-      this.demandWarnTimer = 0;
+      this.demandWarnPrevSin = 0;
     }
     this.carSystem.update(dt, this.spawnSystem.getHouses(), this.spawnSystem.getBusinesses());
 

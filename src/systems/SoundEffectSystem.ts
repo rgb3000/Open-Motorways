@@ -8,7 +8,8 @@ export class SoundEffectSystem {
   private deleteSynth!: Tone.NoiseSynth;
   private deleteFilter!: Tone.Filter;
   private spawnSynth!: Tone.MembraneSynth;
-  private warnSynth!: Tone.PolySynth;
+  private warnSynth!: Tone.Synth;
+  private warnFilter!: Tone.Filter;
   private initialized = false;
 
   async init(): Promise<void> {
@@ -54,12 +55,13 @@ export class SoundEffectSystem {
       envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.05 },
     }).toDestination();
 
-    // Demand warning chirp — urgent short beeps
-    this.warnSynth = new Tone.PolySynth(Tone.Synth, {
-      volume: -8,
-      oscillator: { type: 'square' },
-      envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.05 },
-    }).toDestination();
+    // Demand warning chirp — soft bird-like chirp
+    this.warnFilter = new Tone.Filter(4000, 'bandpass').toDestination();
+    this.warnSynth = new Tone.Synth({
+      volume: -18,
+      oscillator: { type: 'sawtooth' },
+      envelope: { attack: 0.003, decay: 0.06, sustain: 0, release: 0.03 },
+    }).connect(this.warnFilter);
 
     this.initialized = true;
   }
@@ -111,8 +113,9 @@ export class SoundEffectSystem {
   playDemandWarning(): void {
     if (!this.initialized) return;
     const now = Tone.now();
-    this.warnSynth.triggerAttackRelease('E6', '32n', now);
-    this.warnSynth.triggerAttackRelease('E6', '32n', now + 0.12);
+    // Two quick chirps with rising pitch, like a bird
+    this.warnSynth.triggerAttackRelease('A5', 0.04, now);
+    this.warnSynth.triggerAttackRelease('D6', 0.04, now + 0.07);
   }
 
   dispose(): void {
@@ -125,6 +128,7 @@ export class SoundEffectSystem {
     this.deleteFilter.dispose();
     this.spawnSynth.dispose();
     this.warnSynth.dispose();
+    this.warnFilter.dispose();
     this.initialized = false;
   }
 }
