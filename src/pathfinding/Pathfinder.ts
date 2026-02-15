@@ -85,7 +85,10 @@ export class Pathfinder {
         if (currentCell && currentCell.type === CellType.House) {
           if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
         }
-        // Businesses can exit in any direction (no connection check)
+        // ParkingLots can only exit toward their connector
+        if (currentCell && currentCell.type === CellType.ParkingLot) {
+          if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
+        }
 
         const nx = current.gx + dx;
         const ny = current.gy + dy;

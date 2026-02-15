@@ -1,4 +1,4 @@
-import type { Grid } from '../core/Grid';
+import { OPPOSITE_DIR, type Grid } from '../core/Grid';
 import { House } from '../entities/House';
 import { Business } from '../entities/Business';
 import { CellType, Direction, type GameColor, type GridPos } from '../types';
@@ -206,16 +206,16 @@ export class SpawnSystem {
       connectorDir: null,
     });
 
-    // Parking lot cell
+    // Parking lot cell — connectorDir points toward the connector
+    const connToParkingDir = business.getConnectorToParkingDir();
     this.grid.setCell(business.parkingLotPos.gx, business.parkingLotPos.gy, {
       type: CellType.ParkingLot,
       entityId: business.id,
       color,
-      connectorDir: null,
+      connectorDir: OPPOSITE_DIR[connToParkingDir],
     });
 
     // Connector cell owned by the business
-    const connToParkingDir = business.getConnectorToParkingDir();
     this.grid.setCell(business.connectorPos.gx, business.connectorPos.gy, {
       type: CellType.Connector,
       entityId: business.id,
