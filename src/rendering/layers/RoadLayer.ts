@@ -3,7 +3,7 @@ import type { Grid } from '../../core/Grid';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR } from '../../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_HALF_WIDTH } from '../../constants';
 import { cubicBezier, lerp } from '../../utils/math';
 
 const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
@@ -24,7 +24,6 @@ const BEZIER_SAMPLES = 20;
 const SMOOTH_T = 0.75;
 
 const ROAD_SURFACE_Y = 0.3;
-const ROAD_HALF_WIDTH = TILE_SIZE * 0.3;
 
 /**
  * Smooth the center line first, then offset perpendiculars from the dense

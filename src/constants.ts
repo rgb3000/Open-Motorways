@@ -29,7 +29,7 @@ export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier
 
 // Parking
 export const PARKING_SLOTS = 4;
-export const UNLOAD_TIME = 3; // seconds
+export const UNLOAD_TIME = 2; // seconds
 export const PARKING_EXIT_DELAY = 1; // seconds between departures from same lot
 
 // Spawning
@@ -98,6 +98,8 @@ export const SPAWN_DEBUG = true;
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';
 export const GRID_LINE_COLOR = '#D4C4A0';
+// Roads
+export const ROAD_HALF_WIDTH = TILE_SIZE * 0.25;
 export const ROAD_COLOR = '#B8B8B8';
 export const ROAD_OUTLINE_COLOR = '#C0C0C0';
 export const ROAD_LANE_DIVIDER_COLOR = '#DDDDDD';
