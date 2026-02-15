@@ -83,6 +83,18 @@ function StartOverlay({ onStart }: { onStart: () => void }) {
       >
         Start Game
       </button>
+      <div className="absolute bottom-6 left-6 bg-white/10 rounded-xl p-4">
+        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center">
+          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">Space + Drag</kbd>
+          <span className="text-white/70 text-sm">Pan the map</span>
+          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">+ / −</kbd>
+          <span className="text-white/70 text-sm">Zoom in / out</span>
+          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">Click + Drag</kbd>
+          <span className="text-white/70 text-sm">Draw a road</span>
+          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">Shift + Click</kbd>
+          <span className="text-white/70 text-sm">Auto-connect two points</span>
+        </div>
+      </div>
     </div>
   );
 }
