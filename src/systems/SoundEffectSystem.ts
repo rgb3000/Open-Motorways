@@ -4,7 +4,8 @@ export class SoundEffectSystem {
   private chimeSynth!: Tone.PolySynth;
   private returnSynth!: Tone.PolySynth;
   private placeSynth!: Tone.Synth;
-  private deleteSynth!: Tone.Synth;
+  private placeFilter!: Tone.Filter;
+  private deleteSynth!: Tone.NoiseSynth;
   private deleteFilter!: Tone.Filter;
   private spawnSynth!: Tone.MembraneSynth;
   private initialized = false;
@@ -27,19 +28,20 @@ export class SoundEffectSystem {
       envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.15 },
     }).toDestination();
 
-    // Road place — short quiet tick
+    // Road place — muffled soft tap
+    this.placeFilter = new Tone.Filter(600, 'lowpass').toDestination();
     this.placeSynth = new Tone.Synth({
-      volume: -18,
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 },
-    }).toDestination();
-
-    // Road delete — soft muffled thud
-    this.deleteFilter = new Tone.Filter(800, 'lowpass').toDestination();
-    this.deleteSynth = new Tone.Synth({
-      volume: -16,
+      volume: -20,
       oscillator: { type: 'sine' },
-      envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.03 },
+      envelope: { attack: 0.002, decay: 0.08, sustain: 0, release: 0.03 },
+    }).connect(this.placeFilter);
+
+    // Road delete — noisy scrape
+    this.deleteFilter = new Tone.Filter(2500, 'lowpass').toDestination();
+    this.deleteSynth = new Tone.NoiseSynth({
+      volume: -10,
+      noise: { type: 'brown' },
+      envelope: { attack: 0.005, decay: 0.12, sustain: 0, release: 0.04 },
     }).connect(this.deleteFilter);
 
     // Building spawn — deep kick thump
@@ -74,7 +76,7 @@ export class SoundEffectSystem {
     // Ensure each trigger is strictly after the previous one (mono synth requirement)
     const t = Math.max(now, this.lastPlaceTime + 0.01);
     this.lastPlaceTime = t;
-    this.placeSynth.triggerAttackRelease('C6', 0.04, t);
+    this.placeSynth.triggerAttackRelease('C5', 0.05, t);
   }
 
   private lastDeleteTime = 0;
@@ -85,7 +87,7 @@ export class SoundEffectSystem {
     // Ensure each trigger is strictly after the previous one (mono synth requirement)
     const t = Math.max(now, this.lastDeleteTime + 0.01);
     this.lastDeleteTime = t;
-    this.deleteSynth.triggerAttackRelease('A3', 0.10, t);
+    this.deleteSynth.triggerAttackRelease(0.10, t);
   }
 
   private lastSpawnTime = 0;
@@ -103,6 +105,7 @@ export class SoundEffectSystem {
     this.chimeSynth.dispose();
     this.returnSynth.dispose();
     this.placeSynth.dispose();
+    this.placeFilter.dispose();
     this.deleteSynth.dispose();
     this.deleteFilter.dispose();
     this.spawnSynth.dispose();
