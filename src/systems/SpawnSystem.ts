@@ -10,7 +10,7 @@ import {
   HOUSE_CLUSTER_RADIUS,
   HOUSE_SPAWN_PROBABILITY,
   INITIAL_SPAWN_DELAY,
-  INNER_SPAWN_THRESHOLD,
+  SPAWN_AREA_INTERVALS,
   MIN_BUSINESS_DISTANCE,
   MIN_SPAWN_INTERVAL,
   SPAWN_INTERVAL,
@@ -225,20 +225,20 @@ export class SpawnSystem {
     });
   }
 
-  private isInnerSpawnPhase(): boolean {
-    return this.houses.length + this.businesses.length < INNER_SPAWN_THRESHOLD;
-  }
-
   private getSpawnBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
-    if (this.isInnerSpawnPhase()) {
-      return {
-        minX: Math.floor(GRID_COLS * 0.37),
-        maxX: Math.floor(GRID_COLS * 0.63) - 1,
-        minY: Math.floor(GRID_ROWS * 0.37),
-        maxY: Math.floor(GRID_ROWS * 0.63) - 1,
-      };
+    const totalEntities = this.houses.length + this.businesses.length;
+    let inset = SPAWN_AREA_INTERVALS[0].inset;
+    for (const interval of SPAWN_AREA_INTERVALS) {
+      if (totalEntities >= interval.threshold) {
+        inset = interval.inset;
+      }
     }
-    return { minX: 0, maxX: GRID_COLS - 1, minY: 0, maxY: GRID_ROWS - 1 };
+    return {
+      minX: Math.floor(GRID_COLS * inset),
+      maxX: Math.floor(GRID_COLS * (1 - inset)) - 1,
+      minY: Math.floor(GRID_ROWS * inset),
+      maxY: Math.floor(GRID_ROWS * (1 - inset)) - 1,
+    };
   }
 
   private isInBounds(gx: number, gy: number): boolean {

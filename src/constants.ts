@@ -41,7 +41,12 @@ export const SPAWN_INTERVAL = 12;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 6;
 export const SPAWN_INTERVAL_DECAY = 0.95;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
-export const INNER_SPAWN_THRESHOLD = 10;
+export const SPAWN_AREA_INTERVALS = [
+  { threshold: 0, inset: 0.30 },   // 0 entities: 40% of grid (center)
+  { threshold: 8, inset: 0.20 },   // 8 entities: 60% of grid
+  { threshold: 16, inset: 0.10 },  // 16 entities: 80% of grid
+  { threshold: 24, inset: 0.00 },  // 24 entities: full grid
+];
 
 // Money
 export const STARTING_MONEY = 400;
