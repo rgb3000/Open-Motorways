@@ -12,8 +12,8 @@ import { CarLayer } from './layers/CarLayer';
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
-const ZOOM_LERP = 0.1;
-const ZOOM_STEP = 0.02;
+const ZOOM_LERP = 0.25;
+const ZOOM_STEP = 0.05;
 const KEY_ZOOM_STEP = 0.08;
 
 export class Renderer {
