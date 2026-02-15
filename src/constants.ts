@@ -3,7 +3,7 @@ import { GameColor } from './types';
 // Grid
 export const GRID_COLS = 70;
 export const GRID_ROWS = 40;
-export const TILE_SIZE = 30;
+export const TILE_SIZE = 50;
 export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;  // 960
 export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE; // 600
 
@@ -19,10 +19,10 @@ export const DEMAND_INTERVAL_DECAY = 0.97; // multiplier per demand tick
 
 // Cars
 export const CARS_PER_HOUSE = 2;
-export const CAR_SPEED = 2; // tiles per second
-export const LANE_OFFSET = 3.0;   // px from tile center to lane center
-export const CAR_WIDTH = 5.0;     // px (narrow dimension, perpendicular to travel)
-export const CAR_LENGTH = 8.0;    // px (long dimension, along travel direction)
+export const CAR_SPEED = 1; // tiles per second
+export const LANE_OFFSET = TILE_SIZE * 0.15;    // px from tile center to lane center
+export const CAR_WIDTH = TILE_SIZE * 0.15;       // px (narrow dimension, perpendicular to travel)
+export const CAR_LENGTH = TILE_SIZE * 0.25;      // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
 export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier approximation
@@ -41,15 +41,18 @@ export const SPAWN_INTERVAL = 12;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 6;
 export const SPAWN_INTERVAL_DECAY = 0.95;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
-export const INNER_SPAWN_THRESHOLD = 10;
+export const SPAWN_AREA_INTERVALS = [
+  { threshold: 0, inset: 0.30 },   // 0 entities: 40% of grid (center)
+  { threshold: 8, inset: 0.20 },   // 8 entities: 60% of grid
+  { threshold: 16, inset: 0.10 },  // 16 entities: 80% of grid
+  { threshold: 24, inset: 0.00 },  // 24 entities: full grid
+];
 
 // Money
 export const STARTING_MONEY = 400;
 export const ROAD_COST = 10;
-export const BRIDGE_COST = 20;
 export const DELIVERY_REWARD = 50;
 export const ROAD_REFUND = 10;
-export const BRIDGE_REFUND = 20;
 
 // Colors - map GameColor enum to hex
 export const COLOR_MAP: Record<GameColor, string> = {
@@ -61,22 +64,19 @@ export const COLOR_MAP: Record<GameColor, string> = {
   [GameColor.Orange]: '#E67E22',
 };
 
+// Debug
+export const SPAWN_DEBUG = true;
+
 // Rendering colors
 export const BG_COLOR = '#F5F0E8';
-export const GRID_LINE_COLOR = '#E8E3DB';
-export const ROAD_COLOR = '#9E9E9E';
+export const GRID_LINE_COLOR = '#D5CEC3';
+export const ROAD_COLOR = '#616161';
 export const ROAD_OUTLINE_COLOR = '#757575';
 export const ROAD_LANE_DIVIDER_COLOR = '#B0B0B0';
 export const ROAD_CORNER_RADIUS = 3.0; // px
 export const UI_TEXT_COLOR = '#333333';
 export const GAME_OVER_OVERLAY = 'rgba(0, 0, 0, 0.6)';
 
-// Bridge rendering
-export const BRIDGE_COLOR = '#787878';
-export const BRIDGE_OUTLINE_COLOR = '#555555';
-export const BRIDGE_BARRIER_COLOR = '#444444';
-export const BRIDGE_SHADOW_COLOR = 'rgba(0, 0, 0, 0.15)';
-export const BRIDGE_Y_POSITION = 5;
 export const GROUND_Y_POSITION = 1;
 
 // Color unlock order

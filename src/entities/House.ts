@@ -8,6 +8,10 @@ const DIRECTION_OFFSETS: Partial<Record<Direction, GridPos>> = {
   [Direction.Down]: { gx: 0, gy: 1 },
   [Direction.Left]: { gx: -1, gy: 0 },
   [Direction.Right]: { gx: 1, gy: 0 },
+  [Direction.UpLeft]: { gx: -1, gy: -1 },
+  [Direction.UpRight]: { gx: 1, gy: -1 },
+  [Direction.DownLeft]: { gx: -1, gy: 1 },
+  [Direction.DownRight]: { gx: 1, gy: 1 },
 };
 
 const OPPOSITE_DIR: Partial<Record<Direction, Direction>> = {
@@ -15,6 +19,10 @@ const OPPOSITE_DIR: Partial<Record<Direction, Direction>> = {
   [Direction.Down]: Direction.Up,
   [Direction.Left]: Direction.Right,
   [Direction.Right]: Direction.Left,
+  [Direction.UpLeft]: Direction.DownRight,
+  [Direction.UpRight]: Direction.DownLeft,
+  [Direction.DownLeft]: Direction.UpRight,
+  [Direction.DownRight]: Direction.UpLeft,
 };
 
 export class House {

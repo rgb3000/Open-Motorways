@@ -1,8 +1,6 @@
 import type { Grid } from '../core/Grid';
 import { OPPOSITE_DIR } from '../core/Grid';
 import { CellType, Direction } from '../types';
-import { isOpposite } from '../utils/direction';
-import { isDiagonal } from '../utils/math';
 
 export class RoadSystem {
   private dirty = false;
@@ -31,9 +29,6 @@ export class RoadSystem {
     this.grid.setCell(gx, gy, {
       type: CellType.Road,
       roadConnections: [],
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
     });
 
     this.dirty = true;
@@ -42,22 +37,17 @@ export class RoadSystem {
 
   removeRoad(gx: number, gy: number): boolean {
     const cell = this.grid.getCell(gx, gy);
-    if (!cell || cell.type !== CellType.Road) return false;
+    if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
 
-    // Can't remove business-owned connector
-    if (cell.entityId !== null) return false;
-
-    // Disconnect bridge connections from neighbors
-    if (cell.hasBridge) {
-      this.disconnectBridgeFromNeighbors(gx, gy);
-    }
+    // Can't remove connectors
+    if (cell.type === CellType.Connector) return false;
 
     for (const dir of this.grid.getAllDirections()) {
       const neighbor = this.grid.getNeighbor(gx, gy, dir);
       if (neighbor) {
         const oppDir = OPPOSITE_DIR[dir];
-        // Skip disconnecting entity-owned connectors' permanent connections
-        if (neighbor.cell.type === CellType.Road && neighbor.cell.entityId !== null) {
+        // Skip disconnecting connector cells' permanent connections
+        if (neighbor.cell.type === CellType.Connector) {
           // Check if this connection points toward the parking lot or house (permanent)
           const permanentNeighbor = this.grid.getNeighbor(neighbor.gx, neighbor.gy, oppDir);
           if (permanentNeighbor && (permanentNeighbor.cell.type === CellType.ParkingLot || permanentNeighbor.cell.type === CellType.House)) continue;
@@ -71,116 +61,11 @@ export class RoadSystem {
       entityId: null,
       roadConnections: [],
       color: null,
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
 
     this.dirty = true;
     return true;
-  }
-
-  placeBridge(gx: number, gy: number): boolean {
-    const cell = this.grid.getCell(gx, gy);
-    if (!cell || cell.type !== CellType.Road) return false;
-    if (cell.hasBridge) return false;
-
-    // Must be a straight road: exactly 2 opposite connections, cardinal only
-    const conns = cell.roadConnections;
-    if (conns.length !== 2) return false;
-    if (!isOpposite(conns[0], conns[1])) return false;
-    if (conns.some(c => isDiagonal(c))) return false;
-
-    // Determine road axis and bridge axis (perpendicular)
-    const isHorizontalRoad = conns[0] === Direction.Left || conns[0] === Direction.Right;
-    const bridgeAxis: 'horizontal' | 'vertical' = isHorizontalRoad ? 'vertical' : 'horizontal';
-
-    this.grid.setCell(gx, gy, {
-      hasBridge: true,
-      bridgeAxis,
-      bridgeConnections: [],
-    });
-
-    this.updateBridgeConnections(gx, gy);
-    this.dirty = true;
-    return true;
-  }
-
-  removeBridge(gx: number, gy: number): boolean {
-    const cell = this.grid.getCell(gx, gy);
-    if (!cell || !cell.hasBridge) return false;
-
-    this.disconnectBridgeFromNeighbors(gx, gy);
-
-    this.grid.setCell(gx, gy, {
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
-    });
-
-    this.dirty = true;
-    return true;
-  }
-
-  removeBridgeOrRoad(gx: number, gy: number): 'bridge' | 'road' | false {
-    const cell = this.grid.getCell(gx, gy);
-    if (!cell) return false;
-
-    if (cell.hasBridge) {
-      return this.removeBridge(gx, gy) ? 'bridge' : false;
-    }
-    return this.removeRoad(gx, gy) ? 'road' : false;
-  }
-
-  private updateBridgeConnections(gx: number, gy: number): void {
-    const cell = this.grid.getCell(gx, gy);
-    if (!cell || !cell.hasBridge || !cell.bridgeAxis) return;
-
-    const bridgeDirs: Direction[] = cell.bridgeAxis === 'horizontal'
-      ? [Direction.Left, Direction.Right]
-      : [Direction.Up, Direction.Down];
-
-    const connections: Direction[] = [];
-
-    for (const dir of bridgeDirs) {
-      const neighbor = this.grid.getNeighbor(gx, gy, dir);
-      if (!neighbor) continue;
-
-      const nType = neighbor.cell.type;
-      if (nType === CellType.Road || nType === CellType.House || nType === CellType.Business) {
-        connections.push(dir);
-
-        // Connect neighbor's bridge back to us if it has a bridge on same axis
-        if (nType === CellType.Road && neighbor.cell.hasBridge && neighbor.cell.bridgeAxis === cell.bridgeAxis) {
-          const oppDir = OPPOSITE_DIR[dir];
-          if (!neighbor.cell.bridgeConnections.includes(oppDir)) {
-            neighbor.cell.bridgeConnections.push(oppDir);
-          }
-        }
-      }
-    }
-
-    cell.bridgeConnections = connections;
-  }
-
-  private disconnectBridgeFromNeighbors(gx: number, gy: number): void {
-    const cell = this.grid.getCell(gx, gy);
-    if (!cell || !cell.hasBridge || !cell.bridgeAxis) return;
-
-    const bridgeDirs: Direction[] = cell.bridgeAxis === 'horizontal'
-      ? [Direction.Left, Direction.Right]
-      : [Direction.Up, Direction.Down];
-
-    for (const dir of bridgeDirs) {
-      const neighbor = this.grid.getNeighbor(gx, gy, dir);
-      if (!neighbor) continue;
-
-      if (neighbor.cell.hasBridge) {
-        const oppDir = OPPOSITE_DIR[dir];
-        neighbor.cell.bridgeConnections = neighbor.cell.bridgeConnections.filter(d => d !== oppDir);
-      }
-    }
   }
 
   connectRoads(gx1: number, gy1: number, gx2: number, gy2: number): boolean {

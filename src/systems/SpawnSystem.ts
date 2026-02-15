@@ -1,4 +1,4 @@
-import type { Grid } from '../core/Grid';
+import { OPPOSITE_DIR, type Grid } from '../core/Grid';
 import { House } from '../entities/House';
 import { Business } from '../entities/Business';
 import { CellType, Direction, type GameColor, type GridPos } from '../types';
@@ -10,7 +10,7 @@ import {
   HOUSE_CLUSTER_RADIUS,
   HOUSE_SPAWN_PROBABILITY,
   INITIAL_SPAWN_DELAY,
-  INNER_SPAWN_THRESHOLD,
+  SPAWN_AREA_INTERVALS,
   MIN_BUSINESS_DISTANCE,
   MIN_SPAWN_INTERVAL,
   SPAWN_INTERVAL,
@@ -150,7 +150,10 @@ export class SpawnSystem {
     this.dirty = true;
 
     // Find an empty adjacent cell for the connector
-    const tryDirs = [Direction.Down, Direction.Right, Direction.Up, Direction.Left];
+    const tryDirs = [
+      Direction.Down, Direction.Right, Direction.Up, Direction.Left,
+      Direction.DownRight, Direction.DownLeft, Direction.UpRight, Direction.UpLeft,
+    ];
     let connDir: Direction = Direction.Down;
     for (const dir of tryDirs) {
       const off = this.grid.getDirectionOffset(dir);
@@ -171,22 +174,16 @@ export class SpawnSystem {
       type: CellType.House,
       entityId: house.id,
       color,
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: connDir,
     });
 
-    // Connector road cell owned by the house
+    // Connector cell owned by the house
     const connToHouseDir = house.getConnectorToHouseDir();
     this.grid.setCell(house.connectorPos.gx, house.connectorPos.gy, {
-      type: CellType.Road,
+      type: CellType.Connector,
       entityId: house.id,
       color: null,
       roadConnections: [connToHouseDir],
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
   }
@@ -206,52 +203,42 @@ export class SpawnSystem {
       type: CellType.Business,
       entityId: business.id,
       color,
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
 
-    // Parking lot cell
+    // Parking lot cell — connectorDir points toward the connector
+    const connToParkingDir = business.getConnectorToParkingDir();
     this.grid.setCell(business.parkingLotPos.gx, business.parkingLotPos.gy, {
       type: CellType.ParkingLot,
       entityId: business.id,
       color,
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
-      connectorDir: null,
+      connectorDir: OPPOSITE_DIR[connToParkingDir],
     });
 
-    // Connector cell: a Road cell owned by the business
-    // Pre-populate roadConnections with direction toward parking lot
-    const connToParkingDir = business.getConnectorToParkingDir();
+    // Connector cell owned by the business
     this.grid.setCell(business.connectorPos.gx, business.connectorPos.gy, {
-      type: CellType.Road,
+      type: CellType.Connector,
       entityId: business.id,
       color: null,
       roadConnections: [connToParkingDir],
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
   }
 
-  private isInnerSpawnPhase(): boolean {
-    return this.houses.length + this.businesses.length < INNER_SPAWN_THRESHOLD;
-  }
-
-  private getSpawnBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
-    if (this.isInnerSpawnPhase()) {
-      return {
-        minX: Math.floor(GRID_COLS * 0.37),
-        maxX: Math.floor(GRID_COLS * 0.63) - 1,
-        minY: Math.floor(GRID_ROWS * 0.37),
-        maxY: Math.floor(GRID_ROWS * 0.63) - 1,
-      };
+  getSpawnBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
+    const totalEntities = this.houses.length + this.businesses.length;
+    let inset = SPAWN_AREA_INTERVALS[0].inset;
+    for (const interval of SPAWN_AREA_INTERVALS) {
+      if (totalEntities >= interval.threshold) {
+        inset = interval.inset;
+      }
     }
-    return { minX: 0, maxX: GRID_COLS - 1, minY: 0, maxY: GRID_ROWS - 1 };
+    return {
+      minX: Math.floor(GRID_COLS * inset),
+      maxX: Math.floor(GRID_COLS * (1 - inset)) - 1,
+      minY: Math.floor(GRID_ROWS * inset),
+      maxY: Math.floor(GRID_ROWS * (1 - inset)) - 1,
+    };
   }
 
   private isInBounds(gx: number, gy: number): boolean {

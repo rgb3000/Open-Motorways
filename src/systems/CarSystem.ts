@@ -3,18 +3,18 @@ import type { Business } from '../entities/Business';
 import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
-import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, BEZIER_KAPPA, UNLOAD_TIME, PARKING_EXIT_DELAY } from '../constants';
-import { CellType, Direction, LaneId, TrafficLevel } from '../types';
+import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, UNLOAD_TIME, PARKING_EXIT_DELAY } from '../constants';
+import { CellType, Direction, LaneId } from '../types';
 import type { GridPos } from '../types';
-import { gridToPixelCenter, manhattanDist, pixelToGrid, cubicBezier, cubicBezierTangent, isDiagonal } from '../utils/math';
+import { gridToPixelCenter, manhattanDist, pixelToGrid, isDiagonal } from '../utils/math';
 import {
-  getDirection, directionToLane, directionAngle, unitVector,
-  isOpposite, isPerpendicularAxis, YIELD_TO_DIRECTION,
-  laneOffset, laneIntersection,
+  getDirection, directionToLane, directionAngle,
+  isPerpendicularAxis, YIELD_TO_DIRECTION,
 } from '../utils/direction';
+import { computeSmoothLanePath, sampleAtDistance } from '../utils/roadGeometry';
 
-function occupancyKey(gx: number, gy: number, lane: LaneId, level: TrafficLevel): string {
-  return `${gx},${gy},${lane},${level}`;
+function occupancyKey(gx: number, gy: number, lane: LaneId): string {
+  return `${gx},${gy},${lane}`;
 }
 
 function tileKey(gx: number, gy: number): string {
@@ -23,33 +23,9 @@ function tileKey(gx: number, gy: number): string {
 
 function isIntersection(grid: Grid, gx: number, gy: number): boolean {
   const cell = grid.getCell(gx, gy);
-  if (!cell || cell.type !== CellType.Road) return false;
-  if (cell.hasBridge) return false;
+  if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
+  if (cell.type === CellType.Connector) return false;
   return cell.roadConnections.length >= 3;
-}
-
-function getTrafficLevel(grid: Grid, path: GridPos[], pathIndex: number): TrafficLevel {
-  if (pathIndex <= 0 || pathIndex >= path.length) return TrafficLevel.Ground;
-
-  const tile = path[pathIndex];
-  const cell = grid.getCell(tile.gx, tile.gy);
-  if (!cell || !cell.hasBridge || !cell.bridgeAxis) return TrafficLevel.Ground;
-
-  // Derive level from entry direction
-  const prevTile = path[pathIndex - 1];
-  const entryDir = getDirection(prevTile, tile);
-
-  // Diagonal directions are always ground level (no diagonal bridges)
-  if (isDiagonal(entryDir)) return TrafficLevel.Ground;
-
-  const isHorizontal = entryDir === Direction.Left || entryDir === Direction.Right;
-  const isBridgeHorizontal = cell.bridgeAxis === 'horizontal';
-
-  // If entry direction aligns with bridge axis, we're on the bridge
-  if ((isHorizontal && isBridgeHorizontal) || (!isHorizontal && !isBridgeHorizontal)) {
-    return TrafficLevel.Bridge;
-  }
-  return TrafficLevel.Ground;
 }
 
 interface IntersectionEntry {
@@ -119,12 +95,15 @@ export class CarSystem {
           car.state = home && car.destination.gx === home.pos.gx && car.destination.gy === home.pos.gy
             ? CarState.GoingHome
             : CarState.GoingToBusiness;
-          car.path = path;
-          car.pathIndex = 0;
-          car.segmentProgress = 0;
-          const center = gridToPixelCenter(currentTile);
-          car.pixelPos.x = center.x;
-          car.pixelPos.y = center.y;
+          this.assignPath(car, path);
+          if (car.smoothPath.length >= 2) {
+            car.pixelPos.x = car.smoothPath[0].x;
+            car.pixelPos.y = car.smoothPath[0].y;
+          } else {
+            const center = gridToPixelCenter(currentTile);
+            car.pixelPos.x = center.x;
+            car.pixelPos.y = center.y;
+          }
           continue;
         }
       }
@@ -136,12 +115,15 @@ export class CarSystem {
           car.state = CarState.GoingHome;
           car.targetBusinessId = null;
           car.destination = home.pos;
-          car.path = homePath;
-          car.pathIndex = 0;
-          car.segmentProgress = 0;
-          const center = gridToPixelCenter(currentTile);
-          car.pixelPos.x = center.x;
-          car.pixelPos.y = center.y;
+          this.assignPath(car, homePath);
+          if (car.smoothPath.length >= 2) {
+            car.pixelPos.x = car.smoothPath[0].x;
+            car.pixelPos.y = car.smoothPath[0].y;
+          } else {
+            const center = gridToPixelCenter(currentTile);
+            car.pixelPos.x = center.x;
+            car.pixelPos.y = center.y;
+          }
           continue;
         }
       }
@@ -169,18 +151,19 @@ export class CarSystem {
     const currentTile = this.getCarCurrentTile(car);
     const home = houses.find(h => h.id === car.homeHouseId);
 
-    // Snap to current tile center
-    const center = gridToPixelCenter(currentTile);
-    car.pixelPos.x = center.x;
-    car.pixelPos.y = center.y;
-
     // 1. Try to repath to original destination
     if (car.destination) {
       const path = this.pathfinder.findPath(currentTile, car.destination);
       if (path) {
-        car.path = path;
-        car.pathIndex = 0;
-        car.segmentProgress = 0;
+        this.assignPath(car, path);
+        if (car.smoothPath.length >= 2) {
+          car.pixelPos.x = car.smoothPath[0].x;
+          car.pixelPos.y = car.smoothPath[0].y;
+        } else {
+          const center = gridToPixelCenter(currentTile);
+          car.pixelPos.x = center.x;
+          car.pixelPos.y = center.y;
+        }
         return;
       }
     }
@@ -196,9 +179,15 @@ export class CarSystem {
       if (homePath) {
         car.state = CarState.GoingHome;
         car.destination = home.pos;
-        car.path = homePath;
-        car.pathIndex = 0;
-        car.segmentProgress = 0;
+        this.assignPath(car, homePath);
+        if (car.smoothPath.length >= 2) {
+          car.pixelPos.x = car.smoothPath[0].x;
+          car.pixelPos.y = car.smoothPath[0].y;
+        } else {
+          const center = gridToPixelCenter(currentTile);
+          car.pixelPos.x = center.x;
+          car.pixelPos.y = center.y;
+        }
         return;
       }
     }
@@ -208,8 +197,53 @@ export class CarSystem {
     car.path = [];
     car.pathIndex = 0;
     car.segmentProgress = 0;
+    car.smoothPath = [];
+    car.smoothCumDist = [];
+    car.smoothCellDist = [];
+    const center = gridToPixelCenter(currentTile);
+    car.pixelPos.x = center.x;
+    car.pixelPos.y = center.y;
     if (home) {
       car.destination = home.pos;
+    }
+  }
+
+  private assignPath(car: Car, path: GridPos[]): void {
+    car.path = path;
+    car.pathIndex = 0;
+    car.segmentProgress = 0;
+    if (path.length >= 2) {
+      // Trim Business cells from both ends before smoothing
+      // Keep Road, Connector, House, and ParkingLot cells for the smooth path
+      let startTrim = 0;
+      let endTrim = path.length;
+      while (startTrim < path.length) {
+        const cell = this.grid.getCell(path[startTrim].gx, path[startTrim].gy);
+        if (cell && cell.type !== CellType.Business) break;
+        startTrim++;
+      }
+      while (endTrim > startTrim) {
+        const cell = this.grid.getCell(path[endTrim - 1].gx, path[endTrim - 1].gy);
+        if (cell && cell.type !== CellType.Business) break;
+        endTrim--;
+      }
+      const smoothPath = path.slice(startTrim, endTrim);
+      if (smoothPath.length >= 2) {
+        const smooth = computeSmoothLanePath(smoothPath);
+        car.smoothPath = smooth.points;
+        car.smoothCumDist = smooth.cumDist;
+        // Pad cellDist to maintain pathIndex mapping: trimmed start cells get distance 0
+        const padded = new Array(startTrim).fill(0);
+        car.smoothCellDist = padded.concat(smooth.cellDist);
+      } else {
+        car.smoothPath = [];
+        car.smoothCumDist = [];
+        car.smoothCellDist = [];
+      }
+    } else {
+      car.smoothPath = [];
+      car.smoothCumDist = [];
+      car.smoothCellDist = [];
     }
   }
 
@@ -238,18 +272,20 @@ export class CarSystem {
       for (const house of availableHouses) {
         if (dispatched >= neededCars) break;
 
-        const path = this.pathfinder.findPath(house.connectorPos, biz.parkingLotPos);
+        const path = this.pathfinder.findPath(house.pos, biz.parkingLotPos);
         if (!path) continue;
 
-        const car = new Car(house.id, house.color, house.connectorPos);
+        const car = new Car(house.id, house.color, house.pos);
         car.state = CarState.GoingToBusiness;
         car.targetBusinessId = biz.id;
         car.destination = biz.parkingLotPos;
-        car.path = path;
-        car.pathIndex = 0;
-        car.segmentProgress = 0;
+        this.assignPath(car, path);
 
-        if (path.length >= 2) {
+        if (car.smoothPath.length >= 2) {
+          car.pixelPos.x = car.smoothPath[0].x;
+          car.pixelPos.y = car.smoothPath[0].y;
+          car.prevPixelPos.x = car.pixelPos.x;
+          car.prevPixelPos.y = car.pixelPos.y;
           const initDir = getDirection(path[0], path[1]);
           car.renderAngle = directionAngle(initDir);
           car.prevRenderAngle = car.renderAngle;
@@ -276,8 +312,7 @@ export class CarSystem {
       const lane = directionToLane(dir);
 
       const occupiedTile = car.segmentProgress < 0.5 ? currentTile : nextTile;
-      const level = getTrafficLevel(this.grid, car.path, car.segmentProgress < 0.5 ? car.pathIndex : car.pathIndex + 1);
-      occupied.set(occupancyKey(occupiedTile.gx, occupiedTile.gy, lane, level), car.id);
+      occupied.set(occupancyKey(occupiedTile.gx, occupiedTile.gy, lane), car.id);
     }
     return occupied;
   }
@@ -343,8 +378,7 @@ export class CarSystem {
       const afterNextTile = car.path[car.pathIndex + 2];
       const nextDir = getDirection(nextTile, afterNextTile);
       const nextLane = directionToLane(nextDir);
-      const nextLevel = getTrafficLevel(this.grid, car.path, car.pathIndex + 1);
-      const nextKey = occupancyKey(nextTile.gx, nextTile.gy, nextLane, nextLevel);
+      const nextKey = occupancyKey(nextTile.gx, nextTile.gy, nextLane);
       const blocker = occupied.get(nextKey);
 
       if (blocker && blocker !== car.id) {
@@ -354,8 +388,7 @@ export class CarSystem {
 
     // Also check collision on the current segment's next tile (same lane)
     if (car.segmentProgress < 0.5 && newProgress >= 0.5) {
-      const nextLevel = getTrafficLevel(this.grid, car.path, car.pathIndex + 1);
-      const key = occupancyKey(nextTile.gx, nextTile.gy, lane, nextLevel);
+      const key = occupancyKey(nextTile.gx, nextTile.gy, lane);
       const blocker = occupied.get(key);
       if (blocker && blocker !== car.id) {
         newProgress = Math.min(newProgress, 0.45);
@@ -409,92 +442,17 @@ export class CarSystem {
     const curDir = getDirection(curTile, nxtTile);
     car.direction = curDir;
 
-    // Update traffic level
-    car.currentLevel = getTrafficLevel(this.grid, car.path, car.pathIndex);
+    if (car.smoothPath.length < 2) return;
 
-    const pathIndex = car.pathIndex;
-    const t = car.segmentProgress;
-    const half = TILE_SIZE / 2;
-    const currentCenter = gridToPixelCenter(curTile);
-    const nextCenter = gridToPixelCenter(nxtTile);
+    // Map pathIndex + segmentProgress to arc-length distance on the smooth polyline
+    const segStart = car.smoothCellDist[car.pathIndex];
+    const segEnd = car.smoothCellDist[Math.min(car.pathIndex + 1, car.smoothCellDist.length - 1)];
+    const dist = segStart + car.segmentProgress * (segEnd - segStart);
 
-    // Determine entry and exit directions for turn detection
-    const entryDir = pathIndex > 0 ? getDirection(car.path[pathIndex - 1], curTile) : curDir;
-    const exitDir = pathIndex + 2 < car.path.length ? getDirection(nxtTile, car.path[pathIndex + 2]) : curDir;
-    const turningAtStart = entryDir !== curDir && !isOpposite(entryDir, curDir);
-    const turningAtEnd = exitDir !== curDir && !isOpposite(exitDir, curDir);
-
-    const isFirstSegment = pathIndex === 0;
-    const isLastSegment = pathIndex === car.path.length - 2;
-
-    if (turningAtStart || turningAtEnd) {
-      // Bezier curve for turns
-      let p0x: number, p0y: number, tangentDir0: Direction;
-      let p3x: number, p3y: number, tangentDir3: Direction;
-
-      if (isFirstSegment) {
-        p0x = currentCenter.x;
-        p0y = currentCenter.y;
-        tangentDir0 = curDir;
-      } else if (turningAtStart) {
-        const li = laneIntersection(currentCenter.x, currentCenter.y, entryDir, curDir);
-        p0x = li.x;
-        p0y = li.y;
-        tangentDir0 = entryDir;
-      } else {
-        const off = laneOffset(curDir);
-        p0x = currentCenter.x + off.x;
-        p0y = currentCenter.y + off.y;
-        tangentDir0 = curDir;
-      }
-
-      if (isLastSegment) {
-        p3x = nextCenter.x;
-        p3y = nextCenter.y;
-        tangentDir3 = curDir;
-      } else if (turningAtEnd) {
-        const li = laneIntersection(nextCenter.x, nextCenter.y, curDir, exitDir);
-        p3x = li.x;
-        p3y = li.y;
-        tangentDir3 = turningAtStart ? exitDir : curDir;
-      } else {
-        const off = laneOffset(curDir);
-        p3x = nextCenter.x + off.x;
-        p3y = nextCenter.y + off.y;
-        tangentDir3 = curDir;
-      }
-
-      const u0 = unitVector(tangentDir0);
-      const u3 = unitVector(tangentDir3);
-      const arm = half * BEZIER_KAPPA;
-      const p1x = p0x + u0.x * arm;
-      const p1y = p0y + u0.y * arm;
-      const p2x = p3x - u3.x * arm;
-      const p2y = p3y - u3.y * arm;
-
-      const pos = cubicBezier(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
-      const tang = cubicBezierTangent(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, t);
-
-      car.pixelPos.x = pos.x;
-      car.pixelPos.y = pos.y;
-      car.renderAngle = Math.atan2(tang.y, tang.x);
-    } else {
-      // Straight segment — linear interpolation with lane offset
-      const baseX = currentCenter.x + (nextCenter.x - currentCenter.x) * t;
-      const baseY = currentCenter.y + (nextCenter.y - currentCenter.y) * t;
-
-      const offset = laneOffset(curDir);
-      let offsetScale = 1.0;
-      if (isFirstSegment) {
-        offsetScale = t;
-      } else if (isLastSegment) {
-        offsetScale = 1.0 - t;
-      }
-
-      car.pixelPos.x = baseX + offset.x * offsetScale;
-      car.pixelPos.y = baseY + offset.y * offsetScale;
-      car.renderAngle = directionAngle(curDir);
-    }
+    const result = sampleAtDistance(car.smoothPath, car.smoothCumDist, dist);
+    car.pixelPos.x = result.x;
+    car.pixelPos.y = result.y;
+    car.renderAngle = result.angle;
   }
 
   private updateSingleCar(
@@ -520,11 +478,10 @@ export class CarSystem {
     const dir = getDirection(currentTile, nextTile);
     car.direction = dir;
     const lane = directionToLane(dir);
-    const level = getTrafficLevel(this.grid, car.path, car.segmentProgress < 0.5 ? car.pathIndex : car.pathIndex + 1);
 
     // Remove car from old occupancy position
     const oldOccupiedTile = car.segmentProgress < 0.5 ? currentTile : nextTile;
-    const oldKey = occupancyKey(oldOccupiedTile.gx, oldOccupiedTile.gy, lane, level);
+    const oldKey = occupancyKey(oldOccupiedTile.gx, oldOccupiedTile.gy, lane);
     if (occupied.get(oldKey) === car.id) {
       occupied.delete(oldKey);
     }
@@ -566,6 +523,7 @@ export class CarSystem {
       const isFinalTile = car.pathIndex + 1 === car.path.length - 1;
       const isTraversable = cell && (
         cell.type === CellType.Road ||
+        cell.type === CellType.Connector ||
         (isFinalTile && (cell.type === CellType.House || cell.type === CellType.ParkingLot))
       );
 
@@ -578,11 +536,11 @@ export class CarSystem {
     if (car.pathIndex >= car.path.length - 1) {
       // Arrived at destination
       car.segmentProgress = 0;
-      const dest = car.path[car.path.length - 1];
-      const center = gridToPixelCenter(dest);
-      car.pixelPos.x = center.x;
-      car.pixelPos.y = center.y;
-      car.currentLevel = TrafficLevel.Ground;
+      if (car.smoothPath.length > 0) {
+        const lastPt = car.smoothPath[car.smoothPath.length - 1];
+        car.pixelPos.x = lastPt.x;
+        car.pixelPos.y = lastPt.y;
+      }
       this.handleArrival(car, houses, bizMap, toRemove);
       if (car.path.length === 0) return;
     } else {
@@ -596,8 +554,7 @@ export class CarSystem {
     const newDir = car.pathIndex < car.path.length - 1 ? getDirection(newCurrentTile, newNextTile) : dir;
     const newLane = directionToLane(newDir);
     const newOccupiedTile = car.segmentProgress < 0.5 ? newCurrentTile : newNextTile;
-    const newLevel = getTrafficLevel(this.grid, car.path, car.segmentProgress < 0.5 ? car.pathIndex : car.pathIndex + 1);
-    const newKey = occupancyKey(newOccupiedTile.gx, newOccupiedTile.gy, newLane, newLevel);
+    const newKey = occupancyKey(newOccupiedTile.gx, newOccupiedTile.gy, newLane);
     occupied.set(newKey, car.id);
   }
 
@@ -655,24 +612,47 @@ export class CarSystem {
     // Path home from connector
     const home = houses.find(h => h.id === car.homeHouseId);
     if (home) {
-      const homePath = this.pathfinder.findPath(biz.connectorPos, home.pos);
+      const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
       if (homePath) {
         car.state = CarState.GoingHome;
         car.targetBusinessId = null;
         car.assignedSlotIndex = null;
         car.destination = home.pos;
-        car.path = homePath;
-        car.pathIndex = 0;
-        car.segmentProgress = 0;
-        const center = gridToPixelCenter(biz.connectorPos);
-        car.pixelPos.x = center.x;
-        car.pixelPos.y = center.y;
-        car.prevPixelPos.x = center.x;
-        car.prevPixelPos.y = center.y;
-        if (homePath.length >= 2) {
+        this.assignPath(car, homePath);
+        if (car.smoothPath.length >= 2) {
+          // Prepend current parking slot position to smooth path
+          // so the car visually drives out of its slot
+          const slotPos = { x: car.pixelPos.x, y: car.pixelPos.y };
+          const firstPathPt = car.smoothPath[0];
+          const dxSlot = firstPathPt.x - slotPos.x;
+          const dySlot = firstPathPt.y - slotPos.y;
+          const slotDist = Math.sqrt(dxSlot * dxSlot + dySlot * dySlot);
+
+          // Prepend slot position to smooth path
+          car.smoothPath.unshift(slotPos);
+          // Shift all cumulative distances by slotDist
+          for (let i = 0; i < car.smoothCumDist.length; i++) {
+            car.smoothCumDist[i] += slotDist;
+          }
+          car.smoothCumDist.unshift(0);
+          // Shift smoothCellDist so interpolateCarPosition maps pathIndex
+          // to the correct distance on the now-extended smooth path
+          for (let i = 0; i < car.smoothCellDist.length; i++) {
+            car.smoothCellDist[i] += slotDist;
+          }
+
+          // Keep pixelPos at current parking slot position (no jump)
+          car.prevPixelPos.x = car.pixelPos.x;
+          car.prevPixelPos.y = car.pixelPos.y;
           const initDir = getDirection(homePath[0], homePath[1]);
           car.renderAngle = directionAngle(initDir);
           car.prevRenderAngle = car.renderAngle;
+        } else {
+          const center = gridToPixelCenter(biz.parkingLotPos);
+          car.pixelPos.x = center.x;
+          car.pixelPos.y = center.y;
+          car.prevPixelPos.x = center.x;
+          car.prevPixelPos.y = center.y;
         }
       } else {
         car.state = CarState.Stranded;
@@ -682,7 +662,10 @@ export class CarSystem {
         car.path = [];
         car.pathIndex = 0;
         car.segmentProgress = 0;
-        const center = gridToPixelCenter(biz.connectorPos);
+        car.smoothPath = [];
+        car.smoothCumDist = [];
+        car.smoothCellDist = [];
+        const center = gridToPixelCenter(biz.parkingLotPos);
         car.pixelPos.x = center.x;
         car.pixelPos.y = center.y;
         car.prevPixelPos.x = center.x;
@@ -764,21 +747,22 @@ export class CarSystem {
           // Just path home immediately
           const home = houses.find(h => h.id === car.homeHouseId);
           if (home) {
-            const homePath = this.pathfinder.findPath(biz.connectorPos, home.pos);
+            const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
             if (homePath) {
               car.state = CarState.GoingHome;
               car.targetBusinessId = null;
               car.destination = home.pos;
-              car.path = homePath;
-              car.pathIndex = 0;
-              car.segmentProgress = 0;
-              const center = gridToPixelCenter(biz.connectorPos);
-              car.pixelPos.x = center.x;
-              car.pixelPos.y = center.y;
-              if (homePath.length >= 2) {
+              this.assignPath(car, homePath);
+              if (car.smoothPath.length >= 2) {
+                car.pixelPos.x = car.smoothPath[0].x;
+                car.pixelPos.y = car.smoothPath[0].y;
                 const initDir = getDirection(homePath[0], homePath[1]);
                 car.renderAngle = directionAngle(initDir);
                 car.prevRenderAngle = car.renderAngle;
+              } else {
+                const center = gridToPixelCenter(biz.parkingLotPos);
+                car.pixelPos.x = center.x;
+                car.pixelPos.y = center.y;
               }
             } else {
               car.state = CarState.Stranded;
@@ -787,6 +771,9 @@ export class CarSystem {
               car.path = [];
               car.pathIndex = 0;
               car.segmentProgress = 0;
+              car.smoothPath = [];
+              car.smoothCumDist = [];
+              car.smoothCellDist = [];
             }
           } else {
             toRemove.push(car.id);

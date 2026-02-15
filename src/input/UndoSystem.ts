@@ -28,9 +28,6 @@ function deepCopyCell(cell: Cell): Cell {
     entityId: cell.entityId,
     roadConnections: [...cell.roadConnections],
     color: cell.color,
-    hasBridge: cell.hasBridge,
-    bridgeAxis: cell.bridgeAxis,
-    bridgeConnections: [...cell.bridgeConnections],
     connectorDir: cell.connectorDir,
   };
 }

@@ -14,7 +14,7 @@ import { CarSystem } from '../systems/CarSystem';
 import { MusicSystem } from '../systems/MusicSystem';
 import { SoundEffectSystem } from '../systems/SoundEffectSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
-import { STARTING_MONEY, DELIVERY_REWARD } from '../constants';
+import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG } from '../constants';
 
 export class Game {
   private webglRenderer: THREE.WebGLRenderer;
@@ -41,6 +41,7 @@ export class Game {
   private undoSystem: UndoSystem;
   private canvas: HTMLCanvasElement;
   private onUndoStateChange: (() => void) | null = null;
+  private musicEnabled = true;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -57,7 +58,7 @@ export class Game {
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
-    this.renderer = new Renderer(this.webglRenderer, this.grid);
+    this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.resize(window.innerWidth, window.innerHeight);
 
     this.input = new InputHandler(
@@ -174,7 +175,7 @@ export class Game {
     if (this.state !== GameState.WaitingToStart) return;
     await this.musicSystem.init();
     await this.soundEffects.init();
-    this.musicSystem.startMusic();
+    if (this.musicEnabled) this.musicSystem.startMusic();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
@@ -188,7 +189,7 @@ export class Game {
       this.musicSystem.stopMusic();
     } else if (this.state === GameState.Paused) {
       this.state = GameState.Playing;
-      this.musicSystem.startMusic();
+      if (this.musicEnabled) this.musicSystem.startMusic();
     }
   }
 
@@ -215,7 +216,7 @@ export class Game {
     this.soundEffects = new SoundEffectSystem();
     await this.musicSystem.init();
     await this.soundEffects.init();
-    this.musicSystem.startMusic();
+    if (this.musicEnabled) this.musicSystem.startMusic();
     this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
@@ -238,6 +239,19 @@ export class Game {
 
   setOnUndoStateChange(cb: (() => void) | null): void {
     this.onUndoStateChange = cb;
+  }
+
+  setMusicEnabled(enabled: boolean): void {
+    this.musicEnabled = enabled;
+    if (!enabled) {
+      this.musicSystem.stopMusic();
+    } else if (this.state === GameState.Playing) {
+      this.musicSystem.startMusic();
+    }
+  }
+
+  isMusicEnabled(): boolean {
+    return this.musicEnabled;
   }
 
   private update(dt: number): void {
@@ -279,6 +293,7 @@ export class Game {
       this.spawnSystem.getHouses(),
       this.spawnSystem.getBusinesses(),
       this.carSystem.getCars(),
+      SPAWN_DEBUG ? this.spawnSystem.getSpawnBounds() : null,
     );
     this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money);
   }

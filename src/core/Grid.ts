@@ -31,7 +31,7 @@ export class Grid {
   constructor() {
     this.cells = new Array(this.cols * this.rows);
     for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, hasBridge: false, bridgeAxis: null, bridgeConnections: [], connectorDir: null };
+      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, connectorDir: null };
     }
   }
 
@@ -78,7 +78,7 @@ export class Grid {
     for (const dir of this.getAllDirections()) {
       const n = this.getNeighbor(gx, gy, dir);
       if (!n) continue;
-      if (n.cell.type === CellType.Road || n.cell.type === CellType.House || n.cell.type === CellType.ParkingLot) {
+      if (n.cell.type === CellType.Road || n.cell.type === CellType.Connector || n.cell.type === CellType.House || n.cell.type === CellType.ParkingLot) {
         results.push({ dir, gx: n.gx, gy: n.gy });
       }
     }
