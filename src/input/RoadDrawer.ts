@@ -33,6 +33,8 @@ export class RoadDrawer {
   private prevPlacedPos: GridPos | null = null;
   private lastBuiltPos: GridPos | null = null;
   private draggingHouse: House | null = null;
+  private prevCanvasX: number | null = null;
+  private prevCanvasY: number | null = null;
 
   onRoadPlace: (() => void) | null = null;
   onRoadDelete: (() => void) | null = null;
@@ -59,6 +61,9 @@ export class RoadDrawer {
         // Starting a new left-click — determine mode
         this.undoSystem.beginGroup();
         this.lastGridPos = { ...gridPos };
+        const { canvasX: startCX, canvasY: startCY } = this.input.state;
+        this.prevCanvasX = startCX;
+        this.prevCanvasY = startCY;
 
         // Check if clicking on a house cell → connector drag mode
         const cell = this.grid.getCell(gridPos.gx, gridPos.gy);
@@ -172,13 +177,25 @@ export class RoadDrawer {
             this.lastGridPos = { ...gridPos };
           }
         } else if (this.mode === 'place') {
-          // Direction-based drag with threshold to enable diagonal drawing
+          // Interpolate between previous and current mouse positions to follow curves
           const { canvasX, canvasY } = this.input.state;
-          let nextCell = this.computeNextDragCell(this.lastGridPos, canvasX, canvasY);
-          let steps = 0;
-          while (nextCell && steps < 100) {
-            steps++;
-            if (nextCell.gx < 0 || nextCell.gx >= GRID_COLS || nextCell.gy < 0 || nextCell.gy >= GRID_ROWS) break;
+          const prevCX = this.prevCanvasX ?? canvasX;
+          const prevCY = this.prevCanvasY ?? canvasY;
+
+          // Sample the mouse path between frames in steps of ~0.4 tiles
+          const mouseDist = Math.sqrt((canvasX - prevCX) ** 2 + (canvasY - prevCY) ** 2);
+          const stepSize = TILE_SIZE * 0.4;
+          const sampleCount = Math.max(1, Math.ceil(mouseDist / stepSize));
+
+          for (let s = 1; s <= sampleCount; s++) {
+            const t = s / sampleCount;
+            const sx = prevCX + (canvasX - prevCX) * t;
+            const sy = prevCY + (canvasY - prevCY) * t;
+
+            const nextCell = this.computeNextDragCell(this.lastGridPos, sx, sy);
+            if (!nextCell) continue;
+            if (nextCell.gx < 0 || nextCell.gx >= GRID_COLS || nextCell.gy < 0 || nextCell.gy >= GRID_ROWS) continue;
+
             const c = this.grid.getCell(nextCell.gx, nextCell.gy);
             if (c && c.type === CellType.House) {
               this.prevPlacedPos = this.lastGridPos;
@@ -195,8 +212,10 @@ export class RoadDrawer {
             this.prevPlacedPos = { ...nextCell };
             this.lastGridPos = { ...nextCell };
             this.lastBuiltPos = { ...nextCell };
-            nextCell = this.computeNextDragCell(this.lastGridPos, canvasX, canvasY);
           }
+
+          this.prevCanvasX = canvasX;
+          this.prevCanvasY = canvasY;
         }
       }
     }
@@ -226,6 +245,8 @@ export class RoadDrawer {
       this.mode = 'none';
       this.prevPlacedPos = null;
       this.draggingHouse = null;
+      this.prevCanvasX = null;
+      this.prevCanvasY = null;
     }
 
     this.wasLeftDown = leftDown;
