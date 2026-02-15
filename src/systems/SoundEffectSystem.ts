@@ -5,6 +5,7 @@ export class SoundEffectSystem {
   private returnSynth!: Tone.PolySynth;
   private placeSynth!: Tone.Synth;
   private deleteSynth!: Tone.Synth;
+  private deleteFilter!: Tone.Filter;
   private spawnSynth!: Tone.MembraneSynth;
   private initialized = false;
 
@@ -33,12 +34,13 @@ export class SoundEffectSystem {
       envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 },
     }).toDestination();
 
-    // Road delete — slightly lower descending blip
+    // Road delete — soft muffled thud
+    this.deleteFilter = new Tone.Filter(800, 'lowpass').toDestination();
     this.deleteSynth = new Tone.Synth({
       volume: -16,
-      oscillator: { type: 'square' },
-      envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.03 },
-    }).toDestination();
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.03 },
+    }).connect(this.deleteFilter);
 
     // Building spawn — deep kick thump
     this.spawnSynth = new Tone.MembraneSynth({
@@ -83,7 +85,7 @@ export class SoundEffectSystem {
     // Ensure each trigger is strictly after the previous one (mono synth requirement)
     const t = Math.max(now, this.lastDeleteTime + 0.01);
     this.lastDeleteTime = t;
-    this.deleteSynth.triggerAttackRelease('A4', 0.05, t);
+    this.deleteSynth.triggerAttackRelease('A3', 0.10, t);
   }
 
   private lastSpawnTime = 0;
@@ -102,6 +104,7 @@ export class SoundEffectSystem {
     this.returnSynth.dispose();
     this.placeSynth.dispose();
     this.deleteSynth.dispose();
+    this.deleteFilter.dispose();
     this.spawnSynth.dispose();
     this.initialized = false;
   }
