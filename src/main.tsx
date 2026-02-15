@@ -1,6 +1,7 @@
 import { Game } from './core/Game';
 import { createRoot } from 'react-dom/client';
 import { GameUI } from './ui/GameUI';
+import './index.css';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 if (!canvas) throw new Error('Canvas element not found');

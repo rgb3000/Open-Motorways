@@ -27,7 +27,7 @@ export function GameUI({ game }: { game: Game }) {
   const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+    <div className="absolute inset-0 pointer-events-none">
       <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} />
       {state === GameState.WaitingToStart && (
         <StartOverlay onStart={() => game.startGame()} />
@@ -41,55 +41,30 @@ export function GameUI({ game }: { game: Game }) {
 
 function HUD({ score, money, time, state, onPause, canUndo, onUndo }: { score: number; money: number; time: string; state: GameState; onPause: () => void; canUndo: boolean; onUndo: () => void }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        padding: 10,
-      }}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span style={{ color: '#000', font: 'bold 18px monospace' }}>
+    <div className="flex justify-between items-start p-2.5">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-black font-bold font-mono text-lg">
           Score: {score}
         </span>
-        <span style={{ color: '#2a7d2a', font: 'bold 18px monospace' }}>
+        <span className="text-[#2a7d2a] font-bold font-mono text-lg">
           ${money}
         </span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ color: '#000', font: 'bold 18px monospace' }}>
+      <div className="flex items-center gap-2.5">
+        <span className="text-black font-bold font-mono text-lg">
           {time}
         </span>
         <button
           onClick={onUndo}
           disabled={!canUndo}
           title="Undo (Ctrl+Z)"
-          style={{
-            pointerEvents: 'auto',
-            background: 'none',
-            color: canUndo ? '#000' : '#bbb',
-            border: 'none',
-            padding: 0,
-            cursor: canUndo ? 'pointer' : 'default',
-            display: 'flex',
-            alignItems: 'center',
-          }}
+          className={`pointer-events-auto bg-transparent border-none p-0 flex items-center ${canUndo ? 'text-black cursor-pointer' : 'text-[#bbb] cursor-default'}`}
         >
           <Undo2 size={18} />
         </button>
         <button
           onClick={onPause}
-          style={{
-            pointerEvents: 'auto',
-            background: 'none',
-            color: '#000',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-          }}
+          className="pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center text-black"
         >
           {state === GameState.Paused ? <Play size={18} /> : <Pause size={18} />}
         </button>
@@ -100,31 +75,11 @@ function HUD({ score, money, time, state, onPause, canUndo, onUndo }: { score: n
 
 function StartOverlay({ onStart }: { onStart: () => void }) {
   return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 20,
-        pointerEvents: 'auto',
-      }}
-    >
-      <div style={{ color: '#fff', font: 'bold 48px monospace' }}>Open Motorways</div>
+    <div className="absolute inset-0 bg-black/60 flex flex-col justify-center items-center gap-5 pointer-events-auto">
+      <div className="text-white font-bold font-mono text-5xl">Open Motorways</div>
       <button
         onClick={onStart}
-        style={{
-          font: 'bold 20px monospace',
-          padding: '12px 32px',
-          borderRadius: 8,
-          border: 'none',
-          background: '#fff',
-          color: '#000',
-          cursor: 'pointer',
-        }}
+        className="font-bold font-mono text-xl py-3 px-8 rounded-lg border-none bg-white text-black cursor-pointer"
       >
         Start Game
       </button>
@@ -136,22 +91,11 @@ function GameOverOverlay({ score, onRestart }: { score: number; onRestart: () =>
   return (
     <div
       onClick={onRestart}
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 10,
-        cursor: 'pointer',
-        pointerEvents: 'auto',
-      }}
+      className="absolute inset-0 bg-black/60 flex flex-col justify-center items-center gap-2.5 cursor-pointer pointer-events-auto"
     >
-      <div style={{ color: '#fff', font: 'bold 48px monospace' }}>GAME OVER</div>
-      <div style={{ color: '#fff', font: 'bold 24px monospace' }}>Score: {score}</div>
-      <div style={{ color: '#ccc', font: '18px monospace' }}>Click to restart</div>
+      <div className="text-white font-bold font-mono text-5xl">GAME OVER</div>
+      <div className="text-white font-bold font-mono text-2xl">Score: {score}</div>
+      <div className="text-[#ccc] font-mono text-lg">Click to restart</div>
     </div>
   );
 }
