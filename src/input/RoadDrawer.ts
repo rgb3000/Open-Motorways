@@ -76,7 +76,14 @@ export class RoadDrawer {
           if (this.input.state.shiftDown && this.lastBuiltPos) {
             // Shift-click: build L-shaped road from lastBuiltPos to clicked cell
             let prev = { ...this.lastBuiltPos };
+            let stopped = false;
             this.shortestLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+              if (stopped) return;
+              const c = this.grid.getCell(x, y);
+              if (c && c.type === CellType.House) {
+                this.prevPlacedPos = prev;
+                if (this.tryConnectToHouse(x, y)) { stopped = true; return; }
+              }
               this.tryPlace(x, y);
               if (prev.gx !== x || prev.gy !== y) {
                 this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
@@ -135,9 +142,15 @@ export class RoadDrawer {
 
           // If cursor is beyond the connector cell, place roads from connector to cursor
           if (gridPos.gx !== connectorPos.gx || gridPos.gy !== connectorPos.gy) {
+            let stopped1 = false;
             this.bresenhamLine(connectorPos.gx, connectorPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+              if (stopped1) return;
               // Skip the connector cell itself (already placed)
               if (x === connectorPos.gx && y === connectorPos.gy) return;
+              const c = this.grid.getCell(x, y);
+              if (c && c.type === CellType.House) {
+                if (this.tryConnectToHouse(x, y)) { stopped1 = true; return; }
+              }
               this.tryPlace(x, y);
               if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
                 this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
@@ -147,7 +160,13 @@ export class RoadDrawer {
             this.lastBuiltPos = { ...gridPos };
           }
         } else if (this.mode === 'place') {
+          let stopped2 = false;
           this.bresenhamLine(this.lastGridPos.gx, this.lastGridPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
+            if (stopped2) return;
+            const c = this.grid.getCell(x, y);
+            if (c && c.type === CellType.House) {
+              if (this.tryConnectToHouse(x, y)) { stopped2 = true; return; }
+            }
             this.tryPlace(x, y);
             if (this.prevPlacedPos && (this.prevPlacedPos.gx !== x || this.prevPlacedPos.gy !== y)) {
               this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, x, y);
@@ -200,7 +219,8 @@ export class RoadDrawer {
     const newConnX = house.pos.gx + off.gx;
     const newConnY = house.pos.gy + off.gy;
     const targetCell = this.grid.getCell(newConnX, newConnY);
-    if (!targetCell || targetCell.type !== CellType.Empty) return;
+    if (!targetCell || (targetCell.type !== CellType.Empty && targetCell.type !== CellType.Road)) return;
+    const targetIsRoad = targetCell.type === CellType.Road;
 
     // Snapshot old and new connector positions + neighbors before mutation
     this.undoSystem.snapshotCellAndNeighbors(oldConnectorPos.gx, oldConnectorPos.gy);
@@ -242,28 +262,27 @@ export class RoadDrawer {
       connectorDir: newDir,
     });
 
-    // Place new connector road cell
+    // Place new connector road cell (merge into existing road or create fresh)
     const connToHouseDir = house.getConnectorToHouseDir();
-    this.grid.setCell(newConnX, newConnY, {
-      type: CellType.Road,
-      entityId: house.id,
-      color: null,
-      roadConnections: [connToHouseDir],
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
-      connectorDir: null,
-    });
-
-    // Connect new connector to any adjacent roads
-    for (const dir of this.grid.getAllDirections()) {
-      // Skip connection toward house (already permanent)
-      if (dir === connToHouseDir) continue;
-      const neighbor = this.grid.getNeighbor(newConnX, newConnY, dir);
-      if (!neighbor) continue;
-      if (neighbor.cell.type === CellType.Road) {
-        this.roadSystem.connectRoads(newConnX, newConnY, neighbor.gx, neighbor.gy);
+    if (targetIsRoad) {
+      // Merge: add house connection to existing road cell
+      if (!targetCell.roadConnections.includes(connToHouseDir)) {
+        targetCell.roadConnections.push(connToHouseDir);
       }
+      this.grid.setCell(newConnX, newConnY, {
+        entityId: house.id,
+      });
+    } else {
+      this.grid.setCell(newConnX, newConnY, {
+        type: CellType.Road,
+        entityId: house.id,
+        color: null,
+        roadConnections: [connToHouseDir],
+        hasBridge: false,
+        bridgeAxis: null,
+        bridgeConnections: [],
+        connectorDir: null,
+      });
     }
 
     // Mark road system dirty to trigger repath and redraw
@@ -295,6 +314,41 @@ export class RoadDrawer {
       this.undoSystem.addMoneyDelta(ROAD_REFUND);
       this.onRoadDelete?.();
     }
+  }
+
+  private tryConnectToHouse(gx: number, gy: number): boolean {
+    const cell = this.grid.getCell(gx, gy);
+    if (!cell || cell.type !== CellType.House || !cell.entityId) return false;
+    if (!this.prevPlacedPos) return false;
+
+    const house = this.getHouses().find(h => h.id === cell.entityId);
+    if (!house) return false;
+
+    // Must be adjacent (Chebyshev distance 1) from prevPlacedPos
+    const dx = gx - this.prevPlacedPos.gx;
+    const dy = gy - this.prevPlacedPos.gy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== 1) return false;
+
+    // Direction from house to the incoming road cell
+    const rdx = this.prevPlacedPos.gx - house.pos.gx;
+    const rdy = this.prevPlacedPos.gy - house.pos.gy;
+
+    let newDir: Direction;
+    if (rdx === 1 && rdy === 0) newDir = Direction.Right;
+    else if (rdx === -1 && rdy === 0) newDir = Direction.Left;
+    else if (rdx === 0 && rdy === 1) newDir = Direction.Down;
+    else if (rdx === 0 && rdy === -1) newDir = Direction.Up;
+    else if (rdx === 1 && rdy === -1) newDir = Direction.UpRight;
+    else if (rdx === -1 && rdy === -1) newDir = Direction.UpLeft;
+    else if (rdx === 1 && rdy === 1) newDir = Direction.DownRight;
+    else if (rdx === -1 && rdy === 1) newDir = Direction.DownLeft;
+    else return false;
+
+    this.relocateHouseConnector(house, newDir);
+
+    // Connect the incoming road to the new connector
+    this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, house.connectorPos.gx, house.connectorPos.gy);
+    return true;
   }
 
   private shortestLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {
