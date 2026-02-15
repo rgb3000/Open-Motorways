@@ -2,7 +2,7 @@ import { GRID_COLS, GRID_ROWS, TILE_SIZE, BG_COLOR, GRID_LINE_COLOR } from '../.
 
 // Generate a tileable sand noise texture once and reuse it
 function createSandPatternCanvas(): HTMLCanvasElement {
-  const size = 64;
+  const size = 32;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;

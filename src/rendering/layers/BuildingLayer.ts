@@ -38,8 +38,51 @@ export class BuildingLayer {
   private bizSlotGeom: THREE.BoxGeometry;
   private bizPinGeom: THREE.SphereGeometry;
 
+  // Shared plate noise texture
+  private plateNoiseTexture = BuildingLayer.createPlateNoiseTexture();
+
+  private static createPlateNoiseTexture(): THREE.CanvasTexture {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const imgData = ctx.createImageData(size, size);
+    const data = imgData.data;
+
+    let seed = 31;
+    const rand = () => { seed = (seed * 16807 + 0) % 2147483647; return (seed & 0x7fffffff) / 0x7fffffff; };
+
+    // Low-frequency waviness for non-uniform look
+    const low: number[] = [];
+    for (let i = 0; i < size * size; i++) {
+      const x = i % size;
+      const y = (i / size) | 0;
+      low.push(Math.sin(x * 0.3 + 1.2) * Math.cos(y * 0.25 + 0.8) * 25
+        + Math.sin(x * 0.15 - y * 0.2) * 15);
+    }
+
+    for (let i = 0; i < size * size; i++) {
+      const fine = (rand() - 0.5) * 40;
+      const speckle = rand() < 0.15 ? (rand() - 0.5) * 70 : 0;
+      const v = Math.max(0, Math.min(255, 235 + Math.round(low[i] * 0.4 + fine + speckle)));
+      const idx = i * 4;
+      data[idx] = v;
+      data[idx + 1] = v;
+      data[idx + 2] = v;
+      data[idx + 3] = 255;
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(3, 3);
+    return tex;
+  }
+
   // Cached shared materials
-  private plateMat = new THREE.MeshStandardMaterial({ color: '#F0F0F0' });
+  private plateMat = new THREE.MeshStandardMaterial({ color: '#FFFFFF', map: this.plateNoiseTexture });
   private lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
   private chimneyMat = new THREE.MeshStandardMaterial({ color: '#666666' });
   private slotMat = new THREE.MeshStandardMaterial({ color: '#CCCCCC' });
@@ -51,7 +94,7 @@ export class BuildingLayer {
 
     // House body
     const bodyShape = roundedRectShape(size, size, 2);
-    this.houseBodyGeom = new THREE.ExtrudeGeometry(bodyShape, { depth: height, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
+    this.houseBodyGeom = new THREE.ExtrudeGeometry(bodyShape, { depth: height, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.houseBodyGeom.rotateX(-Math.PI / 2);
 
     // House roof
@@ -60,14 +103,14 @@ export class BuildingLayer {
     // House plate
     const plateSize = TILE_SIZE - 2;
     const plateShape = roundedRectShape(plateSize, plateSize, 3);
-    this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 1.5, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
+    this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
     // Business body
     const buildingSize = TILE_SIZE * 0.75;
     const buildingHeight = 7;
     const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
-    this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
+    this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.bizBodyGeom.rotateX(-Math.PI / 2);
 
     // Business tower
@@ -77,7 +120,7 @@ export class BuildingLayer {
     // Business chimney
     const chimneyShape = new THREE.Shape();
     chimneyShape.absarc(0, 0, 5, 0, Math.PI * 2, false);
-    this.bizChimneyGeom = new THREE.ExtrudeGeometry(chimneyShape, { depth: 4, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2, curveSegments: 8 });
+    this.bizChimneyGeom = new THREE.ExtrudeGeometry(chimneyShape, { depth: 4, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.7, bevelSegments: 3, curveSegments: 8 });
     this.bizChimneyGeom.rotateX(-Math.PI / 2);
 
     // Business plates (horizontal and vertical)
@@ -85,10 +128,10 @@ export class BuildingLayer {
     const plateLong = TILE_SIZE * 2 - plateInset;
     const plateShort = TILE_SIZE - 2;
     const plateH = roundedRectShape(plateLong, plateShort, 3);
-    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 1.5, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
+    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.bizPlateGeomH.rotateX(-Math.PI / 2);
     const plateV = roundedRectShape(plateShort, plateLong, 3);
-    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 1.5, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 2, curveSegments: 4 });
+    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.bizPlateGeomV.rotateX(-Math.PI / 2);
 
     // Business lot
@@ -308,6 +351,7 @@ export class BuildingLayer {
     this.bizSlotGeom.dispose();
     this.bizPinGeom.dispose();
     this.plateMat.dispose();
+    this.plateNoiseTexture.dispose();
     this.lotMat.dispose();
     this.slotMat.dispose();
     this.pinMat.dispose();
