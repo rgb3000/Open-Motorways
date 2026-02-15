@@ -178,6 +178,7 @@ export interface SmoothLanePath {
 
 /**
  * Compute the smooth right-lane polyline for a car's grid path.
+ * Approach: smooth the center line first, then offset perpendicular by LANE_OFFSET.
  */
 export function computeSmoothLanePath(path: GridPos[]): SmoothLanePath {
   if (path.length < 2) {
@@ -191,8 +192,31 @@ export function computeSmoothLanePath(path: GridPos[]): SmoothLanePath {
   }
 
   const pixels = path.map(gridToPixelCenter);
-  const offset = offsetChainCenters(pixels, LANE_OFFSET, false);
-  const { points, cellIndices } = smoothPolyline2D(offset, false);
+  const { points: smoothed, cellIndices } = smoothPolyline2D(pixels, false);
+
+  // Offset each smoothed point perpendicular to the travel direction by LANE_OFFSET
+  const points: { x: number; y: number }[] = new Array(smoothed.length);
+  for (let i = 0; i < smoothed.length; i++) {
+    const curr = smoothed[i];
+    let dx: number, dy: number;
+    if (i === 0) {
+      dx = smoothed[1].x - curr.x;
+      dy = smoothed[1].y - curr.y;
+    } else if (i === smoothed.length - 1) {
+      dx = curr.x - smoothed[i - 1].x;
+      dy = curr.y - smoothed[i - 1].y;
+    } else {
+      dx = smoothed[i + 1].x - smoothed[i - 1].x;
+      dy = smoothed[i + 1].y - smoothed[i - 1].y;
+    }
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) {
+      // Perpendicular offset (right side of travel direction)
+      points[i] = { x: curr.x + (-dy / len) * LANE_OFFSET, y: curr.y + (dx / len) * LANE_OFFSET };
+    } else {
+      points[i] = { x: curr.x, y: curr.y };
+    }
+  }
 
   // Compute cumulative arc-length distances
   const cumDist = new Array<number>(points.length);

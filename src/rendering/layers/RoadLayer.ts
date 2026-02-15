@@ -3,9 +3,8 @@ import type { Grid } from '../../core/Grid';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE, LANE_OFFSET, ROAD_HALF_WIDTH } from '../../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
 import { cubicBezier, lerp } from '../../utils/math';
-import { offsetChainCenters } from '../../utils/roadGeometry';
 
 const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
   [Direction.Up]: { dx: 0, dy: -1 },
@@ -98,8 +97,6 @@ export class RoadLayer {
   private lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
   private connectorLineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
   private pathLineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 3 });
-  private laneLineMat = new THREE.LineBasicMaterial({ color: 0x0088ff, linewidth: 2 });
-  private edgeLineMat = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 2 });
   private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
@@ -388,29 +385,6 @@ export class RoadLayer {
       if (points.length >= 2) {
         const geom = new THREE.BufferGeometry().setFromPoints(points);
         group.add(new THREE.Line(geom, this.pathLineMat));
-
-        // Offset-then-smooth: offset cell centers first, then bezier-smooth each offset polyline
-        const LANE_Y = GREEN_Y + 0.1;
-        const EDGE_Y = LANE_Y + 0.1;
-
-        const offsets: [number, number, THREE.LineBasicMaterial][] = [
-          [LANE_OFFSET, LANE_Y, this.laneLineMat],
-          [ROAD_HALF_WIDTH, EDGE_Y, this.edgeLineMat],
-        ];
-
-        for (const [offset, yLevel, mat] of offsets) {
-          const leftCenters = offsetChainCenters(pixels, +offset, isLoop);
-          const rightCenters = offsetChainCenters(pixels, -offset, isLoop);
-          const leftSmoothed = smoothPolyline(leftCenters, isLoop, yLevel);
-          const rightSmoothed = smoothPolyline(rightCenters, isLoop, yLevel);
-
-          if (leftSmoothed.length >= 2) {
-            group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftSmoothed), mat));
-          }
-          if (rightSmoothed.length >= 2) {
-            group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightSmoothed), mat));
-          }
-        }
       }
     }
 
@@ -435,8 +409,6 @@ export class RoadLayer {
     this.lineMat.dispose();
     this.connectorLineMat.dispose();
     this.pathLineMat.dispose();
-    this.laneLineMat.dispose();
-    this.edgeLineMat.dispose();
     this.circleMat.dispose();
     this.connectorCircleMat.dispose();
     this.circleGeom.dispose();

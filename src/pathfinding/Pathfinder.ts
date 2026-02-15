@@ -1,13 +1,12 @@
 import type { Grid } from '../core/Grid';
 import { OPPOSITE_DIR } from '../core/Grid';
-import { CellType, Direction, TrafficLevel, type GridPos } from '../types';
+import { CellType, Direction, type GridPos } from '../types';
 import { gridPosEqual, gridPosKey, octileDist, isDiagonal } from '../utils/math';
 import { PriorityQueue } from '../utils/PriorityQueue';
 
 interface AStarNode {
   gx: number;
   gy: number;
-  level: TrafficLevel;
   g: number;
   f: number;
   parentKey: string | null;
@@ -23,13 +22,6 @@ const DIR_OFFSETS = [
   { dir: Direction.DownLeft, dx: -1, dy: 1 },
   { dir: Direction.DownRight, dx: 1, dy: 1 },
 ] as const;
-
-function isAlongBridgeAxis(dir: Direction, bridgeAxis: 'horizontal' | 'vertical'): boolean {
-  if (bridgeAxis === 'horizontal') {
-    return dir === Direction.Left || dir === Direction.Right;
-  }
-  return dir === Direction.Up || dir === Direction.Down;
-}
 
 export class Pathfinder {
   private cache = new Map<string, GridPos[] | null>();
@@ -63,7 +55,6 @@ export class Pathfinder {
     const startNode: AStarNode = {
       gx: from.gx,
       gy: from.gy,
-      level: TrafficLevel.Ground,
       g: 0,
       f: octileDist(from, to),
       parentKey: null,
@@ -72,7 +63,7 @@ export class Pathfinder {
 
     while (open.size > 0) {
       const current = open.pop()!;
-      const currentKey = `${current.gx},${current.gy},${current.level}`;
+      const currentKey = `${current.gx},${current.gy}`;
 
       if (current.gx === to.gx && current.gy === to.gy) {
         return this.reconstructPath(current, closed);
@@ -86,27 +77,9 @@ export class Pathfinder {
       for (const { dir, dx, dy } of DIR_OFFSETS) {
         const diag = isDiagonal(dir);
 
-        // Check if we can exit in this direction from current cell/level
-        if (currentCell && currentCell.hasBridge && currentCell.bridgeAxis) {
-          // No diagonal movement on bridge cells
-          if (diag) continue;
-          const dirAlongBridge = isAlongBridgeAxis(dir, currentCell.bridgeAxis);
-          if (current.level === TrafficLevel.Bridge && !dirAlongBridge) continue;
-          if (current.level === TrafficLevel.Ground && dirAlongBridge) continue;
-        }
-
         // Check road connections for exit from current cell
         if (currentCell && (currentCell.type === CellType.Road || currentCell.type === CellType.Connector)) {
-          if (currentCell.hasBridge && currentCell.bridgeAxis) {
-            // Bridge level uses bridgeConnections, ground level uses roadConnections
-            if (current.level === TrafficLevel.Bridge) {
-              if (!currentCell.bridgeConnections.includes(dir)) continue;
-            } else {
-              if (!currentCell.roadConnections.includes(dir)) continue;
-            }
-          } else {
-            if (!currentCell.roadConnections.includes(dir)) continue;
-          }
+          if (!currentCell.roadConnections.includes(dir)) continue;
         }
         // Houses can only exit in their connector direction
         if (currentCell && currentCell.type === CellType.House) {
@@ -130,18 +103,7 @@ export class Pathfinder {
           if (dir !== OPPOSITE_DIR[cell.connectorDir]) continue;
         }
 
-        // Determine level when entering the neighbor cell
-        let nextLevel: TrafficLevel = TrafficLevel.Ground;
-        if (cell.hasBridge && cell.bridgeAxis) {
-          nextLevel = isAlongBridgeAxis(dir, cell.bridgeAxis)
-            ? TrafficLevel.Bridge
-            : TrafficLevel.Ground;
-        }
-
-        // No diagonal movement onto bridge cells
-        if (diag && cell.hasBridge) continue;
-
-        const nKey = `${nx},${ny},${nextLevel}`;
+        const nKey = `${nx},${ny}`;
         if (closed.has(nKey)) continue;
 
         const g = current.g + (diag ? Math.SQRT2 : 1);
@@ -151,7 +113,6 @@ export class Pathfinder {
         open.push({
           gx: nx,
           gy: ny,
-          level: nextLevel,
           g,
           f,
           parentKey: currentKey,

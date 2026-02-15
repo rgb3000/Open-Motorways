@@ -6,7 +6,7 @@ import { OPPOSITE_DIR } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { GridPos } from '../types';
 import { CellType, Direction } from '../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COST, ROAD_REFUND, BRIDGE_REFUND } from '../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COST, ROAD_REFUND } from '../constants';
 
 const DRAG_THRESHOLD_SQ = (TILE_SIZE * 0.5) ** 2;
 
@@ -279,9 +279,6 @@ export class RoadDrawer {
           entityId: null,
           roadConnections: [],
           color: null,
-          hasBridge: false,
-          bridgeAxis: null,
-          bridgeConnections: [],
           connectorDir: null,
         });
       }
@@ -312,9 +309,6 @@ export class RoadDrawer {
         entityId: house.id,
         color: null,
         roadConnections: [connToHouseDir],
-        hasBridge: false,
-        bridgeAxis: null,
-        bridgeConnections: [],
         connectorDir: null,
       });
     }
@@ -370,12 +364,7 @@ export class RoadDrawer {
   private tryErase(gx: number, gy: number): void {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
     this.undoSystem.snapshotCellAndNeighbors(gx, gy);
-    const result = this.roadSystem.removeBridgeOrRoad(gx, gy);
-    if (result === 'bridge') {
-      this.money.refund(BRIDGE_REFUND);
-      this.undoSystem.addMoneyDelta(BRIDGE_REFUND);
-      this.onRoadDelete?.();
-    } else if (result === 'road') {
+    if (this.roadSystem.removeRoad(gx, gy)) {
       this.money.refund(ROAD_REFUND);
       this.undoSystem.addMoneyDelta(ROAD_REFUND);
       this.onRoadDelete?.();

@@ -60,19 +60,10 @@ export const GameState = {
 } as const;
 export type GameState = (typeof GameState)[keyof typeof GameState];
 
-export const TrafficLevel = {
-  Ground: 0,
-  Bridge: 1,
-} as const;
-export type TrafficLevel = (typeof TrafficLevel)[keyof typeof TrafficLevel];
-
 export interface Cell {
   type: CellType;
   entityId: string | null;
   roadConnections: Direction[];
   color: GameColor | null;
-  hasBridge: boolean;
-  bridgeAxis: 'horizontal' | 'vertical' | null;
-  bridgeConnections: Direction[];
   connectorDir: Direction | null;
 }

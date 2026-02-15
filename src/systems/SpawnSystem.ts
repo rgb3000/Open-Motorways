@@ -174,9 +174,6 @@ export class SpawnSystem {
       type: CellType.House,
       entityId: house.id,
       color,
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: connDir,
     });
 
@@ -187,9 +184,6 @@ export class SpawnSystem {
       entityId: house.id,
       color: null,
       roadConnections: [connToHouseDir],
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
   }
@@ -209,9 +203,6 @@ export class SpawnSystem {
       type: CellType.Business,
       entityId: business.id,
       color,
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
 
@@ -220,9 +211,6 @@ export class SpawnSystem {
       type: CellType.ParkingLot,
       entityId: business.id,
       color,
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
 
@@ -233,9 +221,6 @@ export class SpawnSystem {
       entityId: business.id,
       color: null,
       roadConnections: [connToParkingDir],
-      hasBridge: false,
-      bridgeAxis: null,
-      bridgeConnections: [],
       connectorDir: null,
     });
   }

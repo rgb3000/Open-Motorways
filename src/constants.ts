@@ -20,7 +20,6 @@ export const DEMAND_INTERVAL_DECAY = 0.97; // multiplier per demand tick
 // Cars
 export const CARS_PER_HOUSE = 2;
 export const CAR_SPEED = 1; // tiles per second
-export const ROAD_HALF_WIDTH = TILE_SIZE * 0.30; // road is 60% of tile width
 export const LANE_OFFSET = TILE_SIZE * 0.15;    // px from tile center to lane center
 export const CAR_WIDTH = TILE_SIZE * 0.08;       // px (narrow dimension, perpendicular to travel)
 export const CAR_LENGTH = TILE_SIZE * 0.13;      // px (long dimension, along travel direction)
@@ -47,10 +46,8 @@ export const INNER_SPAWN_THRESHOLD = 10;
 // Money
 export const STARTING_MONEY = 400;
 export const ROAD_COST = 10;
-export const BRIDGE_COST = 20;
 export const DELIVERY_REWARD = 50;
 export const ROAD_REFUND = 10;
-export const BRIDGE_REFUND = 20;
 
 // Colors - map GameColor enum to hex
 export const COLOR_MAP: Record<GameColor, string> = {
@@ -72,12 +69,6 @@ export const ROAD_CORNER_RADIUS = 3.0; // px
 export const UI_TEXT_COLOR = '#333333';
 export const GAME_OVER_OVERLAY = 'rgba(0, 0, 0, 0.6)';
 
-// Bridge rendering
-export const BRIDGE_COLOR = '#787878';
-export const BRIDGE_OUTLINE_COLOR = '#555555';
-export const BRIDGE_BARRIER_COLOR = '#444444';
-export const BRIDGE_SHADOW_COLOR = 'rgba(0, 0, 0, 0.15)';
-export const BRIDGE_Y_POSITION = 5;
 export const GROUND_Y_POSITION = 1;
 
 // Color unlock order

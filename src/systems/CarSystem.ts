@@ -4,7 +4,7 @@ import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
 import { CAR_SPEED, TILE_SIZE, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, UNLOAD_TIME, PARKING_EXIT_DELAY } from '../constants';
-import { CellType, Direction, LaneId, TrafficLevel } from '../types';
+import { CellType, Direction, LaneId } from '../types';
 import type { GridPos } from '../types';
 import { gridToPixelCenter, manhattanDist, pixelToGrid, isDiagonal } from '../utils/math';
 import {
@@ -13,8 +13,8 @@ import {
 } from '../utils/direction';
 import { computeSmoothLanePath, sampleAtDistance } from '../utils/roadGeometry';
 
-function occupancyKey(gx: number, gy: number, lane: LaneId, level: TrafficLevel): string {
-  return `${gx},${gy},${lane},${level}`;
+function occupancyKey(gx: number, gy: number, lane: LaneId): string {
+  return `${gx},${gy},${lane}`;
 }
 
 function tileKey(gx: number, gy: number): string {
@@ -25,32 +25,7 @@ function isIntersection(grid: Grid, gx: number, gy: number): boolean {
   const cell = grid.getCell(gx, gy);
   if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
   if (cell.type === CellType.Connector) return false;
-  if (cell.hasBridge) return false;
   return cell.roadConnections.length >= 3;
-}
-
-function getTrafficLevel(grid: Grid, path: GridPos[], pathIndex: number): TrafficLevel {
-  if (pathIndex <= 0 || pathIndex >= path.length) return TrafficLevel.Ground;
-
-  const tile = path[pathIndex];
-  const cell = grid.getCell(tile.gx, tile.gy);
-  if (!cell || !cell.hasBridge || !cell.bridgeAxis) return TrafficLevel.Ground;
-
-  // Derive level from entry direction
-  const prevTile = path[pathIndex - 1];
-  const entryDir = getDirection(prevTile, tile);
-
-  // Diagonal directions are always ground level (no diagonal bridges)
-  if (isDiagonal(entryDir)) return TrafficLevel.Ground;
-
-  const isHorizontal = entryDir === Direction.Left || entryDir === Direction.Right;
-  const isBridgeHorizontal = cell.bridgeAxis === 'horizontal';
-
-  // If entry direction aligns with bridge axis, we're on the bridge
-  if ((isHorizontal && isBridgeHorizontal) || (!isHorizontal && !isBridgeHorizontal)) {
-    return TrafficLevel.Bridge;
-  }
-  return TrafficLevel.Ground;
 }
 
 interface IntersectionEntry {
@@ -337,8 +312,7 @@ export class CarSystem {
       const lane = directionToLane(dir);
 
       const occupiedTile = car.segmentProgress < 0.5 ? currentTile : nextTile;
-      const level = getTrafficLevel(this.grid, car.path, car.segmentProgress < 0.5 ? car.pathIndex : car.pathIndex + 1);
-      occupied.set(occupancyKey(occupiedTile.gx, occupiedTile.gy, lane, level), car.id);
+      occupied.set(occupancyKey(occupiedTile.gx, occupiedTile.gy, lane), car.id);
     }
     return occupied;
   }
@@ -404,8 +378,7 @@ export class CarSystem {
       const afterNextTile = car.path[car.pathIndex + 2];
       const nextDir = getDirection(nextTile, afterNextTile);
       const nextLane = directionToLane(nextDir);
-      const nextLevel = getTrafficLevel(this.grid, car.path, car.pathIndex + 1);
-      const nextKey = occupancyKey(nextTile.gx, nextTile.gy, nextLane, nextLevel);
+      const nextKey = occupancyKey(nextTile.gx, nextTile.gy, nextLane);
       const blocker = occupied.get(nextKey);
 
       if (blocker && blocker !== car.id) {
@@ -415,8 +388,7 @@ export class CarSystem {
 
     // Also check collision on the current segment's next tile (same lane)
     if (car.segmentProgress < 0.5 && newProgress >= 0.5) {
-      const nextLevel = getTrafficLevel(this.grid, car.path, car.pathIndex + 1);
-      const key = occupancyKey(nextTile.gx, nextTile.gy, lane, nextLevel);
+      const key = occupancyKey(nextTile.gx, nextTile.gy, lane);
       const blocker = occupied.get(key);
       if (blocker && blocker !== car.id) {
         newProgress = Math.min(newProgress, 0.45);
@@ -470,9 +442,6 @@ export class CarSystem {
     const curDir = getDirection(curTile, nxtTile);
     car.direction = curDir;
 
-    // Update traffic level
-    car.currentLevel = getTrafficLevel(this.grid, car.path, car.pathIndex);
-
     if (car.smoothPath.length < 2) return;
 
     // Map pathIndex + segmentProgress to arc-length distance on the smooth polyline
@@ -509,11 +478,10 @@ export class CarSystem {
     const dir = getDirection(currentTile, nextTile);
     car.direction = dir;
     const lane = directionToLane(dir);
-    const level = getTrafficLevel(this.grid, car.path, car.segmentProgress < 0.5 ? car.pathIndex : car.pathIndex + 1);
 
     // Remove car from old occupancy position
     const oldOccupiedTile = car.segmentProgress < 0.5 ? currentTile : nextTile;
-    const oldKey = occupancyKey(oldOccupiedTile.gx, oldOccupiedTile.gy, lane, level);
+    const oldKey = occupancyKey(oldOccupiedTile.gx, oldOccupiedTile.gy, lane);
     if (occupied.get(oldKey) === car.id) {
       occupied.delete(oldKey);
     }
@@ -573,7 +541,6 @@ export class CarSystem {
         car.pixelPos.x = lastPt.x;
         car.pixelPos.y = lastPt.y;
       }
-      car.currentLevel = TrafficLevel.Ground;
       this.handleArrival(car, houses, bizMap, toRemove);
       if (car.path.length === 0) return;
     } else {
@@ -587,8 +554,7 @@ export class CarSystem {
     const newDir = car.pathIndex < car.path.length - 1 ? getDirection(newCurrentTile, newNextTile) : dir;
     const newLane = directionToLane(newDir);
     const newOccupiedTile = car.segmentProgress < 0.5 ? newCurrentTile : newNextTile;
-    const newLevel = getTrafficLevel(this.grid, car.path, car.segmentProgress < 0.5 ? car.pathIndex : car.pathIndex + 1);
-    const newKey = occupancyKey(newOccupiedTile.gx, newOccupiedTile.gy, newLane, newLevel);
+    const newKey = occupancyKey(newOccupiedTile.gx, newOccupiedTile.gy, newLane);
     occupied.set(newKey, car.id);
   }
 

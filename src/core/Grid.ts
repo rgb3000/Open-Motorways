@@ -31,7 +31,7 @@ export class Grid {
   constructor() {
     this.cells = new Array(this.cols * this.rows);
     for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, hasBridge: false, bridgeAxis: null, bridgeConnections: [], connectorDir: null };
+      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, connectorDir: null };
     }
   }
 
