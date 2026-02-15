@@ -37,9 +37,9 @@ export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color
 export const COLOR_UNLOCK_INTERVAL = 35;   // seconds between new colors
 export const HOUSE_CLUSTER_RADIUS = 3;     // tiles
 export const MIN_BUSINESS_DISTANCE = 8;    // tiles from matching houses
-export const SPAWN_INTERVAL = 12;          // seconds between spawns
-export const MIN_SPAWN_INTERVAL = 6;
-export const SPAWN_INTERVAL_DECAY = 0.95;
+export const SPAWN_INTERVAL = 18;          // seconds between spawns
+export const MIN_SPAWN_INTERVAL = 10;
+export const SPAWN_INTERVAL_DECAY = 0.97;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
 export const SPAWN_AREA_INTERVALS = [
   { threshold: 0, inset: 0.45 },   //  0 entities: 10% of grid
