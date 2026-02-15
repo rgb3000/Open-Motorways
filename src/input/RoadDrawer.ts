@@ -7,6 +7,7 @@ import type { House } from '../entities/House';
 import type { GridPos } from '../types';
 import { CellType, Direction } from '../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COST, ROAD_REFUND } from '../constants';
+import { findRoadPlacementPath } from '../pathfinding/RoadPlacementPathfinder';
 
 const DRAG_THRESHOLD_SQ = (TILE_SIZE * 0.5) ** 2;
 
@@ -81,24 +82,35 @@ export class RoadDrawer {
 
         if (this.mode === 'place') {
           if (this.input.state.shiftDown && this.lastBuiltPos) {
-            // Shift-click: build L-shaped road from lastBuiltPos to clicked cell
-            let prev = { ...this.lastBuiltPos };
-            let stopped = false;
-            this.shortestLine(this.lastBuiltPos.gx, this.lastBuiltPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
-              if (stopped) return;
-              const c = this.grid.getCell(x, y);
-              if (c && c.type === CellType.House) {
-                this.prevPlacedPos = prev;
-                if (this.tryConnectToHouse(x, y)) { stopped = true; return; }
+            // Shift-click: pathfind road from lastBuiltPos to clicked cell
+            const path = findRoadPlacementPath(this.grid, this.lastBuiltPos, gridPos);
+            if (path) {
+              let prev = { ...path[0] };
+              let stopped = false;
+              for (let i = 0; i < path.length; i++) {
+                if (stopped) break;
+                const { gx: x, gy: y } = path[i];
+                const c = this.grid.getCell(x, y);
+                if (c && c.type === CellType.House) {
+                  this.prevPlacedPos = prev;
+                  if (this.tryConnectToHouse(x, y)) { stopped = true; break; }
+                }
+                if (!this.money.canAfford(ROAD_COST) && !(this.grid.getCell(x, y)?.type === CellType.Road || this.grid.getCell(x, y)?.type === CellType.Connector)) {
+                  this.lastBuiltPos = { ...prev };
+                  break;
+                }
+                this.tryPlace(x, y);
+                if (prev.gx !== x || prev.gy !== y) {
+                  this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
+                }
+                prev = { gx: x, gy: y };
+                this.lastBuiltPos = { ...prev };
               }
-              this.tryPlace(x, y);
-              if (prev.gx !== x || prev.gy !== y) {
-                this.roadSystem.connectRoads(prev.gx, prev.gy, x, y);
+              if (!stopped) {
+                this.lastBuiltPos = { ...prev };
               }
-              prev = { gx: x, gy: y };
-            });
+            }
             this.prevPlacedPos = { ...gridPos };
-            this.lastBuiltPos = { ...gridPos };
           } else {
             const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.Connector || cell.type === CellType.House || cell.type === CellType.Business);
 
@@ -428,30 +440,6 @@ export class RoadDrawer {
     // Connect the incoming road to the new connector
     this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, house.connectorPos.gx, house.connectorPos.gy);
     return true;
-  }
-
-  private shortestLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {
-    const sx = x0 < x1 ? 1 : x0 > x1 ? -1 : 0;
-    const sy = y0 < y1 ? 1 : y0 > y1 ? -1 : 0;
-    let x = x0;
-    let y = y0;
-    // Walk diagonally while both axes need covering (Chebyshev-optimal)
-    while (x !== x1 && y !== y1) {
-      callback(x, y);
-      x += sx;
-      y += sy;
-    }
-    // Then walk straight along remaining axis
-    while (x !== x1) {
-      callback(x, y);
-      x += sx;
-    }
-    while (y !== y1) {
-      callback(x, y);
-      y += sy;
-    }
-    // Final cell
-    callback(x1, y1);
   }
 
   private bresenhamLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {
