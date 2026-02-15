@@ -279,6 +279,9 @@ export class Game {
     }
 
     this.demandSystem.update(dt, this.spawnSystem.getBusinesses());
+    if (this.demandSystem.isWarning) {
+      this.soundEffectSystem.playDemandWarning();
+    }
     this.carSystem.update(dt, this.spawnSystem.getHouses(), this.spawnSystem.getBusinesses());
 
     if (this.demandSystem.isGameOver) {

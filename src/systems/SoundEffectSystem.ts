@@ -8,6 +8,7 @@ export class SoundEffectSystem {
   private deleteSynth!: Tone.NoiseSynth;
   private deleteFilter!: Tone.Filter;
   private spawnSynth!: Tone.MembraneSynth;
+  private warnSynth!: Tone.PolySynth;
   private initialized = false;
 
   async init(): Promise<void> {
@@ -51,6 +52,13 @@ export class SoundEffectSystem {
       octaves: 6,
       oscillator: { type: 'square4' },
       envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.05 },
+    }).toDestination();
+
+    // Demand warning chirp — urgent short beeps
+    this.warnSynth = new Tone.PolySynth(Tone.Synth, {
+      volume: -8,
+      oscillator: { type: 'square' },
+      envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.05 },
     }).toDestination();
 
     this.initialized = true;
@@ -100,6 +108,13 @@ export class SoundEffectSystem {
     this.spawnSynth.triggerAttack('C1', t);
   }
 
+  playDemandWarning(): void {
+    if (!this.initialized) return;
+    const now = Tone.now();
+    this.warnSynth.triggerAttackRelease('E6', '32n', now);
+    this.warnSynth.triggerAttackRelease('E6', '32n', now + 0.12);
+  }
+
   dispose(): void {
     if (!this.initialized) return;
     this.chimeSynth.dispose();
@@ -109,6 +124,7 @@ export class SoundEffectSystem {
     this.deleteSynth.dispose();
     this.deleteFilter.dispose();
     this.spawnSynth.dispose();
+    this.warnSynth.dispose();
     this.initialized = false;
   }
 }
