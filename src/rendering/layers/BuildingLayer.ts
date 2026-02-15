@@ -91,7 +91,8 @@ export class BuildingLayer {
   private pinOutlineMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
 
   constructor() {
-    const size = TILE_SIZE * 0.75;
+    const plateSize = TILE_SIZE * 0.7;
+    const size = TILE_SIZE * 0.6;
     const height = 5;
 
     // House body
@@ -103,13 +104,12 @@ export class BuildingLayer {
     this.houseRoofGeom = new THREE.ConeGeometry(size / 2 * 1.1, 3, 4);
 
     // House plate
-    const plateSize = TILE_SIZE - 2;
     const plateShape = roundedRectShape(plateSize, plateSize, 3);
     this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
     // Business body
-    const buildingSize = TILE_SIZE * 0.75;
+    const buildingSize = TILE_SIZE * 0.6;
     const buildingHeight = 7;
     const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
     this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
@@ -127,8 +127,8 @@ export class BuildingLayer {
 
     // Business plates (horizontal and vertical)
     const plateInset = 2;
-    const plateLong = TILE_SIZE * 2 - plateInset;
-    const plateShort = TILE_SIZE - 2;
+    const plateLong = TILE_SIZE * 2 - plateInset - TILE_SIZE * 0.15;
+    const plateShort = TILE_SIZE * 0.7;
     const plateH = roundedRectShape(plateLong, plateShort, 3);
     this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.bizPlateGeomH.rotateX(-Math.PI / 2);
@@ -137,7 +137,7 @@ export class BuildingLayer {
     this.bizPlateGeomV.rotateX(-Math.PI / 2);
 
     // Business lot
-    const lotSize = TILE_SIZE * 0.9;
+    const lotSize = TILE_SIZE * 0.7;
     const lotShape = roundedRectShape(lotSize, lotSize, 3);
     this.bizLotGeom = new THREE.ExtrudeGeometry(lotShape, { depth: 0.15, bevelEnabled: false, curveSegments: 4 });
     this.bizLotGeom.rotateX(-Math.PI / 2);
@@ -278,7 +278,7 @@ export class BuildingLayer {
     // Parking lot (cloned from prototype)
     const lotPx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
     const lotPz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
-    const lotSize = TILE_SIZE * 0.9;
+    const lotSize = TILE_SIZE * 0.7;
     const lot = new THREE.Mesh(this.bizLotGeom.clone(), this.lotMat);
     lot.position.set(lotPx, 0, lotPz);
     lot.receiveShadow = true;
