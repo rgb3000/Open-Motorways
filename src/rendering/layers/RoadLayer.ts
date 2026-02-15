@@ -3,7 +3,7 @@ import type { Grid } from '../../core/Grid';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE, LANE_OFFSET, ROAD_HALF_WIDTH } from '../../constants';
 import { cubicBezier, lerp } from '../../utils/math';
 
 const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
@@ -20,6 +20,159 @@ const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
 const CIRCLE_RADIUS = 3;
 const CIRCLE_SEGMENTS = 16;
 const LINE_Y = 0.5;
+const BEZIER_SAMPLES = 8;
+const SMOOTH_T = 0.75;
+
+/**
+ * Bezier-smooth a polyline of pixel coordinates.
+ * Returns THREE.Vector3[] at the given y level.
+ */
+function smoothPolyline(
+  pixels: { x: number; y: number }[],
+  isLoop: boolean,
+  yLevel: number,
+): THREE.Vector3[] {
+  const points: THREE.Vector3[] = [];
+  const len = pixels.length;
+
+  for (let i = 0; i < len; i++) {
+    const curr = pixels[i];
+
+    if (!isLoop && (i === 0 || i === len - 1)) {
+      points.push(new THREE.Vector3(curr.x, yLevel, curr.y));
+      continue;
+    }
+
+    const prev = isLoop ? pixels[(i - 1 + len) % len] : pixels[i - 1];
+    const next = isLoop ? pixels[(i + 1) % len] : pixels[i + 1];
+
+    const dxIn = curr.x - prev.x;
+    const dyIn = curr.y - prev.y;
+    const dxOut = next.x - curr.x;
+    const dyOut = next.y - curr.y;
+
+    const sameDirection =
+      Math.sign(dxIn) === Math.sign(dxOut) &&
+      Math.sign(dyIn) === Math.sign(dyOut) &&
+      Math.abs(dxIn) > 0 === (Math.abs(dxOut) > 0) &&
+      Math.abs(dyIn) > 0 === (Math.abs(dyOut) > 0);
+
+    if (sameDirection) {
+      points.push(new THREE.Vector3(curr.x, yLevel, curr.y));
+    } else {
+      const pInX = lerp(prev.x, curr.x, 1 - SMOOTH_T);
+      const pInY = lerp(prev.y, curr.y, 1 - SMOOTH_T);
+      const pOutX = lerp(curr.x, next.x, SMOOTH_T);
+      const pOutY = lerp(curr.y, next.y, SMOOTH_T);
+
+      if (points.length > 0) {
+        const last = points[points.length - 1];
+        last.set(pInX, yLevel, pInY);
+      }
+
+      for (let s = 1; s <= BEZIER_SAMPLES; s++) {
+        const t = s / BEZIER_SAMPLES;
+        const b = cubicBezier(
+          pInX, pInY, curr.x, curr.y,
+          curr.x, curr.y, pOutX, pOutY, t,
+        );
+        points.push(new THREE.Vector3(b.x, yLevel, b.y));
+      }
+    }
+  }
+
+  if (isLoop && points.length > 0) {
+    points.push(points[0].clone());
+  }
+
+  return points;
+}
+
+/**
+ * Offset each cell center in a chain by `offset` perpendicular to the travel direction,
+ * using miter joins at corners for clean geometry.
+ */
+function offsetChainCenters(
+  pixels: { x: number; y: number }[],
+  offset: number,
+  isLoop: boolean,
+): { x: number; y: number }[] {
+  const len = pixels.length;
+  const result: { x: number; y: number }[] = [];
+
+  for (let i = 0; i < len; i++) {
+    const curr = pixels[i];
+
+    if (!isLoop && i === 0) {
+      // First endpoint: perpendicular to first segment
+      const next = pixels[1];
+      const dx = next.x - curr.x;
+      const dy = next.y - curr.y;
+      const segLen = Math.sqrt(dx * dx + dy * dy);
+      if (segLen > 0) {
+        result.push({ x: curr.x + (-dy / segLen) * offset, y: curr.y + (dx / segLen) * offset });
+      } else {
+        result.push({ x: curr.x, y: curr.y });
+      }
+      continue;
+    }
+
+    if (!isLoop && i === len - 1) {
+      // Last endpoint: perpendicular to last segment
+      const prev = pixels[i - 1];
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      const segLen = Math.sqrt(dx * dx + dy * dy);
+      if (segLen > 0) {
+        result.push({ x: curr.x + (-dy / segLen) * offset, y: curr.y + (dx / segLen) * offset });
+      } else {
+        result.push({ x: curr.x, y: curr.y });
+      }
+      continue;
+    }
+
+    // Interior point (or any point in a loop): miter join
+    const prev = isLoop ? pixels[(i - 1 + len) % len] : pixels[i - 1];
+    const next = isLoop ? pixels[(i + 1) % len] : pixels[i + 1];
+
+    // Incoming and outgoing segment directions (normalized)
+    const dxIn = curr.x - prev.x;
+    const dyIn = curr.y - prev.y;
+    const lenIn = Math.sqrt(dxIn * dxIn + dyIn * dyIn);
+    const dirInX = lenIn > 0 ? dxIn / lenIn : 0;
+    const dirInY = lenIn > 0 ? dyIn / lenIn : 0;
+
+    const dxOut = next.x - curr.x;
+    const dyOut = next.y - curr.y;
+    const lenOut = Math.sqrt(dxOut * dxOut + dyOut * dyOut);
+    const dirOutX = lenOut > 0 ? dxOut / lenOut : 0;
+    const dirOutY = lenOut > 0 ? dyOut / lenOut : 0;
+
+    // Left perpendiculars
+    const perpInX = -dirInY;
+    const perpInY = dirInX;
+    const perpOutX = -dirOutY;
+    const perpOutY = dirOutX;
+
+    // Miter direction (sum of perpendiculars)
+    const miterX = perpInX + perpOutX;
+    const miterY = perpInY + perpOutY;
+    const miterLen = Math.sqrt(miterX * miterX + miterY * miterY);
+
+    if (miterLen < 1e-6) {
+      // Degenerate (180-degree turn): just use perpIn
+      result.push({ x: curr.x + perpInX * offset, y: curr.y + perpInY * offset });
+    } else {
+      const miterNX = miterX / miterLen;
+      const miterNY = miterY / miterLen;
+      const dot = miterNX * perpInX + miterNY * perpInY;
+      const scale = dot > 1e-6 ? offset / dot : offset;
+      result.push({ x: curr.x + miterNX * scale, y: curr.y + miterNY * scale });
+    }
+  }
+
+  return result;
+}
 
 export class RoadLayer {
   private grid: Grid;
@@ -135,8 +288,6 @@ export class RoadLayer {
 
     // Green bezier-smoothed lines on top of white lines
     const GREEN_Y = LINE_Y + 0.1;
-    const BEZIER_SAMPLES = 8;
-    const SMOOTH_T = 0.75;
 
     // Build adjacency with direction info
     const cellKey = (gx: number, gy: number) => gy * GRID_COLS + gx;
@@ -288,133 +439,35 @@ export class RoadLayer {
         return { x: gx * TILE_SIZE + half, y: gy * TILE_SIZE + half };
       });
 
-      const points: THREE.Vector3[] = [];
-      const len = pixels.length;
-
-      for (let i = 0; i < len; i++) {
-        const curr = pixels[i];
-
-        // For non-loops, endpoints get no smoothing
-        if (!isLoop && (i === 0 || i === len - 1)) {
-          points.push(new THREE.Vector3(curr.x, GREEN_Y, curr.y));
-          continue;
-        }
-
-        // Use modular indexing for loops, normal indexing for open chains
-        const prev = isLoop ? pixels[(i - 1 + len) % len] : pixels[i - 1];
-        const next = isLoop ? pixels[(i + 1) % len] : pixels[i + 1];
-
-        const dxIn = curr.x - prev.x;
-        const dyIn = curr.y - prev.y;
-        const dxOut = next.x - curr.x;
-        const dyOut = next.y - curr.y;
-
-        const sameDirection =
-          Math.sign(dxIn) === Math.sign(dxOut) &&
-          Math.sign(dyIn) === Math.sign(dyOut) &&
-          Math.abs(dxIn) > 0 === (Math.abs(dxOut) > 0) &&
-          Math.abs(dyIn) > 0 === (Math.abs(dyOut) > 0);
-
-        if (sameDirection) {
-          points.push(new THREE.Vector3(curr.x, GREEN_Y, curr.y));
-        } else {
-          const pInX = lerp(prev.x, curr.x, 1 - SMOOTH_T);
-          const pInY = lerp(prev.y, curr.y, 1 - SMOOTH_T);
-          const pOutX = lerp(curr.x, next.x, SMOOTH_T);
-          const pOutY = lerp(curr.y, next.y, SMOOTH_T);
-
-          if (points.length > 0) {
-            const last = points[points.length - 1];
-            last.set(pInX, GREEN_Y, pInY);
-          }
-
-          for (let s = 1; s <= BEZIER_SAMPLES; s++) {
-            const t = s / BEZIER_SAMPLES;
-            const b = cubicBezier(
-              pInX, pInY, curr.x, curr.y,
-              curr.x, curr.y, pOutX, pOutY, t,
-            );
-            points.push(new THREE.Vector3(b.x, GREEN_Y, b.y));
-          }
-        }
-      }
-
-      // Close the loop by appending a copy of the first point
-      if (isLoop && points.length > 0) {
-        points.push(points[0].clone());
-      }
+      // Green center line: smooth the cell centers directly
+      const points = smoothPolyline(pixels, isLoop, GREEN_Y);
 
       if (points.length >= 2) {
         const geom = new THREE.BufferGeometry().setFromPoints(points);
         group.add(new THREE.Line(geom, this.pathLineMat));
 
-        // Compute offset lane lines
-        const LANE_OFFSET = 2.5;
+        // Offset-then-smooth: offset cell centers first, then bezier-smooth each offset polyline
         const LANE_Y = GREEN_Y + 0.1;
-        const leftPoints: THREE.Vector3[] = [];
-        const rightPoints: THREE.Vector3[] = [];
-
-        for (let i = 0; i < points.length; i++) {
-          let tx: number, tz: number;
-          if (i === 0) {
-            tx = points[1].x - points[0].x;
-            tz = points[1].z - points[0].z;
-          } else if (i === points.length - 1) {
-            tx = points[i].x - points[i - 1].x;
-            tz = points[i].z - points[i - 1].z;
-          } else {
-            tx = points[i + 1].x - points[i - 1].x;
-            tz = points[i + 1].z - points[i - 1].z;
-          }
-          const len = Math.sqrt(tx * tx + tz * tz);
-          if (len > 0) { tx /= len; tz /= len; }
-          const nx = -tz;
-          const nz = tx;
-
-          leftPoints.push(new THREE.Vector3(
-            points[i].x + nx * LANE_OFFSET, LANE_Y, points[i].z + nz * LANE_OFFSET
-          ));
-          rightPoints.push(new THREE.Vector3(
-            points[i].x - nx * LANE_OFFSET, LANE_Y, points[i].z - nz * LANE_OFFSET
-          ));
-        }
-
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftPoints), this.laneLineMat));
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightPoints), this.laneLineMat));
-
-        // Compute road edge lines (larger offset)
-        const EDGE_OFFSET = 5;
         const EDGE_Y = LANE_Y + 0.1;
-        const leftEdge: THREE.Vector3[] = [];
-        const rightEdge: THREE.Vector3[] = [];
 
-        for (let i = 0; i < points.length; i++) {
-          let tx: number, tz: number;
-          if (i === 0) {
-            tx = points[1].x - points[0].x;
-            tz = points[1].z - points[0].z;
-          } else if (i === points.length - 1) {
-            tx = points[i].x - points[i - 1].x;
-            tz = points[i].z - points[i - 1].z;
-          } else {
-            tx = points[i + 1].x - points[i - 1].x;
-            tz = points[i + 1].z - points[i - 1].z;
+        const offsets: [number, number, THREE.LineBasicMaterial][] = [
+          [LANE_OFFSET, LANE_Y, this.laneLineMat],
+          [ROAD_HALF_WIDTH, EDGE_Y, this.edgeLineMat],
+        ];
+
+        for (const [offset, yLevel, mat] of offsets) {
+          const leftCenters = offsetChainCenters(pixels, +offset, isLoop);
+          const rightCenters = offsetChainCenters(pixels, -offset, isLoop);
+          const leftSmoothed = smoothPolyline(leftCenters, isLoop, yLevel);
+          const rightSmoothed = smoothPolyline(rightCenters, isLoop, yLevel);
+
+          if (leftSmoothed.length >= 2) {
+            group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftSmoothed), mat));
           }
-          const len = Math.sqrt(tx * tx + tz * tz);
-          if (len > 0) { tx /= len; tz /= len; }
-          const nx = -tz;
-          const nz = tx;
-
-          leftEdge.push(new THREE.Vector3(
-            points[i].x + nx * EDGE_OFFSET, EDGE_Y, points[i].z + nz * EDGE_OFFSET
-          ));
-          rightEdge.push(new THREE.Vector3(
-            points[i].x - nx * EDGE_OFFSET, EDGE_Y, points[i].z - nz * EDGE_OFFSET
-          ));
+          if (rightSmoothed.length >= 2) {
+            group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightSmoothed), mat));
+          }
         }
-
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftEdge), this.edgeLineMat));
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightEdge), this.edgeLineMat));
       }
     }
 
