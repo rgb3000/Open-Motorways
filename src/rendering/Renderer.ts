@@ -208,7 +208,6 @@ export class Renderer {
     // Update 3D meshes
     this.buildingLayer.update(this.scene, houses, businesses);
     this.carLayer.update(this.scene, cars, alpha);
-
     // Render
     this.webglRenderer.render(this.scene, this.camera);
   }
