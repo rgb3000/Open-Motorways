@@ -39,10 +39,10 @@ export class BuildingLayer {
   private bizPinGeom: THREE.SphereGeometry;
 
   // Cached shared materials
-  private plateMat = new THREE.MeshStandardMaterial({ color: '#AAAAAA' });
+  private plateMat = new THREE.MeshStandardMaterial({ color: '#F0F0F0' });
   private lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
   private chimneyMat = new THREE.MeshStandardMaterial({ color: '#666666' });
-  private slotMat = new THREE.MeshStandardMaterial({ color: '#AAAAAA' });
+  private slotMat = new THREE.MeshStandardMaterial({ color: '#CCCCCC' });
   private pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
 
   constructor() {

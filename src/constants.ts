@@ -74,11 +74,11 @@ export const COLOR_MAP: Record<GameColor, string> = {
 export const SPAWN_DEBUG = true;
 
 // Rendering colors
-export const BG_COLOR = '#F5F0E8';
-export const GRID_LINE_COLOR = '#D5CEC3';
-export const ROAD_COLOR = '#616161';
-export const ROAD_OUTLINE_COLOR = '#757575';
-export const ROAD_LANE_DIVIDER_COLOR = '#B0B0B0';
+export const BG_COLOR = '#E8D8B4';
+export const GRID_LINE_COLOR = '#D4C4A0';
+export const ROAD_COLOR = '#B8B8B8';
+export const ROAD_OUTLINE_COLOR = '#C0C0C0';
+export const ROAD_LANE_DIVIDER_COLOR = '#DDDDDD';
 export const ROAD_CORNER_RADIUS = 3.0; // px
 export const UI_TEXT_COLOR = '#333333';
 export const GAME_OVER_OVERLAY = 'rgba(0, 0, 0, 0.6)';

@@ -166,10 +166,19 @@ function buildRoadShapeMesh(
     shape.lineTo(smoothRight[i].x, -smoothRight[i].z);
   }
 
-  const geom = new THREE.ShapeGeometry(shape);
+  const geom = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.15,
+    bevelEnabled: true,
+    bevelThickness: 0.08,
+    bevelSize: 0.08,
+    bevelSegments: 2,
+    curveSegments: 1,
+  });
   const mesh = new THREE.Mesh(geom, material);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = yLevel;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
 
   return mesh;
 }
@@ -275,7 +284,39 @@ export class RoadLayer {
   private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
-  private roadSurfaceMat = new THREE.MeshBasicMaterial({ color: ROAD_COLOR, side: THREE.DoubleSide });
+  private roadNoiseTexture = RoadLayer.createRoadNoiseTexture();
+  private roadSurfaceMat = new THREE.MeshStandardMaterial({ color: ROAD_COLOR, side: THREE.DoubleSide, map: this.roadNoiseTexture });
+
+  private static createRoadNoiseTexture(): THREE.CanvasTexture {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const imgData = ctx.createImageData(size, size);
+    const data = imgData.data;
+
+    let seed = 77;
+    const rand = () => { seed = (seed * 16807 + 0) % 2147483647; return (seed & 0x7fffffff) / 0x7fffffff; };
+
+    for (let i = 0; i < size * size; i++) {
+      const fine = (rand() - 0.5) * 60;
+      const speckle = rand() < 0.15 ? (rand() - 0.5) * 90 : 0;
+      const v = 128 + Math.round(fine + speckle);
+      const idx = i * 4;
+      data[idx] = v;
+      data[idx + 1] = v;
+      data[idx + 2] = v;
+      data[idx + 3] = 255;
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(8, 8);
+    return tex;
+  }
 
   constructor(grid: Grid, getHouses: () => House[], getBusinesses: () => Business[]) {
     this.grid = grid;
@@ -594,5 +635,6 @@ export class RoadLayer {
     this.connectorCircleMat.dispose();
     this.circleGeom.dispose();
     this.roadSurfaceMat.dispose();
+    this.roadNoiseTexture.dispose();
   }
 }
