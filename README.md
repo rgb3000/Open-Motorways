@@ -45,16 +45,23 @@ npm run preview
 
 | Input | Action |
 |-------|--------|
-| **Left Click** + Drag | Draw roads |
-| **Right Click** + Drag | Erase roads |
-| **Shift** + Click | Build L-shaped road to clicked cell |
+| **Left Click** + Mouse Drag | Draw roads |
+| **Right Click** + Mous Drag | Erase roads |
+| **Shift** + Click | BAuto build road between two points |
 | **Scroll Wheel** | Zoom in/out |
 | **Space** + Drag | Pan the camera |
 | **+** / **=** | Zoom in |
 | **-** | Zoom out |
-| **1** | Road tool |
-| **2** | Bridge tool |
-| **Esc** / **P** | Pause/unpause |
+| **P** | Pause/unpause |
+
+## Future Plans
+
+Open Motorways aims to go beyond the original game. Here's what we're working towards:
+
+- **Bigger cities** 
+- **More road types** 
+- **More building types** 
+- **...**
 
 ## License
 
