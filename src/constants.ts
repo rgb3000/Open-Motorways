@@ -42,7 +42,7 @@ export const MIN_SPAWN_INTERVAL = 10;
 export const SPAWN_INTERVAL_DECAY = 0.97;
 export const HOUSE_SPAWN_PROBABILITY = 0.7;
 export const SPAWN_AREA_INTERVALS = [
-  { threshold: 0, inset: 0.45 },   //  0 entities: 10% of grid
+  { threshold: 0, inset: 0.42 },   //  0 entities: 10% of grid
   { threshold: 4, inset: 0.40 },   //  4 entities: 20% of grid
   { threshold: 8, inset: 0.35 },   //  8 entities: 30% of grid
   { threshold: 12, inset: 0.30 },  // 12 entities: 40% of grid

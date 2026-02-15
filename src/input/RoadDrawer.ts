@@ -336,6 +336,9 @@ export class RoadDrawer {
 
     // Mark road system dirty to trigger repath and redraw
     this.roadSystem.markDirty();
+
+    // Remember new connector position for shift auto-road
+    this.lastBuiltPos = { gx: newConnX, gy: newConnY };
   }
 
   private computeNextDragCell(lastPos: GridPos, canvasX: number, canvasY: number): GridPos | null {

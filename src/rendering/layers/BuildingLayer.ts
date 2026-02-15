@@ -36,7 +36,8 @@ export class BuildingLayer {
   private bizPlateGeomV: THREE.ExtrudeGeometry;
   private bizLotGeom: THREE.ExtrudeGeometry;
   private bizSlotGeom: THREE.BoxGeometry;
-  private bizPinGeom: THREE.SphereGeometry;
+  private bizPinGeom: THREE.CircleGeometry;
+  private bizPinOutlineGeom: THREE.RingGeometry;
 
   // Shared plate noise texture
   private plateNoiseTexture = BuildingLayer.createPlateNoiseTexture();
@@ -86,7 +87,8 @@ export class BuildingLayer {
   private lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
   private chimneyMat = new THREE.MeshStandardMaterial({ color: '#666666' });
   private slotMat = new THREE.MeshStandardMaterial({ color: '#CCCCCC' });
-  private pinMat = new THREE.MeshStandardMaterial({ color: 0xE74C3C });
+  private pinMat = new THREE.MeshBasicMaterial({ color: 0xE74C3C });
+  private pinOutlineMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
 
   constructor() {
     const size = TILE_SIZE * 0.75;
@@ -145,8 +147,9 @@ export class BuildingLayer {
     const slotD = lotSize * 0.4;
     this.bizSlotGeom = new THREE.BoxGeometry(slotW, 0.05, slotD);
 
-    // Demand pins
-    this.bizPinGeom = new THREE.SphereGeometry(3, 8, 8);
+    // Demand pins (flat circles with outline)
+    this.bizPinGeom = new THREE.CircleGeometry(2.5, 12);
+    this.bizPinOutlineGeom = new THREE.RingGeometry(2.5, 3.2, 12);
 
     this.initSharedResources();
   }
@@ -179,10 +182,22 @@ export class BuildingLayer {
         this.demandPinRefs.set(biz.id, pins);
       }
 
-      // Update demand pin visibility
+      // Update demand pin visibility and pulse when near max
       const pins = this.demandPinRefs.get(biz.id)!;
+      const shouldPulse = biz.demandPins >= MAX_DEMAND_PINS - 2;
+      const pulseScale = shouldPulse ? 1 + 0.25 * Math.sin(Date.now() * 0.006) : 1;
       for (let i = 0; i < MAX_DEMAND_PINS; i++) {
-        pins[i].visible = i < biz.demandPins;
+        const visible = i < biz.demandPins;
+        pins[i].visible = visible;
+        const outline = (pins[i] as any)._outline as THREE.Mesh | undefined;
+        if (outline) outline.visible = visible;
+        if (visible && shouldPulse) {
+          pins[i].scale.set(pulseScale, pulseScale, 1);
+          if (outline) outline.scale.set(pulseScale, pulseScale, 1);
+        } else if (visible) {
+          pins[i].scale.set(1, 1, 1);
+          if (outline) outline.scale.set(1, 1, 1);
+        }
       }
     }
   }
@@ -282,19 +297,29 @@ export class BuildingLayer {
       group.add(slot);
     }
 
-    // Demand pins (shared geometry + material)
-    const ringRadius = buildingSize / 2 + 6;
+    // Demand pins — flat circles in a row on top of the building
+    const pinSpacing = 8;
+    const totalWidth = (MAX_DEMAND_PINS - 1) * pinSpacing;
+    const pinY = buildingHeight + 3 + 1.6; // above tower
     const pins: THREE.Mesh[] = [];
     for (let i = 0; i < MAX_DEMAND_PINS; i++) {
-      const angle = (i / MAX_DEMAND_PINS) * Math.PI * 2 - Math.PI / 2;
+      const px = buildingPx - totalWidth / 2 + i * pinSpacing;
+      const pz = buildingPz;
+
+      // White outline ring
+      const outline = new THREE.Mesh(this.bizPinOutlineGeom, this.pinOutlineMat);
+      outline.rotation.x = -Math.PI / 2;
+      outline.position.set(px, pinY + 0.01, pz);
+      outline.visible = false;
+      group.add(outline);
+
+      // Red fill circle
       const pin = new THREE.Mesh(this.bizPinGeom, this.pinMat);
-      pin.position.set(
-        buildingPx + Math.cos(angle) * ringRadius,
-        0.5,
-        buildingPz + Math.sin(angle) * ringRadius,
-      );
-      pin.castShadow = true;
+      pin.rotation.x = -Math.PI / 2;
+      pin.position.set(px, pinY + 0.02, pz);
       pin.visible = false;
+      // Store reference to outline so we can toggle both
+      (pin as any)._outline = outline;
       group.add(pin);
       pins.push(pin);
     }
@@ -313,6 +338,8 @@ export class BuildingLayer {
     this.sharedResources.add(this.bizChimneyGeom);
     this.sharedResources.add(this.bizSlotGeom);
     this.sharedResources.add(this.bizPinGeom);
+    this.sharedResources.add(this.bizPinOutlineGeom);
+    this.sharedResources.add(this.pinOutlineMat);
   }
 
   private disposeGroup(group: THREE.Group): void {
@@ -350,6 +377,8 @@ export class BuildingLayer {
     this.bizChimneyGeom.dispose();
     this.bizSlotGeom.dispose();
     this.bizPinGeom.dispose();
+    this.bizPinOutlineGeom.dispose();
+    this.pinOutlineMat.dispose();
     this.plateMat.dispose();
     this.plateNoiseTexture.dispose();
     this.lotMat.dispose();
