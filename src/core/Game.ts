@@ -14,7 +14,7 @@ import { CarSystem } from '../systems/CarSystem';
 import { MusicSystem } from '../systems/MusicSystem';
 import { SoundEffectSystem } from '../systems/SoundEffectSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
-import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG } from '../constants';
+import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG, MAX_DEMAND_PINS } from '../constants';
 
 export class Game {
   private webglRenderer: THREE.WebGLRenderer;
@@ -26,6 +26,7 @@ export class Game {
   private roadSystem: RoadSystem;
   private spawnSystem: SpawnSystem;
   private demandSystem: DemandSystem;
+  private demandWarnTimer = 0;
   private carSystem: CarSystem;
   private pathfinder: Pathfinder;
   private musicSystem: MusicSystem = new MusicSystem();
@@ -202,6 +203,7 @@ export class Game {
     this.pathfinder = new Pathfinder(this.grid);
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
+    this.demandWarnTimer = 0;
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.money = STARTING_MONEY;
     this.undoSystem = new UndoSystem(this.grid);
@@ -279,8 +281,15 @@ export class Game {
     }
 
     this.demandSystem.update(dt, this.spawnSystem.getBusinesses());
-    if (this.demandSystem.isWarning) {
-      this.soundEffectSystem.playDemandWarning();
+    const hasWarning = this.spawnSystem.getBusinesses().some(b => b.demandPins >= MAX_DEMAND_PINS - 2);
+    if (hasWarning) {
+      this.demandWarnTimer += dt;
+      if (this.demandWarnTimer >= 5) {
+        this.demandWarnTimer = 0;
+        this.soundEffects.playDemandWarning();
+      }
+    } else {
+      this.demandWarnTimer = 0;
     }
     this.carSystem.update(dt, this.spawnSystem.getHouses(), this.spawnSystem.getBusinesses());
 

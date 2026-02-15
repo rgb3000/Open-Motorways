@@ -19,7 +19,7 @@ const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
 
 const CIRCLE_RADIUS = 3;
 const CIRCLE_SEGMENTS = 16;
-const LINE_Y = 0.5;
+const LINE_Y = 0.6;
 const BEZIER_SAMPLES = 20;
 const SMOOTH_T = 0.75;
 
