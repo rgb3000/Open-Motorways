@@ -620,8 +620,28 @@ export class CarSystem {
         car.destination = home.pos;
         this.assignPath(car, homePath);
         if (car.smoothPath.length >= 2) {
-          car.pixelPos.x = car.smoothPath[0].x;
-          car.pixelPos.y = car.smoothPath[0].y;
+          // Prepend current parking slot position to smooth path
+          // so the car visually drives out of its slot
+          const slotPos = { x: car.pixelPos.x, y: car.pixelPos.y };
+          const firstPathPt = car.smoothPath[0];
+          const dxSlot = firstPathPt.x - slotPos.x;
+          const dySlot = firstPathPt.y - slotPos.y;
+          const slotDist = Math.sqrt(dxSlot * dxSlot + dySlot * dySlot);
+
+          // Prepend slot position to smooth path
+          car.smoothPath.unshift(slotPos);
+          // Shift all cumulative distances by slotDist
+          for (let i = 0; i < car.smoothCumDist.length; i++) {
+            car.smoothCumDist[i] += slotDist;
+          }
+          car.smoothCumDist.unshift(0);
+          // Shift smoothCellDist so interpolateCarPosition maps pathIndex
+          // to the correct distance on the now-extended smooth path
+          for (let i = 0; i < car.smoothCellDist.length; i++) {
+            car.smoothCellDist[i] += slotDist;
+          }
+
+          // Keep pixelPos at current parking slot position (no jump)
           car.prevPixelPos.x = car.pixelPos.x;
           car.prevPixelPos.y = car.pixelPos.y;
           const initDir = getDirection(homePath[0], homePath[1]);

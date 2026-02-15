@@ -519,24 +519,23 @@ export class RoadLayer {
       if (chain) chains.push(chain);
     }
 
-    // Extend chains that end at Connectors into their House/ParkingLot
-    for (const chain of chains) {
-      for (const endIdx of [0, chain.length - 1] as const) {
-        const key = chain[endIdx];
-        const gx = key % GRID_COLS;
-        const gy = Math.floor(key / GRID_COLS);
+    // Add straight spur chains from every Connector to its House/ParkingLot.
+    // These are always separate 2-node chains (not appended to main chains)
+    // so they render as straight segments without unwanted Bezier curves.
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
-        if (cell?.type !== CellType.Connector) continue;
+        if (!cell || cell.type !== CellType.Connector) continue;
+        if (cell.roadConnections.length === 0) continue;
 
+        const key = cellKey(gx, gy);
         for (const dir of cell.roadConnections) {
           const off = DIRECTION_OFFSETS[dir];
           const nx = gx + off.dx;
           const ny = gy + off.dy;
           const nCell = this.grid.getCell(nx, ny);
           if (nCell?.type === CellType.House || nCell?.type === CellType.ParkingLot) {
-            const nKey = cellKey(nx, ny);
-            if (endIdx === 0) chain.unshift(nKey);
-            else chain.push(nKey);
+            chains.push([key, cellKey(nx, ny)]);
             break;
           }
         }
