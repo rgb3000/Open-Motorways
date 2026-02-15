@@ -239,10 +239,10 @@ export class CarSystem {
       for (const house of availableHouses) {
         if (dispatched >= neededCars) break;
 
-        const path = this.pathfinder.findPath(house.connectorPos, biz.parkingLotPos);
+        const path = this.pathfinder.findPath(house.pos, biz.parkingLotPos);
         if (!path) continue;
 
-        const car = new Car(house.id, house.color, house.connectorPos);
+        const car = new Car(house.id, house.color, house.pos);
         car.state = CarState.GoingToBusiness;
         car.targetBusinessId = biz.id;
         car.destination = biz.parkingLotPos;
@@ -657,7 +657,7 @@ export class CarSystem {
     // Path home from connector
     const home = houses.find(h => h.id === car.homeHouseId);
     if (home) {
-      const homePath = this.pathfinder.findPath(biz.connectorPos, home.pos);
+      const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
       if (homePath) {
         car.state = CarState.GoingHome;
         car.targetBusinessId = null;
@@ -666,7 +666,7 @@ export class CarSystem {
         car.path = homePath;
         car.pathIndex = 0;
         car.segmentProgress = 0;
-        const center = gridToPixelCenter(biz.connectorPos);
+        const center = gridToPixelCenter(biz.parkingLotPos);
         car.pixelPos.x = center.x;
         car.pixelPos.y = center.y;
         car.prevPixelPos.x = center.x;
@@ -684,7 +684,7 @@ export class CarSystem {
         car.path = [];
         car.pathIndex = 0;
         car.segmentProgress = 0;
-        const center = gridToPixelCenter(biz.connectorPos);
+        const center = gridToPixelCenter(biz.parkingLotPos);
         car.pixelPos.x = center.x;
         car.pixelPos.y = center.y;
         car.prevPixelPos.x = center.x;
@@ -766,7 +766,7 @@ export class CarSystem {
           // Just path home immediately
           const home = houses.find(h => h.id === car.homeHouseId);
           if (home) {
-            const homePath = this.pathfinder.findPath(biz.connectorPos, home.pos);
+            const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
             if (homePath) {
               car.state = CarState.GoingHome;
               car.targetBusinessId = null;
@@ -774,7 +774,7 @@ export class CarSystem {
               car.path = homePath;
               car.pathIndex = 0;
               car.segmentProgress = 0;
-              const center = gridToPixelCenter(biz.connectorPos);
+              const center = gridToPixelCenter(biz.parkingLotPos);
               car.pixelPos.x = center.x;
               car.pixelPos.y = center.y;
               if (homePath.length >= 2) {
