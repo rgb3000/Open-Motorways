@@ -31,6 +31,7 @@ export class RoadLayer {
   private connectorLineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
   private pathLineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 3 });
   private laneLineMat = new THREE.LineBasicMaterial({ color: 0x0088ff, linewidth: 2 });
+  private edgeLineMat = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 2 });
   private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
@@ -137,9 +138,9 @@ export class RoadLayer {
     const BEZIER_SAMPLES = 8;
     const SMOOTH_T = 0.75;
 
-    // Build adjacency: for each road cell, store its connected neighbors
+    // Build adjacency with direction info
     const cellKey = (gx: number, gy: number) => gy * GRID_COLS + gx;
-    const adjacency = new Map<number, number[]>();
+    const adjacency = new Map<number, Array<{ neighbor: number; dir: Direction }>>();
 
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
@@ -148,18 +149,32 @@ export class RoadLayer {
         if (cell.roadConnections.length === 0) continue;
 
         const key = cellKey(gx, gy);
-        const neighbors: number[] = [];
+        const neighbors: Array<{ neighbor: number; dir: Direction }> = [];
         for (const dir of cell.roadConnections) {
           const off = DIRECTION_OFFSETS[dir];
-          neighbors.push(cellKey(gx + off.dx, gy + off.dy));
+          neighbors.push({ neighbor: cellKey(gx + off.dx, gy + off.dy), dir });
         }
         adjacency.set(key, neighbors);
       }
     }
 
-    // Trace chains: find endpoints (1 connection) and intersections (3+) as start points
+    // Opposite direction lookup for routing chains through intersections
+    const oppositeDir: Record<Direction, Direction> = {
+      [Direction.Up]: Direction.Down,
+      [Direction.Down]: Direction.Up,
+      [Direction.Left]: Direction.Right,
+      [Direction.Right]: Direction.Left,
+      [Direction.UpLeft]: Direction.DownRight,
+      [Direction.DownRight]: Direction.UpLeft,
+      [Direction.UpRight]: Direction.DownLeft,
+      [Direction.DownLeft]: Direction.UpRight,
+    };
+
+    // Trace chains, routing through intersections when opposite directions pair up
     const visited = new Set<string>(); // edge keys "a-b"
     const edgeKey = (a: number, b: number) => a < b ? `${a}-${b}` : `${b}-${a}`;
+    // Track which through-pairs at intersections have been used
+    const usedThroughPairs = new Set<string>(); // "nodeKey-dir"
 
     const chains: number[][] = [];
     const startNodes: number[] = [];
@@ -170,69 +185,103 @@ export class RoadLayer {
       }
     }
 
-    // Walk chains from each start node
-    for (const start of startNodes) {
-      const neighbors = adjacency.get(start)!;
-      for (const next of neighbors) {
-        const ek = edgeKey(start, next);
-        if (visited.has(ek)) continue;
-        visited.add(ek);
+    // Given prev and curr node keys, determine the direction from prev to curr
+    const getDirection = (prevKey: number, currKey: number): Direction | null => {
+      const prevNeighbors = adjacency.get(prevKey);
+      if (!prevNeighbors) return null;
+      const entry = prevNeighbors.find(e => e.neighbor === currKey);
+      return entry ? entry.dir : null;
+    };
 
-        const chain = [start, next];
-        let prev = start;
-        let curr = next;
+    // Try to continue a chain through an intersection node
+    const tryPassThrough = (prevKey: number, currKey: number): number | null => {
+      const incomingDir = getDirection(prevKey, currKey);
+      if (incomingDir === null) return null;
 
-        // Walk until we hit an endpoint/intersection or dead end
-        while (true) {
-          const currNeighbors = adjacency.get(curr);
-          if (!currNeighbors || currNeighbors.length !== 2) break;
+      // The "through" direction is the opposite of incoming
+      const throughDir = oppositeDir[incomingDir];
+      const currNeighbors = adjacency.get(currKey);
+      if (!currNeighbors) return null;
 
-          const nextNode = currNeighbors[0] === prev ? currNeighbors[1] : currNeighbors[0];
-          const ek2 = edgeKey(curr, nextNode);
+      const throughEntry = currNeighbors.find(e => e.dir === throughDir);
+      if (!throughEntry) return null;
+
+      // Check if this through-pair hasn't been used yet
+      const pairKeyIn = `${currKey}-${incomingDir}`;
+      const pairKeyOut = `${currKey}-${throughDir}`;
+      if (usedThroughPairs.has(pairKeyIn) || usedThroughPairs.has(pairKeyOut)) return null;
+
+      // Mark both directions as used at this intersection
+      usedThroughPairs.add(pairKeyIn);
+      usedThroughPairs.add(pairKeyOut);
+
+      return throughEntry.neighbor;
+    };
+
+    // Walk a chain from start→next, continuing through intersections when possible
+    const walkChain = (start: number, next: number): number[] | null => {
+      const ek = edgeKey(start, next);
+      if (visited.has(ek)) return null;
+      visited.add(ek);
+
+      const chain = [start, next];
+      let prev = start;
+      let curr = next;
+
+      while (true) {
+        const currNeighbors = adjacency.get(curr);
+        if (!currNeighbors) break;
+
+        if (currNeighbors.length === 2) {
+          // Simple degree-2 node: continue normally
+          const nextEntry = currNeighbors[0].neighbor === prev ? currNeighbors[1] : currNeighbors[0];
+          const ek2 = edgeKey(curr, nextEntry.neighbor);
           if (visited.has(ek2)) break;
           visited.add(ek2);
 
-          chain.push(nextNode);
+          chain.push(nextEntry.neighbor);
           prev = curr;
-          curr = nextNode;
-        }
+          curr = nextEntry.neighbor;
+        } else {
+          // Intersection or endpoint: try to pass through
+          const throughNode = tryPassThrough(prev, curr);
+          if (throughNode === null) break;
 
-        chains.push(chain);
+          const ek2 = edgeKey(curr, throughNode);
+          if (visited.has(ek2)) break;
+          visited.add(ek2);
+
+          chain.push(throughNode);
+          prev = curr;
+          curr = throughNode;
+        }
+      }
+
+      return chain;
+    };
+
+    // Walk chains from each start node
+    for (const start of startNodes) {
+      const neighbors = adjacency.get(start)!;
+      for (const entry of neighbors) {
+        const chain = walkChain(start, entry.neighbor);
+        if (chain) chains.push(chain);
       }
     }
 
     // Also handle pure loops (all degree-2, no start nodes found them)
     for (const [node, neighbors] of adjacency) {
       if (neighbors.length !== 2) continue;
-      for (const next of neighbors) {
-        const ek = edgeKey(node, next);
-        if (visited.has(ek)) continue;
-        visited.add(ek);
-
-        const chain = [node, next];
-        let prev = node;
-        let curr = next;
-
-        while (true) {
-          const currNeighbors = adjacency.get(curr);
-          if (!currNeighbors || currNeighbors.length !== 2) break;
-
-          const nextNode = currNeighbors[0] === prev ? currNeighbors[1] : currNeighbors[0];
-          const ek2 = edgeKey(curr, nextNode);
-          if (visited.has(ek2)) break;
-          visited.add(ek2);
-
-          chain.push(nextNode);
-          prev = curr;
-          curr = nextNode;
-        }
-
-        chains.push(chain);
-      }
+      const chain = walkChain(node, neighbors[0].neighbor);
+      if (chain) chains.push(chain);
     }
 
     // Convert chains to pixel coords and draw with bezier smoothing
     for (const chain of chains) {
+      // Detect closed loops (first node == last node)
+      const isLoop = chain.length > 2 && chain[0] === chain[chain.length - 1];
+      if (isLoop) chain.pop(); // Remove duplicate end node
+
       const pixels = chain.map((key) => {
         const gx = key % GRID_COLS;
         const gy = Math.floor(key / GRID_COLS);
@@ -240,17 +289,20 @@ export class RoadLayer {
       });
 
       const points: THREE.Vector3[] = [];
+      const len = pixels.length;
 
-      for (let i = 0; i < pixels.length; i++) {
+      for (let i = 0; i < len; i++) {
         const curr = pixels[i];
 
-        if (i === 0 || i === pixels.length - 1) {
+        // For non-loops, endpoints get no smoothing
+        if (!isLoop && (i === 0 || i === len - 1)) {
           points.push(new THREE.Vector3(curr.x, GREEN_Y, curr.y));
           continue;
         }
 
-        const prev = pixels[i - 1];
-        const next = pixels[i + 1];
+        // Use modular indexing for loops, normal indexing for open chains
+        const prev = isLoop ? pixels[(i - 1 + len) % len] : pixels[i - 1];
+        const next = isLoop ? pixels[(i + 1) % len] : pixels[i + 1];
 
         const dxIn = curr.x - prev.x;
         const dyIn = curr.y - prev.y;
@@ -287,12 +339,17 @@ export class RoadLayer {
         }
       }
 
+      // Close the loop by appending a copy of the first point
+      if (isLoop && points.length > 0) {
+        points.push(points[0].clone());
+      }
+
       if (points.length >= 2) {
         const geom = new THREE.BufferGeometry().setFromPoints(points);
         group.add(new THREE.Line(geom, this.pathLineMat));
 
         // Compute offset lane lines
-        const LANE_OFFSET = 5;
+        const LANE_OFFSET = 2.5;
         const LANE_Y = GREEN_Y + 0.1;
         const leftPoints: THREE.Vector3[] = [];
         const rightPoints: THREE.Vector3[] = [];
@@ -324,6 +381,40 @@ export class RoadLayer {
 
         group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftPoints), this.laneLineMat));
         group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightPoints), this.laneLineMat));
+
+        // Compute road edge lines (larger offset)
+        const EDGE_OFFSET = 5;
+        const EDGE_Y = LANE_Y + 0.1;
+        const leftEdge: THREE.Vector3[] = [];
+        const rightEdge: THREE.Vector3[] = [];
+
+        for (let i = 0; i < points.length; i++) {
+          let tx: number, tz: number;
+          if (i === 0) {
+            tx = points[1].x - points[0].x;
+            tz = points[1].z - points[0].z;
+          } else if (i === points.length - 1) {
+            tx = points[i].x - points[i - 1].x;
+            tz = points[i].z - points[i - 1].z;
+          } else {
+            tx = points[i + 1].x - points[i - 1].x;
+            tz = points[i + 1].z - points[i - 1].z;
+          }
+          const len = Math.sqrt(tx * tx + tz * tz);
+          if (len > 0) { tx /= len; tz /= len; }
+          const nx = -tz;
+          const nz = tx;
+
+          leftEdge.push(new THREE.Vector3(
+            points[i].x + nx * EDGE_OFFSET, EDGE_Y, points[i].z + nz * EDGE_OFFSET
+          ));
+          rightEdge.push(new THREE.Vector3(
+            points[i].x - nx * EDGE_OFFSET, EDGE_Y, points[i].z - nz * EDGE_OFFSET
+          ));
+        }
+
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(leftEdge), this.edgeLineMat));
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightEdge), this.edgeLineMat));
       }
     }
 
@@ -349,6 +440,7 @@ export class RoadLayer {
     this.connectorLineMat.dispose();
     this.pathLineMat.dispose();
     this.laneLineMat.dispose();
+    this.edgeLineMat.dispose();
     this.circleMat.dispose();
     this.connectorCircleMat.dispose();
     this.circleGeom.dispose();
