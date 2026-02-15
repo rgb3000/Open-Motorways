@@ -64,6 +64,9 @@ export const COLOR_MAP: Record<GameColor, string> = {
   [GameColor.Orange]: '#E67E22',
 };
 
+// Debug
+export const SPAWN_DEBUG = true;
+
 // Rendering colors
 export const BG_COLOR = '#F5F0E8';
 export const GRID_LINE_COLOR = '#D5CEC3';

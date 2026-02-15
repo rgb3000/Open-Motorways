@@ -9,6 +9,7 @@ import { TerrainLayer } from './layers/TerrainLayer';
 import { RoadLayer } from './layers/RoadLayer';
 import { BuildingLayer } from './layers/BuildingLayer';
 import { CarLayer } from './layers/CarLayer';
+import { DebugLayer } from './layers/DebugLayer';
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
@@ -25,6 +26,7 @@ export class Renderer {
   private roadLayer: RoadLayer;
   private buildingLayer: BuildingLayer;
   private carLayer: CarLayer;
+  private debugLayer: DebugLayer;
 
   private offscreenCanvas: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
@@ -91,6 +93,7 @@ export class Renderer {
     this.roadLayer = new RoadLayer(grid, getHouses, getBusinesses);
     this.buildingLayer = new BuildingLayer();
     this.carLayer = new CarLayer();
+    this.debugLayer = new DebugLayer();
 
     // Render initial ground state (terrain only, roads are 3D)
     this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -184,6 +187,7 @@ export class Renderer {
     houses: House[],
     businesses: Business[],
     cars: Car[],
+    spawnBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null,
   ): void {
     // Smooth zoom/pan animation
     this.updateCamera();
@@ -208,6 +212,7 @@ export class Renderer {
     // Update 3D meshes
     this.buildingLayer.update(this.scene, houses, businesses);
     this.carLayer.update(this.scene, cars, alpha);
+    this.debugLayer.update(this.scene, spawnBounds);
     // Render
     this.webglRenderer.render(this.scene, this.camera);
   }
@@ -216,6 +221,7 @@ export class Renderer {
     this.roadLayer.dispose(this.scene);
     this.buildingLayer.dispose(this.scene);
     this.carLayer.dispose(this.scene);
+    this.debugLayer.dispose(this.scene);
 
     // Dispose all remaining scene objects
     this.scene.traverse((obj) => {

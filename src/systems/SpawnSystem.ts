@@ -225,7 +225,7 @@ export class SpawnSystem {
     });
   }
 
-  private getSpawnBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
+  getSpawnBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
     const totalEntities = this.houses.length + this.businesses.length;
     let inset = SPAWN_AREA_INTERVALS[0].inset;
     for (const interval of SPAWN_AREA_INTERVALS) {

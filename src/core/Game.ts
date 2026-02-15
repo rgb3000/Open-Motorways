@@ -14,7 +14,7 @@ import { CarSystem } from '../systems/CarSystem';
 import { MusicSystem } from '../systems/MusicSystem';
 import { SoundEffectSystem } from '../systems/SoundEffectSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
-import { STARTING_MONEY, DELIVERY_REWARD } from '../constants';
+import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG } from '../constants';
 
 export class Game {
   private webglRenderer: THREE.WebGLRenderer;
@@ -293,6 +293,7 @@ export class Game {
       this.spawnSystem.getHouses(),
       this.spawnSystem.getBusinesses(),
       this.carSystem.getCars(),
+      SPAWN_DEBUG ? this.spawnSystem.getSpawnBounds() : null,
     );
     this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money);
   }
