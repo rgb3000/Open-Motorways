@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { Grid } from '../../core/Grid';
+import type { House } from '../../entities/House';
+import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
 
@@ -20,14 +22,18 @@ const LINE_Y = 0.5;
 
 export class RoadLayer {
   private grid: Grid;
+  private getHouses: () => House[];
+  private getBusinesses: () => Business[];
   private group: THREE.Group | null = null;
 
   private lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
   private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
 
-  constructor(grid: Grid) {
+  constructor(grid: Grid, getHouses: () => House[], getBusinesses: () => Business[]) {
     this.grid = grid;
+    this.getHouses = getHouses;
+    this.getBusinesses = getBusinesses;
   }
 
   update(scene: THREE.Scene): void {
@@ -71,6 +77,34 @@ export class RoadLayer {
           group.add(line);
         }
       }
+    }
+
+    // Connector lines: house connector → house center
+    for (const house of this.getHouses()) {
+      const hcx = house.pos.gx * TILE_SIZE + half;
+      const hcz = house.pos.gy * TILE_SIZE + half;
+      const ccx = house.connectorPos.gx * TILE_SIZE + half;
+      const ccz = house.connectorPos.gy * TILE_SIZE + half;
+      const points = [
+        new THREE.Vector3(ccx, LINE_Y, ccz),
+        new THREE.Vector3(hcx, LINE_Y, hcz),
+      ];
+      const geom = new THREE.BufferGeometry().setFromPoints(points);
+      group.add(new THREE.Line(geom, this.lineMat));
+    }
+
+    // Connector lines: business connector → parking lot center
+    for (const biz of this.getBusinesses()) {
+      const pcx = biz.parkingLotPos.gx * TILE_SIZE + half;
+      const pcz = biz.parkingLotPos.gy * TILE_SIZE + half;
+      const ccx = biz.connectorPos.gx * TILE_SIZE + half;
+      const ccz = biz.connectorPos.gy * TILE_SIZE + half;
+      const points = [
+        new THREE.Vector3(ccx, LINE_Y, ccz),
+        new THREE.Vector3(pcx, LINE_Y, pcz),
+      ];
+      const geom = new THREE.BufferGeometry().setFromPoints(points);
+      group.add(new THREE.Line(geom, this.lineMat));
     }
 
     this.group = group;

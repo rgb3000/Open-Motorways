@@ -104,12 +104,22 @@ export class RoadDrawer {
           const dx = gridPos.gx - house.pos.gx;
           const dy = gridPos.gy - house.pos.gy;
 
-          // Determine direction from house toward cursor
+          // Determine direction from house toward cursor (8 directions)
           let newDir: Direction;
-          if (Math.abs(dx) >= Math.abs(dy)) {
+          const adx = Math.abs(dx);
+          const ady = Math.abs(dy);
+          if (adx > 2 * ady) {
             newDir = dx >= 0 ? Direction.Right : Direction.Left;
-          } else {
+          } else if (ady > 2 * adx) {
             newDir = dy >= 0 ? Direction.Down : Direction.Up;
+          } else if (dx > 0 && dy > 0) {
+            newDir = Direction.DownRight;
+          } else if (dx > 0 && dy < 0) {
+            newDir = Direction.UpRight;
+          } else if (dx < 0 && dy > 0) {
+            newDir = Direction.DownLeft;
+          } else {
+            newDir = Direction.UpLeft;
           }
 
           if (newDir !== house.connectorDir) {

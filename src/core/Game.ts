@@ -57,7 +57,7 @@ export class Game {
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
-    this.renderer = new Renderer(this.webglRenderer, this.grid);
+    this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.resize(window.innerWidth, window.innerHeight);
 
     this.input = new InputHandler(

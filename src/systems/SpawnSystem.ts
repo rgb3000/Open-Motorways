@@ -150,7 +150,10 @@ export class SpawnSystem {
     this.dirty = true;
 
     // Find an empty adjacent cell for the connector
-    const tryDirs = [Direction.Down, Direction.Right, Direction.Up, Direction.Left];
+    const tryDirs = [
+      Direction.Down, Direction.Right, Direction.Up, Direction.Left,
+      Direction.DownRight, Direction.DownLeft, Direction.UpRight, Direction.UpLeft,
+    ];
     let connDir: Direction = Direction.Down;
     for (const dir of tryDirs) {
       const off = this.grid.getDirectionOffset(dir);

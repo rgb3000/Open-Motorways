@@ -43,7 +43,7 @@ export class Renderer {
   private viewportWidth = CANVAS_WIDTH;
   private viewportHeight = CANVAS_HEIGHT;
 
-  constructor(webglRenderer: THREE.WebGLRenderer, grid: Grid) {
+  constructor(webglRenderer: THREE.WebGLRenderer, grid: Grid, getHouses: () => House[] = () => [], getBusinesses: () => Business[] = () => []) {
     this.webglRenderer = webglRenderer;
 
     // Scene
@@ -88,7 +88,7 @@ export class Renderer {
 
     // Layers
     this.terrainLayer = new TerrainLayer();
-    this.roadLayer = new RoadLayer(grid);
+    this.roadLayer = new RoadLayer(grid, getHouses, getBusinesses);
     this.buildingLayer = new BuildingLayer();
     this.carLayer = new CarLayer();
 
