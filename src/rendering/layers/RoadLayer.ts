@@ -47,7 +47,7 @@ export class RoadLayer {
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
-        if (!cell || cell.type !== CellType.Road) continue;
+        if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) continue;
 
         const cx = gx * TILE_SIZE + half;
         const cz = gy * TILE_SIZE + half;

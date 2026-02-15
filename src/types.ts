@@ -24,6 +24,7 @@ export const CellType = {
   House: 2,
   Business: 3,
   ParkingLot: 4,
+  Connector: 5,
 } as const;
 export type CellType = (typeof CellType)[keyof typeof CellType];
 

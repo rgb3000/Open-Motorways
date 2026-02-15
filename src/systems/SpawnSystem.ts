@@ -180,10 +180,10 @@ export class SpawnSystem {
       connectorDir: connDir,
     });
 
-    // Connector road cell owned by the house
+    // Connector cell owned by the house
     const connToHouseDir = house.getConnectorToHouseDir();
     this.grid.setCell(house.connectorPos.gx, house.connectorPos.gy, {
-      type: CellType.Road,
+      type: CellType.Connector,
       entityId: house.id,
       color: null,
       roadConnections: [connToHouseDir],
@@ -226,11 +226,10 @@ export class SpawnSystem {
       connectorDir: null,
     });
 
-    // Connector cell: a Road cell owned by the business
-    // Pre-populate roadConnections with direction toward parking lot
+    // Connector cell owned by the business
     const connToParkingDir = business.getConnectorToParkingDir();
     this.grid.setCell(business.connectorPos.gx, business.connectorPos.gy, {
-      type: CellType.Road,
+      type: CellType.Connector,
       entityId: business.id,
       color: null,
       roadConnections: [connToParkingDir],

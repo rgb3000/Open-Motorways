@@ -96,7 +96,7 @@ export class Pathfinder {
         }
 
         // Check road connections for exit from current cell
-        if (currentCell && currentCell.type === CellType.Road) {
+        if (currentCell && (currentCell.type === CellType.Road || currentCell.type === CellType.Connector)) {
           if (currentCell.hasBridge && currentCell.bridgeAxis) {
             // Bridge level uses bridgeConnections, ground level uses roadConnections
             if (current.level === TrafficLevel.Bridge) {

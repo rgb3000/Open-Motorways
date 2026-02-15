@@ -23,7 +23,8 @@ function tileKey(gx: number, gy: number): string {
 
 function isIntersection(grid: Grid, gx: number, gy: number): boolean {
   const cell = grid.getCell(gx, gy);
-  if (!cell || cell.type !== CellType.Road) return false;
+  if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
+  if (cell.type === CellType.Connector) return false;
   if (cell.hasBridge) return false;
   return cell.roadConnections.length >= 3;
 }
@@ -566,6 +567,7 @@ export class CarSystem {
       const isFinalTile = car.pathIndex + 1 === car.path.length - 1;
       const isTraversable = cell && (
         cell.type === CellType.Road ||
+        cell.type === CellType.Connector ||
         (isFinalTile && (cell.type === CellType.House || cell.type === CellType.ParkingLot))
       );
 

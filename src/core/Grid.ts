@@ -78,7 +78,7 @@ export class Grid {
     for (const dir of this.getAllDirections()) {
       const n = this.getNeighbor(gx, gy, dir);
       if (!n) continue;
-      if (n.cell.type === CellType.Road || n.cell.type === CellType.House || n.cell.type === CellType.ParkingLot) {
+      if (n.cell.type === CellType.Road || n.cell.type === CellType.Connector || n.cell.type === CellType.House || n.cell.type === CellType.ParkingLot) {
         results.push({ dir, gx: n.gx, gy: n.gy });
       }
     }

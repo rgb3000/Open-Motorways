@@ -95,7 +95,7 @@ export class RoadDrawer {
             this.prevPlacedPos = { ...gridPos };
             this.lastBuiltPos = { ...gridPos };
           } else {
-            const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.House || cell.type === CellType.Business);
+            const isOccupied = cell && (cell.type === CellType.Road || cell.type === CellType.Connector || cell.type === CellType.House || cell.type === CellType.Business);
 
             if (isOccupied) {
               this.prevPlacedPos = { ...gridPos };
@@ -236,7 +236,7 @@ export class RoadDrawer {
     const oldConnectorPos = house.connectorPos;
     const oldDir = house.connectorDir;
 
-    // Check target cell is empty
+    // Check target cell is empty or road (can place connector there)
     const off = this.grid.getDirectionOffset(newDir);
     const newConnX = house.pos.gx + off.gx;
     const newConnY = house.pos.gy + off.gy;
@@ -250,30 +250,41 @@ export class RoadDrawer {
     this.undoSystem.snapshotCellAndNeighbors(house.pos.gx, house.pos.gy);
     this.undoSystem.setHouseConnectorChange(house, oldDir);
 
-    // Remove old connector cell — disconnect from neighbors first
+    // Remove old connector cell — preserve underlying road if it had other connections
     const oldCell = this.grid.getCell(oldConnectorPos.gx, oldConnectorPos.gy);
-    if (oldCell && oldCell.type === CellType.Road) {
-      // Disconnect neighbors from old connector (except permanent house connection)
-      for (const dir of this.grid.getAllDirections()) {
-        const neighbor = this.grid.getNeighbor(oldConnectorPos.gx, oldConnectorPos.gy, dir);
-        if (!neighbor) continue;
-        const oppDir = OPPOSITE_DIR[dir];
-        // Skip the house cell
-        if (neighbor.cell.type === CellType.House) continue;
-        neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
-      }
+    if (oldCell && oldCell.type === CellType.Connector) {
+      // Filter out the connection to the house to find remaining road connections
+      const connToHouseDirOld = house.getConnectorToHouseDir();
+      const remainingConnections = oldCell.roadConnections.filter(d => d !== connToHouseDirOld);
 
-      // Clear old connector cell
-      this.grid.setCell(oldConnectorPos.gx, oldConnectorPos.gy, {
-        type: CellType.Empty,
-        entityId: null,
-        roadConnections: [],
-        color: null,
-        hasBridge: false,
-        bridgeAxis: null,
-        bridgeConnections: [],
-        connectorDir: null,
-      });
+      if (remainingConnections.length > 0) {
+        // Revert to Road — preserve road connections
+        this.grid.setCell(oldConnectorPos.gx, oldConnectorPos.gy, {
+          type: CellType.Road,
+          entityId: null,
+          roadConnections: remainingConnections,
+        });
+      } else {
+        // No remaining connections — disconnect neighbors and revert to Empty
+        for (const dir of this.grid.getAllDirections()) {
+          const neighbor = this.grid.getNeighbor(oldConnectorPos.gx, oldConnectorPos.gy, dir);
+          if (!neighbor) continue;
+          const oppDir = OPPOSITE_DIR[dir];
+          if (neighbor.cell.type === CellType.House) continue;
+          neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
+        }
+
+        this.grid.setCell(oldConnectorPos.gx, oldConnectorPos.gy, {
+          type: CellType.Empty,
+          entityId: null,
+          roadConnections: [],
+          color: null,
+          hasBridge: false,
+          bridgeAxis: null,
+          bridgeConnections: [],
+          connectorDir: null,
+        });
+      }
     }
 
     // Update house
@@ -284,19 +295,20 @@ export class RoadDrawer {
       connectorDir: newDir,
     });
 
-    // Place new connector road cell (merge into existing road or create fresh)
+    // Place new connector cell (merge into existing road or create fresh)
     const connToHouseDir = house.getConnectorToHouseDir();
     if (targetIsRoad) {
-      // Merge: add house connection to existing road cell
+      // Convert Road to Connector, preserving existing road connections
       if (!targetCell.roadConnections.includes(connToHouseDir)) {
         targetCell.roadConnections.push(connToHouseDir);
       }
       this.grid.setCell(newConnX, newConnY, {
+        type: CellType.Connector,
         entityId: house.id,
       });
     } else {
       this.grid.setCell(newConnX, newConnY, {
-        type: CellType.Road,
+        type: CellType.Connector,
         entityId: house.id,
         color: null,
         roadConnections: [connToHouseDir],

@@ -42,10 +42,10 @@ export class RoadSystem {
 
   removeRoad(gx: number, gy: number): boolean {
     const cell = this.grid.getCell(gx, gy);
-    if (!cell || cell.type !== CellType.Road) return false;
+    if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
 
-    // Can't remove business-owned connector
-    if (cell.entityId !== null) return false;
+    // Can't remove connectors
+    if (cell.type === CellType.Connector) return false;
 
     // Disconnect bridge connections from neighbors
     if (cell.hasBridge) {
@@ -56,8 +56,8 @@ export class RoadSystem {
       const neighbor = this.grid.getNeighbor(gx, gy, dir);
       if (neighbor) {
         const oppDir = OPPOSITE_DIR[dir];
-        // Skip disconnecting entity-owned connectors' permanent connections
-        if (neighbor.cell.type === CellType.Road && neighbor.cell.entityId !== null) {
+        // Skip disconnecting connector cells' permanent connections
+        if (neighbor.cell.type === CellType.Connector) {
           // Check if this connection points toward the parking lot or house (permanent)
           const permanentNeighbor = this.grid.getNeighbor(neighbor.gx, neighbor.gy, oppDir);
           if (permanentNeighbor && (permanentNeighbor.cell.type === CellType.ParkingLot || permanentNeighbor.cell.type === CellType.House)) continue;
@@ -148,7 +148,7 @@ export class RoadSystem {
       if (!neighbor) continue;
 
       const nType = neighbor.cell.type;
-      if (nType === CellType.Road || nType === CellType.House || nType === CellType.Business) {
+      if (nType === CellType.Road || nType === CellType.Connector || nType === CellType.House || nType === CellType.Business) {
         connections.push(dir);
 
         // Connect neighbor's bridge back to us if it has a bridge on same axis
