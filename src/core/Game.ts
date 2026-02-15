@@ -13,6 +13,7 @@ import { DemandSystem } from '../systems/DemandSystem';
 import { CarSystem } from '../systems/CarSystem';
 import { MusicSystem } from '../systems/MusicSystem';
 import { SoundEffectSystem } from '../systems/SoundEffectSystem';
+import { ObstacleSystem } from '../systems/ObstacleSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
 import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG, MAX_DEMAND_PINS } from '../constants';
 
@@ -28,6 +29,7 @@ export class Game {
   private demandSystem: DemandSystem;
   private demandWarnPrevSin = 0;
   private carSystem: CarSystem;
+  private obstacleSystem: ObstacleSystem;
   private pathfinder: Pathfinder;
   private musicSystem: MusicSystem = new MusicSystem();
   private soundEffects: SoundEffectSystem = new SoundEffectSystem();
@@ -54,12 +56,15 @@ export class Game {
     this.webglRenderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.grid = new Grid();
+    this.obstacleSystem = new ObstacleSystem(this.grid);
+    this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
     this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
+    this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
 
     this.input = new InputHandler(
@@ -199,6 +204,8 @@ export class Game {
     this.soundEffects.dispose();
     this.renderer.dispose();
     this.grid = new Grid();
+    this.obstacleSystem = new ObstacleSystem(this.grid);
+    this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
     this.spawnSystem = new SpawnSystem(this.grid);
@@ -209,6 +216,7 @@ export class Game {
     this.undoSystem = new UndoSystem(this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem);
     this.renderer = new Renderer(this.webglRenderer, this.grid);
+    this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
     this.spawnSystem.spawnInitial();

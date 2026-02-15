@@ -3,14 +3,17 @@ import type { Grid } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { Business } from '../entities/Business';
 import type { Car } from '../entities/Car';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../constants';
+import type { GridPos } from '../types';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, TILE_SIZE, LAKE_DEPTH, LAKE_WATER_SURFACE_Y, LAKE_WATER_COLOR_HEX, LAKE_WATER_OPACITY } from '../constants';
 import { lerp, clamp } from '../utils/math';
 import { TerrainLayer } from './layers/TerrainLayer';
 import { RoadLayer } from './layers/RoadLayer';
 import { BuildingLayer } from './layers/BuildingLayer';
 import { CarLayer } from './layers/CarLayer';
 import { DebugLayer } from './layers/DebugLayer';
+import { ObstacleLayer } from './layers/ObstacleLayer';
 
+const GROUND_SUBDIV = 3; // subdivisions per grid cell for smooth lake bevel
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const ZOOM_LERP = 0.25;
@@ -27,10 +30,14 @@ export class Renderer {
   private buildingLayer: BuildingLayer;
   private carLayer: CarLayer;
   private debugLayer: DebugLayer;
+  private obstacleLayer: ObstacleLayer;
+  private lakeCells: GridPos[] = [];
 
   private offscreenCanvas: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
   private groundTexture: THREE.CanvasTexture;
+  private groundMesh!: THREE.Mesh;
+  private waterSurface: THREE.Mesh | null = null;
   private groundDirty = false;
   private roadRebuildScheduled = false;
   private dpr: number;
@@ -94,23 +101,25 @@ export class Renderer {
     this.buildingLayer = new BuildingLayer();
     this.carLayer = new CarLayer();
     this.debugLayer = new DebugLayer();
+    this.obstacleLayer = new ObstacleLayer();
 
     // Render initial ground state (terrain only, roads are 3D)
     this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.terrainLayer.render(this.offCtx);
+    this.terrainLayer.render(this.offCtx, this.lakeCells);
 
-    // Ground plane
+    // Ground plane (subdivided to allow lake depressions)
     this.groundTexture = new THREE.CanvasTexture(this.offscreenCanvas);
     this.groundTexture.minFilter = THREE.LinearFilter;
     this.groundTexture.magFilter = THREE.LinearFilter;
 
     const groundMat = new THREE.MeshStandardMaterial({ map: this.groundTexture });
-    const groundGeom = new THREE.PlaneGeometry(CANVAS_WIDTH, CANVAS_HEIGHT);
+    const groundGeom = new THREE.PlaneGeometry(CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS * GROUND_SUBDIV, GRID_ROWS * GROUND_SUBDIV);
     groundGeom.rotateX(-Math.PI / 2);
-    const ground = new THREE.Mesh(groundGeom, groundMat);
-    ground.position.set(CANVAS_WIDTH / 2, 0, CANVAS_HEIGHT / 2);
-    ground.receiveShadow = true;
-    this.scene.add(ground);
+    this.groundMesh = new THREE.Mesh(groundGeom, groundMat);
+    this.groundMesh.position.set(CANVAS_WIDTH / 2, 0, CANVAS_HEIGHT / 2);
+    this.groundMesh.receiveShadow = true;
+    this.groundMesh.castShadow = true;
+    this.scene.add(this.groundMesh);
   }
 
   resize(width: number, height: number): void {
@@ -178,6 +187,115 @@ export class Renderer {
     return { x: worldX, z: worldZ };
   }
 
+  buildObstacles(mountainCells: GridPos[], heightMap: Map<string, number>, lakeCells: GridPos[]): void {
+    this.obstacleLayer.build(this.scene, mountainCells, heightMap);
+    this.lakeCells = lakeCells;
+
+    // Displace ground vertices for lake depressions
+    this.displaceGroundForLakes(lakeCells);
+
+    // Create water surface
+    this.buildWaterSurface(lakeCells);
+  }
+
+  private displaceGroundForLakes(lakeCells: GridPos[]): void {
+    if (lakeCells.length === 0) return;
+
+    // Build lake lookup: 1.0 if lake, 0.0 otherwise
+    const lakeField = new Uint8Array(GRID_COLS * GRID_ROWS);
+    for (const p of lakeCells) {
+      lakeField[p.gy * GRID_COLS + p.gx] = 1;
+    }
+    const isLake = (cx: number, cy: number): number => {
+      if (cx < 0 || cx >= GRID_COLS || cy < 0 || cy >= GRID_ROWS) return 0;
+      return lakeField[cy * GRID_COLS + cx];
+    };
+
+    const posAttr = this.groundMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const segsX = GRID_COLS * GROUND_SUBDIV;
+    const segsZ = GRID_ROWS * GROUND_SUBDIV;
+    const cols = segsX + 1;
+
+    for (let j = 0; j <= segsZ; j++) {
+      for (let i = 0; i <= segsX; i++) {
+        // Position in grid-cell units (vertex at cell boundaries when i % SUBDIV == 0)
+        const gx = i / GROUND_SUBDIV;
+        const gy = j / GROUND_SUBDIV;
+
+        // Bilinear sample the lake field at cell centers
+        // Cell (cx, cy) center is at (cx + 0.5, cy + 0.5)
+        const sx = gx - 0.5;
+        const sy = gy - 0.5;
+        const cx0 = Math.floor(sx);
+        const cy0 = Math.floor(sy);
+        const fx = sx - cx0;
+        const fy = sy - cy0;
+
+        const s00 = isLake(cx0, cy0);
+        const s10 = isLake(cx0 + 1, cy0);
+        const s01 = isLake(cx0, cy0 + 1);
+        const s11 = isLake(cx0 + 1, cy0 + 1);
+
+        const bilinear = s00 * (1 - fx) * (1 - fy) + s10 * fx * (1 - fy) + s01 * (1 - fx) * fy + s11 * fx * fy;
+
+        if (bilinear > 0.001) {
+          // Smoothstep for concave bevel profile
+          const t = bilinear * bilinear * (3 - 2 * bilinear);
+          const idx = j * cols + i;
+          posAttr.setY(idx, -LAKE_DEPTH * t);
+        }
+      }
+    }
+
+    posAttr.needsUpdate = true;
+    this.groundMesh.geometry.computeVertexNormals();
+  }
+
+  private buildWaterSurface(lakeCells: GridPos[]): void {
+    if (this.waterSurface) {
+      this.scene.remove(this.waterSurface);
+      this.waterSurface.geometry.dispose();
+      (this.waterSurface.material as THREE.Material).dispose();
+      this.waterSurface = null;
+    }
+
+    if (lakeCells.length === 0) return;
+
+    // Build merged geometry for all lake cell quads
+    const vertices: number[] = [];
+    const indices: number[] = [];
+
+    for (const pos of lakeCells) {
+      const x0 = pos.gx * TILE_SIZE;
+      const x1 = x0 + TILE_SIZE;
+      const z0 = pos.gy * TILE_SIZE;
+      const z1 = z0 + TILE_SIZE;
+      const y = LAKE_WATER_SURFACE_Y;
+
+      const base = vertices.length / 3;
+      vertices.push(x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1);
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
+    const mat = new THREE.MeshStandardMaterial({
+      color: LAKE_WATER_COLOR_HEX,
+      transparent: true,
+      opacity: LAKE_WATER_OPACITY,
+      roughness: 0.1,
+      metalness: 0.2,
+      side: THREE.DoubleSide,
+    });
+
+    this.waterSurface = new THREE.Mesh(geom, mat);
+    this.waterSurface.receiveShadow = true;
+    this.scene.add(this.waterSurface);
+  }
+
   markGroundDirty(): void {
     this.groundDirty = true;
   }
@@ -195,7 +313,7 @@ export class Renderer {
     // Update ground texture if dirty (terrain only)
     if (this.groundDirty) {
       this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-      this.terrainLayer.render(this.offCtx);
+      this.terrainLayer.render(this.offCtx, this.lakeCells);
       this.groundTexture.needsUpdate = true;
 
       // Defer road mesh rebuild to next frame to avoid frame hitch
@@ -222,6 +340,13 @@ export class Renderer {
     this.buildingLayer.dispose(this.scene);
     this.carLayer.dispose(this.scene);
     this.debugLayer.dispose(this.scene);
+    this.obstacleLayer.disposeAll(this.scene);
+    if (this.waterSurface) {
+      this.scene.remove(this.waterSurface);
+      this.waterSurface.geometry.dispose();
+      (this.waterSurface.material as THREE.Material).dispose();
+      this.waterSurface = null;
+    }
 
     // Dispose all remaining scene objects
     this.scene.traverse((obj) => {

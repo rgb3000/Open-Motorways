@@ -70,6 +70,28 @@ export const COLOR_MAP: Record<GameColor, string> = {
   [GameColor.Orange]: '#E67E22',
 };
 
+// Obstacles
+export const MOUNTAIN_CLUSTER_COUNT = 3;
+export const MOUNTAIN_CLUSTER_MIN_SIZE = 4;
+export const MOUNTAIN_CLUSTER_MAX_SIZE = 8;
+export const LAKE_CLUSTER_COUNT = 2;
+export const LAKE_CLUSTER_MIN_SIZE = 5;
+export const LAKE_CLUSTER_MAX_SIZE = 12;
+export const OBSTACLE_EDGE_MARGIN = 3;
+export const OBSTACLE_CENTER_EXCLUSION = 8;
+
+export const MOUNTAIN_COLOR = '#A0947C';
+export const MOUNTAIN_PEAK_COLOR = '#8A7E66';
+export const LAKE_COLOR = '#7ABFCF';
+export const LAKE_SHORE_COLOR = '#C4B896';
+export const MOUNTAIN_MIN_HEIGHT = 6;
+export const MOUNTAIN_MAX_HEIGHT = 14;
+export const LAKE_DEPTH = 5;
+export const LAKE_WATER_SURFACE_Y = -2;
+export const LAKE_WATER_COLOR_HEX = 0x7ABFCF;
+export const LAKE_WATER_OPACITY = 0.55;
+export const LAKE_BED_COLOR = '#5A9AAA';
+
 // Debug
 export const SPAWN_DEBUG = true;
 
