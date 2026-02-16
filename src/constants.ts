@@ -14,7 +14,7 @@ export const MAX_FRAME_TIME = 0.2;       // spiral-of-death cap
 // Demand
 export const MAX_DEMAND_PINS = 8;
 export const DEMAND_BASE_RATE = 0.8;   // pins/min for a fresh business
-export const DEMAND_RATE_GROWTH = 0.15; // additional pins/min per minute of age
+export const DEMAND_RATE_GROWTH = 0.3; // additional pins/min per minute of age
 export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to the same business
 
 // Cars
@@ -46,11 +46,11 @@ export const SPAWN_AREA_INTERVALS = [
   { threshold: 8, inset: 0.35 },   //  8 entities: 30% of grid
   { threshold: 12, inset: 0.30 },  // 12 entities: 40% of grid
   { threshold: 16, inset: 0.25 },  // 16 entities: 50% of grid
-  { threshold: 20, inset: 0.20 },  // 20 entities: 60% of grid
-  { threshold: 30, inset: 0.15 },  // 24 entities: 70% of grid
-  { threshold: 40, inset: 0.10 },  // 28 entities: 80% of grid
-  { threshold: 50, inset: 0.05 },  // 32 entities: 90% of grid
-  { threshold: 60, inset: 0.00 },  // 36 entities: full grid
+  { threshold: 30, inset: 0.20 },  // 20 entities: 60% of grid
+  { threshold: 60, inset: 0.15 },  // 24 entities: 70% of grid
+  { threshold: 120, inset: 0.10 },  // 28 entities: 80% of grid
+  { threshold: 240, inset: 0.05 },  // 32 entities: 90% of grid
+  { threshold: 480, inset: 0.00 },  // 36 entities: full grid
 ];
 
 // Money
