@@ -118,7 +118,7 @@ export class CarMovement {
         cell.type === CellType.Road ||
         cell.type === CellType.Connector ||
         (isFinalTile && (cell.type === CellType.House || cell.type === CellType.ParkingLot))
-      );
+      ) && (!cell.pendingDeletion || car.state === CarState.GoingHome);
 
       if (!isTraversable) {
         this.router.rerouteCar(car, houses);

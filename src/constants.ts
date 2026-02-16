@@ -40,7 +40,6 @@ export const MIN_BUSINESS_DISTANCE = 8;    // tiles from matching houses
 export const SPAWN_INTERVAL = 18;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 10;
 export const SPAWN_INTERVAL_DECAY = 0.97;
-export const HOUSE_SPAWN_PROBABILITY = 0.7;
 export const SPAWN_AREA_INTERVALS = [
   { threshold: 0, inset: 0.42 },   //  0 entities: 10% of grid
   { threshold: 4, inset: 0.40 },   //  4 entities: 20% of grid
@@ -93,8 +92,7 @@ export const LAKE_WATER_OPACITY = 0.55;
 export const LAKE_BED_COLOR = '#5A9AAA';
 
 // Demand-aware spawning
-export const HOUSE_SATISFACTION_RATE = 2.0; // pins/min one house can clear
-export const DEMAND_HOUSE_THRESHOLD = 1.0; // spawn houses when total pin output rate exceeds satisfaction * threshold
+export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. this is an estimation and used to calculate if there is enough houses on the maps
 
 // Debug
 export const SPAWN_DEBUG = true;

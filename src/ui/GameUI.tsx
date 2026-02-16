@@ -185,22 +185,22 @@ function StartOverlay({ onStart }: { onStart: () => void }) {
 function DemandDebugOverlay({ stats }: { stats: DemandStat[] }) {
   return (
     <div className="absolute bottom-2.5 right-2.5 bg-black/70 rounded-lg p-2.5 font-mono text-xs pointer-events-none">
-      <div className="text-white/60 mb-1">Demand / Supply</div>
-      {stats.map(({ color, demand, supply, demandPerMin }) => {
-        const balance = supply - demand;
+      <div className="text-white/60 mb-1">Demand / Supply (pins/min)</div>
+      {stats.map(({ color, demand, supplyPerMin, demandPerMin }) => {
+        const balance = supplyPerMin - demandPerMin;
         return (
           <div key={color} className="flex items-center gap-2 py-0.5">
             <span
               className="inline-block w-3 h-3 rounded-sm"
               style={{ backgroundColor: COLOR_MAP[color] }}
             />
-            <span className="text-white w-8 text-right">{demand}</span>
+            <span className="text-white w-14 text-right">{demandPerMin.toFixed(1)}/m</span>
             <span className="text-white/40">/</span>
-            <span className="text-white w-8">{supply}</span>
-            <span className={`w-10 text-right ${balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {balance >= 0 ? '+' : ''}{balance}
+            <span className="text-white w-14">{supplyPerMin.toFixed(1)}/m</span>
+            <span className={`w-14 text-right ${balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {balance >= 0 ? '+' : ''}{balance.toFixed(1)}
             </span>
-            <span className="text-white/40 w-12 text-right">{demandPerMin.toFixed(1)}/m</span>
+            <span className="text-white/40 w-6 text-right">({demand})</span>
           </div>
         );
       })}

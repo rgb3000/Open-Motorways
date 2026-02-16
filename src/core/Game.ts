@@ -18,12 +18,12 @@ import { ObstacleSystem } from '../systems/ObstacleSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
 import { PendingDeletionSystem } from '../systems/PendingDeletionSystem';
 import { CarState } from '../entities/Car';
-import { STARTING_MONEY, DELIVERY_REWARD, ROAD_REFUND, SPAWN_DEBUG, DEMAND_DEBUG, MAX_DEMAND_PINS, CARS_PER_HOUSE } from '../constants';
+import { STARTING_MONEY, DELIVERY_REWARD, ROAD_REFUND, SPAWN_DEBUG, DEMAND_DEBUG, MAX_DEMAND_PINS, HOUSE_SUPPLY_PER_MINUTE } from '../constants';
 
 export interface DemandStat {
   color: GameColor;
   demand: number;
-  supply: number;
+  supplyPerMin: number;
   demandPerMin: number;
 }
 
@@ -391,7 +391,7 @@ export class Game {
       demandStats = this.spawnSystem.getUnlockedColors().map(color => ({
         color,
         demand: colorDemands.get(color) ?? 0,
-        supply: this.spawnSystem.getHouses().filter(h => h.color === color).length * CARS_PER_HOUSE,
+        supplyPerMin: this.spawnSystem.getHouses().filter(h => h.color === color).length * HOUSE_SUPPLY_PER_MINUTE,
         demandPerMin: this.demandSystem.getColorPinOutputRate(color),
       }));
     }

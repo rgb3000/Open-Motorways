@@ -26,6 +26,7 @@ export class CarSystem {
   private dispatcher: CarDispatcher;
   private movement: CarMovement;
   private pendingDeletionSystem: PendingDeletionSystem;
+  private grid: Grid;
 
   // Reusable collections
   private _toRemove: string[] = [];
@@ -35,6 +36,7 @@ export class CarSystem {
   constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem) {
     this.pathfinder = pathfinder;
     this.pendingDeletionSystem = pendingDeletionSystem;
+    this.grid = grid;
 
     this.router = new CarRouter(pathfinder, grid);
     this.trafficManager = new CarTrafficManager(grid);
@@ -107,6 +109,26 @@ export class CarSystem {
           }
           continue;
         }
+      }
+    }
+
+    // Reroute active cars whose path crosses a pending-deletion cell
+    for (const car of this.cars) {
+      if (car.path.length === 0) continue;
+      if (car.state !== CarState.GoingToBusiness && car.state !== CarState.GoingHome) continue;
+
+      let crossesPending = false;
+      for (let i = car.pathIndex; i < car.path.length; i++) {
+        const c = this.grid.getCell(car.path[i].gx, car.path[i].gy);
+        if (c?.pendingDeletion) {
+          // GoingHome cars are allowed on pending-deletion roads
+          if (car.state === CarState.GoingHome) { crossesPending = false; break; }
+          crossesPending = true;
+          break;
+        }
+      }
+      if (crossesPending) {
+        this.router.rerouteCar(car, houses);
       }
     }
   }
