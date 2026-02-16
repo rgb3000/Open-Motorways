@@ -4,10 +4,10 @@ import { Business } from '../entities/Business';
 import { CellType, Direction, type GameColor, type GridPos } from '../types';
 import type { DemandSystem } from './DemandSystem';
 import {
-  CARS_PER_HOUSE,
   COLOR_UNLOCK_ORDER,
   COLOR_UNLOCK_INTERVAL,
   DEMAND_HOUSE_THRESHOLD,
+  HOUSE_SATISFACTION_RATE,
   GRID_COLS,
   GRID_ROWS,
   HOUSE_CLUSTER_RADIUS,
@@ -99,20 +99,16 @@ export class SpawnSystem {
     }
   }
 
-  private getColorCapacity(color: GameColor): number {
-    return this.houses.filter(h => h.color === color).length * CARS_PER_HOUSE;
-  }
-
   private findMostStressedColor(): GameColor | null {
     let worstColor: GameColor | null = null;
     let worstRatio = -Infinity;
 
     for (const color of this.unlockedColors) {
-      const demand = this.demandSystem.getColorDemand(color);
-      const capacity = this.getColorCapacity(color);
-      if (demand > capacity * DEMAND_HOUSE_THRESHOLD) {
-        // Higher ratio = more stressed
-        const ratio = capacity > 0 ? demand / capacity : Infinity;
+      const totalRate = this.demandSystem.getColorPinOutputRate(color);
+      const houseCount = this.houses.filter(h => h.color === color).length;
+      const satisfaction = houseCount * HOUSE_SATISFACTION_RATE;
+      if (totalRate > satisfaction * DEMAND_HOUSE_THRESHOLD) {
+        const ratio = satisfaction > 0 ? totalRate / satisfaction : Infinity;
         if (ratio > worstRatio) {
           worstRatio = ratio;
           worstColor = color;

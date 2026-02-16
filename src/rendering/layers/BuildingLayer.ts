@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
-import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS } from '../../constants';
+import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG } from '../../constants';
 import { Direction } from '../../types';
 
 function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
@@ -24,6 +24,9 @@ export class BuildingLayer {
   private houseConnectorDirs = new Map<string, Direction>();
   private businessMeshes = new Map<string, THREE.Group>();
   private demandPinRefs = new Map<string, THREE.Mesh[]>();
+  private debugSprites = new Map<string, THREE.Sprite>();
+  private debugCanvas: HTMLCanvasElement | null = null;
+  private debugCtx: CanvasRenderingContext2D | null = null;
 
   // Cached prototype geometries (created once, cloned on spawn)
   private houseBodyGeom: THREE.ExtrudeGeometry;
@@ -200,6 +203,61 @@ export class BuildingLayer {
         }
       }
     }
+
+    // Per-business debug labels
+    if (DEMAND_DEBUG) {
+      if (!this.debugCanvas) {
+        this.debugCanvas = document.createElement('canvas');
+        this.debugCanvas.width = 128;
+        this.debugCanvas.height = 32;
+        this.debugCtx = this.debugCanvas.getContext('2d')!;
+      }
+      const tmpCanvas = this.debugCanvas!;
+      const ctx = this.debugCtx!;
+
+      for (const biz of businesses) {
+        const ageMin = (biz.age / 60).toFixed(1);
+        const text = `${ageMin}m | ${biz.pinOutputRate.toFixed(1)}/m`;
+
+        // Draw text onto shared scratch canvas
+        ctx.clearRect(0, 0, 128, 32);
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(0, 0, 128, 32);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 64, 16);
+
+        let sprite = this.debugSprites.get(biz.id);
+        if (!sprite) {
+          // Each sprite gets its own canvas so textures are independent
+          const ownCanvas = document.createElement('canvas');
+          ownCanvas.width = 128;
+          ownCanvas.height = 32;
+          const ownCtx = ownCanvas.getContext('2d')!;
+          ownCtx.drawImage(tmpCanvas, 0, 0);
+          const tex = new THREE.CanvasTexture(ownCanvas);
+          const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+          sprite = new THREE.Sprite(mat);
+          sprite.scale.set(40, 10, 1);
+          scene.add(sprite);
+          this.debugSprites.set(biz.id, sprite);
+        } else {
+          // Update existing sprite's canvas
+          const tex = (sprite.material as THREE.SpriteMaterial).map as THREE.CanvasTexture;
+          const ownCanvas = tex.image as HTMLCanvasElement;
+          const ownCtx = ownCanvas.getContext('2d')!;
+          ownCtx.clearRect(0, 0, 128, 32);
+          ownCtx.drawImage(tmpCanvas, 0, 0);
+          tex.needsUpdate = true;
+        }
+
+        const px = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
+        const pz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
+        sprite.position.set(px + 10, 2, pz + 15);
+      }
+    }
   }
 
   private createHouseMesh(house: House): THREE.Group {
@@ -361,6 +419,12 @@ export class BuildingLayer {
       scene.remove(group);
       this.disposeGroup(group);
     }
+    for (const [, sprite] of this.debugSprites) {
+      scene.remove(sprite);
+      (sprite.material as THREE.SpriteMaterial).map?.dispose();
+      sprite.material.dispose();
+    }
+    this.debugSprites.clear();
     this.houseMeshes.clear();
     this.businessMeshes.clear();
     this.demandPinRefs.clear();

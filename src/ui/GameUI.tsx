@@ -186,7 +186,7 @@ function DemandDebugOverlay({ stats }: { stats: DemandStat[] }) {
   return (
     <div className="absolute bottom-2.5 right-2.5 bg-black/70 rounded-lg p-2.5 font-mono text-xs pointer-events-none">
       <div className="text-white/60 mb-1">Demand / Supply</div>
-      {stats.map(({ color, demand, supply }) => {
+      {stats.map(({ color, demand, supply, demandPerMin }) => {
         const balance = supply - demand;
         return (
           <div key={color} className="flex items-center gap-2 py-0.5">
@@ -200,6 +200,7 @@ function DemandDebugOverlay({ stats }: { stats: DemandStat[] }) {
             <span className={`w-10 text-right ${balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {balance >= 0 ? '+' : ''}{balance}
             </span>
+            <span className="text-white/40 w-12 text-right">{demandPerMin.toFixed(1)}/m</span>
           </div>
         );
       })}

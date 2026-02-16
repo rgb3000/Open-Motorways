@@ -13,7 +13,9 @@ export const MAX_FRAME_TIME = 0.2;       // spiral-of-death cap
 
 // Demand
 export const MAX_DEMAND_PINS = 8;
-export const DEMAND_AGE_INTERVAL = 12; // seconds of age per target demand pin
+export const DEMAND_BASE_RATE = 0.8;   // pins/min for a fresh business
+export const DEMAND_RATE_GROWTH = 0.15; // additional pins/min per minute of age
+export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to the same business
 
 // Cars
 export const CARS_PER_HOUSE = 2;
@@ -91,7 +93,8 @@ export const LAKE_WATER_OPACITY = 0.55;
 export const LAKE_BED_COLOR = '#5A9AAA';
 
 // Demand-aware spawning
-export const DEMAND_HOUSE_THRESHOLD = 1.0; // spawn houses when demand exceeds capacity * threshold
+export const HOUSE_SATISFACTION_RATE = 2.0; // pins/min one house can clear
+export const DEMAND_HOUSE_THRESHOLD = 1.0; // spawn houses when total pin output rate exceeds satisfaction * threshold
 
 // Debug
 export const SPAWN_DEBUG = true;

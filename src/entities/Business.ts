@@ -18,6 +18,9 @@ export class Business {
   readonly parkingSlots: ParkingSlot[];
   demandPins: number;
   age: number = 0;
+  pinCooldown: number = 0;
+  pinOutputRate: number = 0;
+  pinAccumulator: number = 0;
 
   constructor(
     pos: GridPos,
