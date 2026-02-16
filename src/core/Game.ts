@@ -15,7 +15,14 @@ import { MusicSystem } from '../systems/MusicSystem';
 import { SoundEffectSystem } from '../systems/SoundEffectSystem';
 import { ObstacleSystem } from '../systems/ObstacleSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
-import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG, MAX_DEMAND_PINS } from '../constants';
+import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG, DEMAND_DEBUG, MAX_DEMAND_PINS, CARS_PER_HOUSE } from '../constants';
+import type { GameColor } from '../types';
+
+export interface DemandStat {
+  color: GameColor;
+  demand: number;
+  supply: number;
+}
 
 export class Game {
   private webglRenderer: THREE.WebGLRenderer;
@@ -36,7 +43,7 @@ export class Game {
   private state: GameState = GameState.WaitingToStart;
   private elapsedTime = 0;
   private money = STARTING_MONEY;
-  private stateCallback: ((state: GameState, score: number, time: number, money: number) => void) | null = null;
+  private stateCallback: ((state: GameState, score: number, time: number, money: number, demandStats: DemandStat[] | null) => void) | null = null;
   private spaceDown = false;
   private isPanning = false;
   private lastPanX = 0;
@@ -62,8 +69,8 @@ export class Game {
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
-    this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
+    this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem);
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
@@ -177,7 +184,7 @@ export class Game {
     };
   }
 
-  onStateUpdate(cb: (state: GameState, score: number, time: number, money: number) => void): void {
+  onStateUpdate(cb: (state: GameState, score: number, time: number, money: number, demandStats: DemandStat[] | null) => void): void {
     this.stateCallback = cb;
   }
 
@@ -212,8 +219,8 @@ export class Game {
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
-    this.spawnSystem = new SpawnSystem(this.grid);
     this.demandSystem = new DemandSystem();
+    this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem);
     this.demandWarnPrevSin = 0;
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.money = STARTING_MONEY;
@@ -337,7 +344,16 @@ export class Game {
       this.carSystem.getCars(),
       SPAWN_DEBUG ? this.spawnSystem.getSpawnBounds() : null,
     );
-    this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money);
+    let demandStats: DemandStat[] | null = null;
+    if (DEMAND_DEBUG) {
+      const colorDemands = this.demandSystem.getColorDemands();
+      demandStats = this.spawnSystem.getUnlockedColors().map(color => ({
+        color,
+        demand: colorDemands.get(color) ?? 0,
+        supply: this.spawnSystem.getHouses().filter(h => h.color === color).length * CARS_PER_HOUSE,
+      }));
+    }
+    this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money, demandStats);
   }
 
   private onResize(): void {

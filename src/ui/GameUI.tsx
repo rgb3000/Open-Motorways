@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser } from 'lucide-react';
-import type { Game } from '../core/Game';
+import type { Game, DemandStat } from '../core/Game';
 import { GameState, Tool } from '../types';
+import { COLOR_MAP } from '../constants';
 
 export function GameUI({ game }: { game: Game }) {
   const [state, setState] = useState<GameState>(game.getState());
@@ -12,13 +13,15 @@ export function GameUI({ game }: { game: Game }) {
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<Tool>(game.getActiveTool());
+  const [demandStats, setDemandStats] = useState<DemandStat[] | null>(null);
   useEffect(() => {
-    game.onStateUpdate((s, sc, t, m) => {
+    game.onStateUpdate((s, sc, t, m, ds) => {
       setState(s);
       setScore(sc);
       setTime(t);
       setMoney(m);
       setCanUndo(game.canUndo());
+      setDemandStats(ds);
     });
     game.setOnUndoStateChange(() => setCanUndo(game.canUndo()));
     game.onToolChange((tool) => setActiveTool(tool));
@@ -47,6 +50,9 @@ export function GameUI({ game }: { game: Game }) {
       )}
       {settingsOpen && (
         <SettingsOverlay onClose={handleToggleSettings} musicEnabled={musicEnabled} onToggleMusic={handleToggleMusic} />
+      )}
+      {demandStats && demandStats.length > 0 && (
+        <DemandDebugOverlay stats={demandStats} />
       )}
       {state === GameState.WaitingToStart && (
         <StartOverlay onStart={() => game.startGame()} />
@@ -172,6 +178,31 @@ function StartOverlay({ onStart }: { onStart: () => void }) {
           <span className="text-white/70 text-sm">Road / Eraser tool</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DemandDebugOverlay({ stats }: { stats: DemandStat[] }) {
+  return (
+    <div className="absolute bottom-2.5 right-2.5 bg-black/70 rounded-lg p-2.5 font-mono text-xs pointer-events-none">
+      <div className="text-white/60 mb-1">Demand / Supply</div>
+      {stats.map(({ color, demand, supply }) => {
+        const balance = supply - demand;
+        return (
+          <div key={color} className="flex items-center gap-2 py-0.5">
+            <span
+              className="inline-block w-3 h-3 rounded-sm"
+              style={{ backgroundColor: COLOR_MAP[color] }}
+            />
+            <span className="text-white w-8 text-right">{demand}</span>
+            <span className="text-white/40">/</span>
+            <span className="text-white w-8">{supply}</span>
+            <span className={`w-10 text-right ${balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {balance >= 0 ? '+' : ''}{balance}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

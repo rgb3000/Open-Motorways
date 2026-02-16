@@ -13,9 +13,7 @@ export const MAX_FRAME_TIME = 0.2;       // spiral-of-death cap
 
 // Demand
 export const MAX_DEMAND_PINS = 8;
-export const INITIAL_DEMAND_INTERVAL = 5;  // seconds
-export const MIN_DEMAND_INTERVAL = 1.5;
-export const DEMAND_INTERVAL_DECAY = 0.97; // multiplier per demand tick
+export const DEMAND_AGE_INTERVAL = 12; // seconds of age per target demand pin
 
 // Cars
 export const CARS_PER_HOUSE = 2;
@@ -92,8 +90,12 @@ export const LAKE_WATER_COLOR_HEX = 0x7ABFCF;
 export const LAKE_WATER_OPACITY = 0.55;
 export const LAKE_BED_COLOR = '#5A9AAA';
 
+// Demand-aware spawning
+export const DEMAND_HOUSE_THRESHOLD = 1.0; // spawn houses when demand exceeds capacity * threshold
+
 // Debug
 export const SPAWN_DEBUG = true;
+export const DEMAND_DEBUG = true;
 
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';

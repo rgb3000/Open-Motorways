@@ -17,6 +17,7 @@ export class Business {
   readonly connectorPos: GridPos;
   readonly parkingSlots: ParkingSlot[];
   demandPins: number;
+  age: number = 0;
 
   constructor(
     pos: GridPos,

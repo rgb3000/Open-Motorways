@@ -2,9 +2,12 @@ import { OPPOSITE_DIR, type Grid } from '../core/Grid';
 import { House } from '../entities/House';
 import { Business } from '../entities/Business';
 import { CellType, Direction, type GameColor, type GridPos } from '../types';
+import type { DemandSystem } from './DemandSystem';
 import {
+  CARS_PER_HOUSE,
   COLOR_UNLOCK_ORDER,
   COLOR_UNLOCK_INTERVAL,
+  DEMAND_HOUSE_THRESHOLD,
   GRID_COLS,
   GRID_ROWS,
   HOUSE_CLUSTER_RADIUS,
@@ -34,6 +37,7 @@ export class SpawnSystem {
   private spawnTimer = 0;
   private currentSpawnInterval = SPAWN_INTERVAL;
   private grid: Grid;
+  private demandSystem: DemandSystem;
   private dirty = false;
   onSpawn: (() => void) | null = null;
 
@@ -45,8 +49,9 @@ export class SpawnSystem {
     this.dirty = false;
   }
 
-  constructor(grid: Grid) {
+  constructor(grid: Grid, demandSystem: DemandSystem) {
     this.grid = grid;
+    this.demandSystem = demandSystem;
   }
 
   getHouses(): House[] {
@@ -94,7 +99,38 @@ export class SpawnSystem {
     }
   }
 
+  private getColorCapacity(color: GameColor): number {
+    return this.houses.filter(h => h.color === color).length * CARS_PER_HOUSE;
+  }
+
+  private findMostStressedColor(): GameColor | null {
+    let worstColor: GameColor | null = null;
+    let worstRatio = -Infinity;
+
+    for (const color of this.unlockedColors) {
+      const demand = this.demandSystem.getColorDemand(color);
+      const capacity = this.getColorCapacity(color);
+      if (demand > capacity * DEMAND_HOUSE_THRESHOLD) {
+        // Higher ratio = more stressed
+        const ratio = capacity > 0 ? demand / capacity : Infinity;
+        if (ratio > worstRatio) {
+          worstRatio = ratio;
+          worstColor = color;
+        }
+      }
+    }
+
+    return worstColor;
+  }
+
   private spawnRandom(): void {
+    // Check for demand imbalance first
+    const stressedColor = this.findMostStressedColor();
+    if (stressedColor !== null) {
+      this.trySpawnHouseForColor(stressedColor);
+      return;
+    }
+
     const color = this.unlockedColors[Math.floor(Math.random() * this.unlockedColors.length)];
 
     if (Math.random() < HOUSE_SPAWN_PROBABILITY) {
