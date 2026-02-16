@@ -98,6 +98,7 @@ export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. thi
 export const SPAWN_DEBUG = true;
 export const DEMAND_DEBUG = true;
 export const ROAD_DEBUG = false;
+export const ROAD_GRAPH_DEBUG = false;
 
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';

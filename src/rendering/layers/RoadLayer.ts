@@ -3,7 +3,7 @@ import type { Grid } from '../../core/Grid';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
-import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_HALF_WIDTH } from '../../constants';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_HALF_WIDTH, ROAD_GRAPH_DEBUG } from '../../constants';
 import { cubicBezier, lerp } from '../../utils/math';
 
 const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
@@ -338,81 +338,85 @@ export class RoadLayer {
         const cx = gx * TILE_SIZE + half;
         const cz = gy * TILE_SIZE + half;
 
-        // Circle at cell center
-        const circle = new THREE.Mesh(this.circleGeom, this.circleMat);
-        circle.rotation.x = -Math.PI / 2;
-        circle.position.set(cx, LINE_Y, cz);
-        group.add(circle);
+        if (ROAD_GRAPH_DEBUG) {
+          // Circle at cell center
+          const circle = new THREE.Mesh(this.circleGeom, this.circleMat);
+          circle.rotation.x = -Math.PI / 2;
+          circle.position.set(cx, LINE_Y, cz);
+          group.add(circle);
 
-        // Lines to connected neighbors (only draw if neighbor index > current to avoid duplicates)
-        const currentIdx = gy * GRID_COLS + gx;
-        for (const dir of cell.roadConnections) {
-          const off = DIRECTION_OFFSETS[dir];
-          const nx = gx + off.dx;
-          const ny = gy + off.dy;
-          const neighborIdx = ny * GRID_COLS + nx;
-          if (neighborIdx <= currentIdx) continue;
+          // Lines to connected neighbors (only draw if neighbor index > current to avoid duplicates)
+          const currentIdx = gy * GRID_COLS + gx;
+          for (const dir of cell.roadConnections) {
+            const off = DIRECTION_OFFSETS[dir];
+            const nx = gx + off.dx;
+            const ny = gy + off.dy;
+            const neighborIdx = ny * GRID_COLS + nx;
+            if (neighborIdx <= currentIdx) continue;
 
-          const ncx = nx * TILE_SIZE + half;
-          const ncz = ny * TILE_SIZE + half;
+            const ncx = nx * TILE_SIZE + half;
+            const ncz = ny * TILE_SIZE + half;
 
-          const points = [
-            new THREE.Vector3(cx, LINE_Y, cz),
-            new THREE.Vector3(ncx, LINE_Y, ncz),
-          ];
-          const geom = new THREE.BufferGeometry().setFromPoints(points);
-          const line = new THREE.Line(geom, this.lineMat);
-          group.add(line);
+            const points = [
+              new THREE.Vector3(cx, LINE_Y, cz),
+              new THREE.Vector3(ncx, LINE_Y, ncz),
+            ];
+            const geom = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geom, this.lineMat);
+            group.add(line);
+          }
         }
       }
     }
 
-    // Connector lines: house connector → house center
-    for (const house of this.getHouses()) {
-      const hcx = house.pos.gx * TILE_SIZE + half;
-      const hcz = house.pos.gy * TILE_SIZE + half;
-      const ccx = house.connectorPos.gx * TILE_SIZE + half;
-      const ccz = house.connectorPos.gy * TILE_SIZE + half;
-      const points = [
-        new THREE.Vector3(ccx, LINE_Y, ccz),
-        new THREE.Vector3(hcx, LINE_Y, hcz),
-      ];
-      const geom = new THREE.BufferGeometry().setFromPoints(points);
-      group.add(new THREE.Line(geom, this.connectorLineMat));
+    if (ROAD_GRAPH_DEBUG) {
+      // Connector lines: house connector → house center
+      for (const house of this.getHouses()) {
+        const hcx = house.pos.gx * TILE_SIZE + half;
+        const hcz = house.pos.gy * TILE_SIZE + half;
+        const ccx = house.connectorPos.gx * TILE_SIZE + half;
+        const ccz = house.connectorPos.gy * TILE_SIZE + half;
+        const points = [
+          new THREE.Vector3(ccx, LINE_Y, ccz),
+          new THREE.Vector3(hcx, LINE_Y, hcz),
+        ];
+        const geom = new THREE.BufferGeometry().setFromPoints(points);
+        group.add(new THREE.Line(geom, this.connectorLineMat));
 
-      const hCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
-      hCircle1.rotation.x = -Math.PI / 2;
-      hCircle1.position.set(hcx, 10, hcz);
-      group.add(hCircle1);
+        const hCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+        hCircle1.rotation.x = -Math.PI / 2;
+        hCircle1.position.set(hcx, 10, hcz);
+        group.add(hCircle1);
 
-      const hCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
-      hCircle2.rotation.x = -Math.PI / 2;
-      hCircle2.position.set(ccx, LINE_Y, ccz);
-      group.add(hCircle2);
-    }
+        const hCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+        hCircle2.rotation.x = -Math.PI / 2;
+        hCircle2.position.set(ccx, LINE_Y, ccz);
+        group.add(hCircle2);
+      }
 
-    // Connector lines: business connector → parking lot center
-    for (const biz of this.getBusinesses()) {
-      const pcx = biz.parkingLotPos.gx * TILE_SIZE + half;
-      const pcz = biz.parkingLotPos.gy * TILE_SIZE + half;
-      const ccx = biz.connectorPos.gx * TILE_SIZE + half;
-      const ccz = biz.connectorPos.gy * TILE_SIZE + half;
-      const points = [
-        new THREE.Vector3(ccx, LINE_Y, ccz),
-        new THREE.Vector3(pcx, LINE_Y, pcz),
-      ];
-      const geom = new THREE.BufferGeometry().setFromPoints(points);
-      group.add(new THREE.Line(geom, this.connectorLineMat));
+      // Connector lines: business connector → parking lot center
+      for (const biz of this.getBusinesses()) {
+        const pcx = biz.parkingLotPos.gx * TILE_SIZE + half;
+        const pcz = biz.parkingLotPos.gy * TILE_SIZE + half;
+        const ccx = biz.connectorPos.gx * TILE_SIZE + half;
+        const ccz = biz.connectorPos.gy * TILE_SIZE + half;
+        const points = [
+          new THREE.Vector3(ccx, LINE_Y, ccz),
+          new THREE.Vector3(pcx, LINE_Y, pcz),
+        ];
+        const geom = new THREE.BufferGeometry().setFromPoints(points);
+        group.add(new THREE.Line(geom, this.connectorLineMat));
 
-      const bCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
-      bCircle1.rotation.x = -Math.PI / 2;
-      bCircle1.position.set(pcx, LINE_Y, pcz);
-      group.add(bCircle1);
+        const bCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+        bCircle1.rotation.x = -Math.PI / 2;
+        bCircle1.position.set(pcx, LINE_Y, pcz);
+        group.add(bCircle1);
 
-      const bCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
-      bCircle2.rotation.x = -Math.PI / 2;
-      bCircle2.position.set(ccx, LINE_Y, ccz);
-      group.add(bCircle2);
+        const bCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+        bCircle2.rotation.x = -Math.PI / 2;
+        bCircle2.position.set(ccx, LINE_Y, ccz);
+        group.add(bCircle2);
+      }
     }
 
     // Green bezier-smoothed lines on top of white lines
@@ -624,12 +628,14 @@ export class RoadLayer {
         group.add(shapeMesh);
       }
 
-      // Green center line: smooth the cell centers directly
-      const points = smoothPolyline(pixels, isLoop, GREEN_Y);
+      if (ROAD_GRAPH_DEBUG) {
+        // Green center line: smooth the cell centers directly
+        const points = smoothPolyline(pixels, isLoop, GREEN_Y);
 
-      if (points.length >= 2) {
-        const geom = new THREE.BufferGeometry().setFromPoints(points);
-        group.add(new THREE.Line(geom, this.pathLineMat));
+        if (points.length >= 2) {
+          const geom = new THREE.BufferGeometry().setFromPoints(points);
+          group.add(new THREE.Line(geom, this.pathLineMat));
+        }
       }
 
       // Pending-deletion overlay: extract sub-chains that include pending cells
