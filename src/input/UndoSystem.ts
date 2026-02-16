@@ -29,6 +29,7 @@ function deepCopyCell(cell: Cell): Cell {
     roadConnections: [...cell.roadConnections],
     color: cell.color,
     connectorDir: cell.connectorDir,
+    pendingDeletion: cell.pendingDeletion,
   };
 }
 

@@ -10,6 +10,7 @@ import { CarTrafficManager } from './car/CarTrafficManager';
 import { CarParkingManager } from './car/CarParkingManager';
 import { CarDispatcher } from './car/CarDispatcher';
 import { CarMovement } from './car/CarMovement';
+import type { PendingDeletionSystem } from './PendingDeletionSystem';
 
 export class CarSystem {
   private cars: Car[] = [];
@@ -24,20 +25,24 @@ export class CarSystem {
   private parkingManager: CarParkingManager;
   private dispatcher: CarDispatcher;
   private movement: CarMovement;
+  private pendingDeletionSystem: PendingDeletionSystem;
+  private grid: Grid;
 
   // Reusable collections
   private _toRemove: string[] = [];
   private _toRemoveSet = new Set<string>();
   private _businessMap = new Map<string, Business>();
 
-  constructor(pathfinder: Pathfinder, grid: Grid) {
+  constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem) {
     this.pathfinder = pathfinder;
+    this.pendingDeletionSystem = pendingDeletionSystem;
+    this.grid = grid;
 
     this.router = new CarRouter(pathfinder, grid);
     this.trafficManager = new CarTrafficManager(grid);
     this.dispatcher = new CarDispatcher(pathfinder, this.router);
-    this.parkingManager = new CarParkingManager(pathfinder, this.router);
-    this.movement = new CarMovement(grid, this.trafficManager, this.router);
+    this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem);
+    this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem);
   }
 
   getCars(): Car[] {
@@ -86,9 +91,9 @@ export class CarSystem {
         }
       }
 
-      // Try to go home instead
+      // Try to go home instead (allow pending-deletion roads)
       if (home) {
-        const homePath = this.pathfinder.findPath(currentTile, home.pos);
+        const homePath = this.pathfinder.findPath(currentTile, home.pos, true);
         if (homePath) {
           car.state = CarState.GoingHome;
           car.targetBusinessId = null;
@@ -104,6 +109,26 @@ export class CarSystem {
           }
           continue;
         }
+      }
+    }
+
+    // Reroute active cars whose path crosses a pending-deletion cell
+    for (const car of this.cars) {
+      if (car.path.length === 0) continue;
+      if (car.state !== CarState.GoingToBusiness && car.state !== CarState.GoingHome) continue;
+
+      let crossesPending = false;
+      for (let i = car.pathIndex; i < car.path.length; i++) {
+        const c = this.grid.getCell(car.path[i].gx, car.path[i].gy);
+        if (c?.pendingDeletion) {
+          // GoingHome cars are allowed on pending-deletion roads
+          if (car.state === CarState.GoingHome) { crossesPending = false; break; }
+          crossesPending = true;
+          break;
+        }
+      }
+      if (crossesPending) {
+        this.router.rerouteCar(car, houses);
       }
     }
   }
@@ -157,7 +182,10 @@ export class CarSystem {
     if (toRemove.length > 0) {
       const removeSet = this._toRemoveSet;
       removeSet.clear();
-      for (const id of toRemove) removeSet.add(id);
+      for (const id of toRemove) {
+        removeSet.add(id);
+        this.pendingDeletionSystem.notifyCarRemoved(id);
+      }
       this.cars = this.cars.filter(c => !removeSet.has(c.id));
     }
   }

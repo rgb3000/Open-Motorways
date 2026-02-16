@@ -6,12 +6,10 @@ import type { DemandSystem } from './DemandSystem';
 import {
   COLOR_UNLOCK_ORDER,
   COLOR_UNLOCK_INTERVAL,
-  DEMAND_HOUSE_THRESHOLD,
-  HOUSE_SATISFACTION_RATE,
+  HOUSE_SUPPLY_PER_MINUTE,
   GRID_COLS,
   GRID_ROWS,
   HOUSE_CLUSTER_RADIUS,
-  HOUSE_SPAWN_PROBABILITY,
   INITIAL_SPAWN_DELAY,
   SPAWN_AREA_INTERVALS,
   MIN_BUSINESS_DISTANCE,
@@ -99,40 +97,27 @@ export class SpawnSystem {
     }
   }
 
-  private findMostStressedColor(): GameColor | null {
-    let worstColor: GameColor | null = null;
-    let worstRatio = -Infinity;
-
-    for (const color of this.unlockedColors) {
-      const totalRate = this.demandSystem.getColorPinOutputRate(color);
-      const houseCount = this.houses.filter(h => h.color === color).length;
-      const satisfaction = houseCount * HOUSE_SATISFACTION_RATE;
-      if (totalRate > satisfaction * DEMAND_HOUSE_THRESHOLD) {
-        const ratio = satisfaction > 0 ? totalRate / satisfaction : Infinity;
-        if (ratio > worstRatio) {
-          worstRatio = ratio;
-          worstColor = color;
-        }
-      }
-    }
-
-    return worstColor;
-  }
-
   private spawnRandom(): void {
-    // Check for demand imbalance first
-    const stressedColor = this.findMostStressedColor();
-    if (stressedColor !== null) {
-      this.trySpawnHouseForColor(stressedColor);
-      return;
-    }
+    // Compute per-color balance: supplyRate - demandRate
+    const balances = this.unlockedColors.map(color => {
+      const demandRate = this.demandSystem.getColorPinOutputRate(color);
+      const houseCount = this.houses.filter(h => h.color === color).length;
+      const supplyRate = houseCount * HOUSE_SUPPLY_PER_MINUTE;
+      return { color, balance: supplyRate - demandRate };
+    });
 
-    const color = this.unlockedColors[Math.floor(Math.random() * this.unlockedColors.length)];
+    // Find most under-supplied color (most negative balance = needs houses)
+    // Find most over-supplied color (most positive balance = can absorb more demand)
+    const sorted = [...balances].sort((a, b) => a.balance - b.balance);
+    const mostDeficit = sorted[0];
+    const mostSurplus = sorted[sorted.length - 1];
 
-    if (Math.random() < HOUSE_SPAWN_PROBABILITY) {
-      this.trySpawnHouseForColor(color);
+    // Decide house vs business: if any color has deficit, spawn house; otherwise spawn business
+    if (mostDeficit.balance < 0) {
+      this.trySpawnHouseForColor(mostDeficit.color);
     } else {
-      this.trySpawnBusinessForColor(color);
+      // All colors have surplus or are balanced → spawn a business for the color with most surplus
+      this.trySpawnBusinessForColor(mostSurplus.color);
     }
   }
 

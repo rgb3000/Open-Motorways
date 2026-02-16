@@ -4,6 +4,7 @@ import type { Business } from '../../entities/Business';
 import type { House } from '../../entities/House';
 import type { Pathfinder } from '../../pathfinding/Pathfinder';
 import type { CarRouter } from './CarRouter';
+import type { PendingDeletionSystem } from '../PendingDeletionSystem';
 import { TILE_SIZE, UNLOAD_TIME } from '../../constants';
 import { gridToPixelCenter } from '../../utils/math';
 import { getDirection, directionAngle } from '../../utils/direction';
@@ -19,10 +20,12 @@ export const PARKING_SLOT_OFFSETS = [
 export class CarParkingManager {
   private pathfinder: Pathfinder;
   private router: CarRouter;
+  private pendingDeletionSystem: PendingDeletionSystem;
 
-  constructor(pathfinder: Pathfinder, router: CarRouter) {
+  constructor(pathfinder: Pathfinder, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem) {
     this.pathfinder = pathfinder;
     this.router = router;
+    this.pendingDeletionSystem = pendingDeletionSystem;
   }
 
   updateUnloadingCar(
@@ -77,16 +80,18 @@ export class CarParkingManager {
     }
     onSetCooldown(biz.id);
 
-    // Path home from connector
+    // Path home from connector (allow pending-deletion roads)
     const home = houses.find(h => h.id === car.homeHouseId);
     if (home) {
-      const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
+      const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
       if (homePath) {
         car.state = CarState.GoingHome;
+        car.outboundPath = [];
         car.targetBusinessId = null;
         car.assignedSlotIndex = null;
         car.destination = home.pos;
         this.router.assignPath(car, homePath);
+        this.pendingDeletionSystem.notifyCarTransitionedHome(car.id, car.path);
         if (car.smoothPath.length >= 2) {
           // Prepend current parking slot position to smooth path
           const slotPos = { x: car.pixelPos.x, y: car.pixelPos.y };
@@ -118,6 +123,7 @@ export class CarParkingManager {
         }
       } else {
         car.state = CarState.Stranded;
+        car.outboundPath = [];
         car.targetBusinessId = null;
         car.assignedSlotIndex = null;
         car.destination = home.pos;
@@ -150,6 +156,7 @@ export class CarParkingManager {
       car.state = CarState.Unloading;
       car.assignedSlotIndex = slotIndex;
       car.unloadTimer = 0;
+      car.outboundPath = [...car.path];
       car.path = [];
       car.pathIndex = 0;
       car.segmentProgress = 0;
@@ -161,10 +168,10 @@ export class CarParkingManager {
       car.prevPixelPos.x = car.pixelPos.x;
       car.prevPixelPos.y = car.pixelPos.y;
     } else {
-      // No free slot — path home immediately
+      // No free slot — path home immediately (allow pending-deletion roads)
       const home = houses.find(h => h.id === car.homeHouseId);
       if (home) {
-        const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
+        const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
         if (homePath) {
           car.state = CarState.GoingHome;
           car.targetBusinessId = null;

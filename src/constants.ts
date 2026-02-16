@@ -13,14 +13,14 @@ export const MAX_FRAME_TIME = 0.2;       // spiral-of-death cap
 
 // Demand
 export const MAX_DEMAND_PINS = 8;
-export const DEMAND_BASE_RATE = 0.8;   // pins/min for a fresh business
-export const DEMAND_RATE_GROWTH = 0.15; // additional pins/min per minute of age
+export const DEMAND_BASE_RATE = 1.5;   // pins/min for a fresh business
+export const DEMAND_RATE_GROWTH = 0.3; // additional pins/min per minute of age
 export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to the same business
 
 // Cars
 export const CARS_PER_HOUSE = 2;
 export const CAR_SPEED = 1; // tiles per second
-export const LANE_OFFSET = TILE_SIZE * 0.15;    // px from tile center to lane center
+export const LANE_OFFSET = TILE_SIZE * 0.12;    // px from tile center to lane center
 export const CAR_WIDTH = TILE_SIZE * 0.15;       // px (narrow dimension, perpendicular to travel)
 export const CAR_LENGTH = TILE_SIZE * 0.25;      // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
@@ -40,18 +40,17 @@ export const MIN_BUSINESS_DISTANCE = 8;    // tiles from matching houses
 export const SPAWN_INTERVAL = 18;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 10;
 export const SPAWN_INTERVAL_DECAY = 0.97;
-export const HOUSE_SPAWN_PROBABILITY = 0.7;
 export const SPAWN_AREA_INTERVALS = [
   { threshold: 0, inset: 0.42 },   //  0 entities: 10% of grid
   { threshold: 4, inset: 0.40 },   //  4 entities: 20% of grid
   { threshold: 8, inset: 0.35 },   //  8 entities: 30% of grid
   { threshold: 12, inset: 0.30 },  // 12 entities: 40% of grid
   { threshold: 16, inset: 0.25 },  // 16 entities: 50% of grid
-  { threshold: 20, inset: 0.20 },  // 20 entities: 60% of grid
-  { threshold: 24, inset: 0.15 },  // 24 entities: 70% of grid
-  { threshold: 28, inset: 0.10 },  // 28 entities: 80% of grid
-  { threshold: 32, inset: 0.05 },  // 32 entities: 90% of grid
-  { threshold: 36, inset: 0.00 },  // 36 entities: full grid
+  { threshold: 30, inset: 0.20 },  // 20 entities: 60% of grid
+  { threshold: 60, inset: 0.15 },  // 24 entities: 70% of grid
+  { threshold: 120, inset: 0.10 },  // 28 entities: 80% of grid
+  { threshold: 240, inset: 0.05 },  // 32 entities: 90% of grid
+  { threshold: 480, inset: 0.00 },  // 36 entities: full grid
 ];
 
 // Money
@@ -93,18 +92,18 @@ export const LAKE_WATER_OPACITY = 0.55;
 export const LAKE_BED_COLOR = '#5A9AAA';
 
 // Demand-aware spawning
-export const HOUSE_SATISFACTION_RATE = 2.0; // pins/min one house can clear
-export const DEMAND_HOUSE_THRESHOLD = 1.0; // spawn houses when total pin output rate exceeds satisfaction * threshold
+export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. this is an estimation and used to calculate if there is enough houses on the maps
 
 // Debug
 export const SPAWN_DEBUG = true;
 export const DEMAND_DEBUG = true;
+export const ROAD_DEBUG = false;
 
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';
 export const GRID_LINE_COLOR = '#D4C4A0';
 // Roads
-export const ROAD_HALF_WIDTH = TILE_SIZE * 0.25;
+export const ROAD_HALF_WIDTH = TILE_SIZE * 0.2;
 export const ROAD_COLOR = '#B8B8B8';
 export const ROAD_OUTLINE_COLOR = '#C0C0C0';
 export const ROAD_LANE_DIVIDER_COLOR = '#DDDDDD';

@@ -1,0 +1,77 @@
+import * as THREE from 'three';
+import type { Grid } from '../../core/Grid';
+import type { Car } from '../../entities/Car';
+import { CarState } from '../../entities/Car';
+import { CellType } from '../../types';
+import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
+
+const OUTLINE_Y = 0.6;
+
+export class RoadDebugLayer {
+  private group: THREE.Group | null = null;
+  private greenMat = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+  private redMat = new THREE.LineBasicMaterial({ color: 0xff0000 });
+  private edgesGeom = new THREE.EdgesGeometry(new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE));
+
+  update(scene: THREE.Scene, grid: Grid, cars: Car[]): void {
+    this.clearFromScene(scene);
+
+    // Build reserved cell set from car paths
+    const reserved = new Set<string>();
+
+    for (const car of cars) {
+      if (car.state === CarState.GoingToBusiness) {
+        // Cells already passed — reserved for return trip
+        for (let i = 0; i < car.pathIndex; i++) {
+          const p = car.path[i];
+          reserved.add(`${p.gx},${p.gy}`);
+        }
+      } else if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) {
+        // Entire outbound path is reserved for return trip
+        for (const p of car.outboundPath) {
+          reserved.add(`${p.gx},${p.gy}`);
+        }
+      } else if (car.state === CarState.GoingHome) {
+        // Cells still ahead — reserved until car passes
+        for (let i = car.pathIndex; i < car.path.length; i++) {
+          const p = car.path[i];
+          reserved.add(`${p.gx},${p.gy}`);
+        }
+      }
+    }
+
+    const group = new THREE.Group();
+    const half = TILE_SIZE / 2;
+
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const cell = grid.getCell(gx, gy);
+        if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) continue;
+
+        const mat = reserved.has(`${gx},${gy}`) ? this.redMat : this.greenMat;
+        const outline = new THREE.LineSegments(this.edgesGeom, mat);
+        outline.rotation.x = -Math.PI / 2;
+        outline.position.set(gx * TILE_SIZE + half, OUTLINE_Y, gy * TILE_SIZE + half);
+        group.add(outline);
+      }
+    }
+
+    this.group = group;
+    scene.add(group);
+  }
+
+  private clearFromScene(scene: THREE.Scene): void {
+    if (this.group) {
+      scene.remove(this.group);
+      // No per-child geometry disposal needed — we share edgesGeom
+      this.group = null;
+    }
+  }
+
+  dispose(scene: THREE.Scene): void {
+    this.clearFromScene(scene);
+    this.greenMat.dispose();
+    this.redMat.dispose();
+    this.edgesGeom.dispose();
+  }
+}

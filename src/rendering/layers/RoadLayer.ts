@@ -285,6 +285,7 @@ export class RoadLayer {
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
   private roadNoiseTexture = RoadLayer.createRoadNoiseTexture();
   private roadSurfaceMat = new THREE.MeshStandardMaterial({ color: ROAD_COLOR, side: THREE.DoubleSide, map: this.roadNoiseTexture });
+  private pendingOverlayMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2, depthWrite: false });
 
   private static createRoadNoiseTexture(): THREE.CanvasTexture {
     const size = 64;
@@ -559,9 +560,9 @@ export class RoadLayer {
       if (chain) chains.push(chain);
     }
 
-    // Add straight spur chains from every Connector to its House/ParkingLot.
-    // These are always separate 2-node chains (not appended to main chains)
-    // so they render as straight segments without unwanted Bezier curves.
+    // Append building cells (House/ParkingLot) to chains that end at their Connector.
+    // This eliminates visual gaps where road chains meet building connectors.
+    const connectorToBuilding = new Map<number, number>();
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
@@ -575,14 +576,37 @@ export class RoadLayer {
           const ny = gy + off.dy;
           const nCell = this.grid.getCell(nx, ny);
           if (nCell?.type === CellType.House || nCell?.type === CellType.ParkingLot) {
-            chains.push([key, cellKey(nx, ny)]);
+            connectorToBuilding.set(key, cellKey(nx, ny));
             break;
           }
         }
       }
     }
 
+    // Extend chains that start/end at a connector by appending the building cell
+    const attachedConnectors = new Set<number>();
+    for (const chain of chains) {
+      const last = chain[chain.length - 1];
+      if (connectorToBuilding.has(last)) {
+        chain.push(connectorToBuilding.get(last)!);
+        attachedConnectors.add(last);
+      }
+      const first = chain[0];
+      if (connectorToBuilding.has(first)) {
+        chain.unshift(connectorToBuilding.get(first)!);
+        attachedConnectors.add(first);
+      }
+    }
+
+    // Fall back to 2-node spur chains for any connectors not attached to a chain
+    for (const [connKey, buildingKey] of connectorToBuilding) {
+      if (!attachedConnectors.has(connKey)) {
+        chains.push([connKey, buildingKey]);
+      }
+    }
+
     // Convert chains to pixel coords and draw with bezier smoothing
+    const pendingOverlayY = ROAD_SURFACE_Y + 0.01;
     for (const chain of chains) {
       // Detect closed loops (first node == last node)
       const isLoop = chain.length > 2 && chain[0] === chain[chain.length - 1];
@@ -606,6 +630,33 @@ export class RoadLayer {
       if (points.length >= 2) {
         const geom = new THREE.BufferGeometry().setFromPoints(points);
         group.add(new THREE.Line(geom, this.pathLineMat));
+      }
+
+      // Pending-deletion overlay: extract sub-chains that include pending cells
+      // and render a road-shaped overlay on top. Each sub-chain extends one cell
+      // beyond the pending region on each side for smooth blending.
+      const isPending = (key: number) => {
+        const cell = this.grid.getCell(key % GRID_COLS, Math.floor(key / GRID_COLS));
+        return cell?.pendingDeletion === true;
+      };
+      let i = 0;
+      while (i < chain.length) {
+        if (!isPending(chain[i])) { i++; continue; }
+        // Found start of a pending run
+        let start = i;
+        while (i < chain.length && isPending(chain[i])) i++;
+        let end = i; // exclusive
+        // Extend one cell before/after for smooth curve continuity
+        const subStart = Math.max(0, start - 1);
+        const subEnd = Math.min(chain.length, end + 1);
+        const subPixels = [];
+        for (let j = subStart; j < subEnd; j++) {
+          const gx = chain[j] % GRID_COLS;
+          const gy = Math.floor(chain[j] / GRID_COLS);
+          subPixels.push({ x: gx * TILE_SIZE + half, y: gy * TILE_SIZE + half });
+        }
+        const overlay = buildRoadShapeMesh(subPixels, false, ROAD_HALF_WIDTH, pendingOverlayY, this.pendingOverlayMat);
+        if (overlay) group.add(overlay);
       }
     }
 
@@ -635,5 +686,6 @@ export class RoadLayer {
     this.circleGeom.dispose();
     this.roadSurfaceMat.dispose();
     this.roadNoiseTexture.dispose();
+    this.pendingOverlayMat.dispose();
   }
 }
