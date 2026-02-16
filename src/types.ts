@@ -62,6 +62,12 @@ export const GameState = {
 } as const;
 export type GameState = (typeof GameState)[keyof typeof GameState];
 
+export const Tool = {
+  Road: 0,
+  Eraser: 1,
+} as const;
+export type Tool = (typeof Tool)[keyof typeof Tool];
+
 export interface Cell {
   type: CellType;
   entityId: string | null;

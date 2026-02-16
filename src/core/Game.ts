@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GameState } from '../types';
+import { GameState, Tool } from '../types';
 import { Grid } from './Grid';
 import { GameLoop } from './GameLoop';
 import { Renderer } from '../rendering/Renderer';
@@ -45,6 +45,8 @@ export class Game {
   private canvas: HTMLCanvasElement;
   private onUndoStateChange: (() => void) | null = null;
   private musicEnabled = true;
+  private activeTool: Tool = Tool.Road;
+  private toolChangeCallback: ((tool: Tool) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -72,7 +74,7 @@ export class Game {
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
     this.undoSystem = new UndoSystem(this.grid);
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -94,6 +96,8 @@ export class Game {
         e.preventDefault();
         this.performUndo();
       }
+      if (e.key === 'r' || e.key === 'R') this.setActiveTool(Tool.Road);
+      if (e.key === 'e' || e.key === 'E') this.setActiveTool(Tool.Eraser);
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
         this.spaceDown = true;
@@ -107,7 +111,7 @@ export class Game {
         this.spaceDown = false;
         this.isPanning = false;
         this.input.panningActive = false;
-        this.canvas.style.cursor = 'default';
+        this.canvas.style.cursor = this.activeTool === Tool.Eraser ? 'crosshair' : 'default';
       }
     });
 
@@ -135,7 +139,7 @@ export class Game {
     canvas.addEventListener('mouseup', (e) => {
       if (e.button === 0 && this.isPanning) {
         this.isPanning = false;
-        this.canvas.style.cursor = this.spaceDown ? 'grab' : 'default';
+        this.canvas.style.cursor = this.spaceDown ? 'grab' : (this.activeTool === Tool.Eraser ? 'crosshair' : 'default');
       }
     });
 
@@ -214,7 +218,8 @@ export class Game {
     this.carSystem = new CarSystem(this.pathfinder, this.grid);
     this.money = STARTING_MONEY;
     this.undoSystem = new UndoSystem(this.grid);
-    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem);
+    this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
+    this.setActiveTool(Tool.Road);
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
@@ -264,6 +269,21 @@ export class Game {
     return this.musicEnabled;
   }
 
+  getActiveTool(): Tool {
+    return this.activeTool;
+  }
+
+  setActiveTool(tool: Tool): void {
+    if (this.activeTool === tool) return;
+    this.activeTool = tool;
+    this.canvas.style.cursor = tool === Tool.Eraser ? 'crosshair' : 'default';
+    this.toolChangeCallback?.(tool);
+  }
+
+  onToolChange(cb: ((tool: Tool) => void) | null): void {
+    this.toolChangeCallback = cb;
+  }
+
   private update(dt: number): void {
     if (this.state === GameState.WaitingToStart) return;
 
@@ -309,6 +329,7 @@ export class Game {
   }
 
   private render(alpha: number): void {
+    this.renderer.updateIndicator(this.roadDrawer.getLastBuiltPos());
     this.renderer.render(
       alpha,
       this.spawnSystem.getHouses(),

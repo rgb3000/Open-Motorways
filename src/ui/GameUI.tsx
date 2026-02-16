@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X } from 'lucide-react';
+import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser } from 'lucide-react';
 import type { Game } from '../core/Game';
-import { GameState } from '../types';
+import { GameState, Tool } from '../types';
 
 export function GameUI({ game }: { game: Game }) {
   const [state, setState] = useState<GameState>(game.getState());
@@ -11,6 +11,7 @@ export function GameUI({ game }: { game: Game }) {
   const [canUndo, setCanUndo] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeTool, setActiveTool] = useState<Tool>(game.getActiveTool());
   useEffect(() => {
     game.onStateUpdate((s, sc, t, m) => {
       setState(s);
@@ -20,7 +21,11 @@ export function GameUI({ game }: { game: Game }) {
       setCanUndo(game.canUndo());
     });
     game.setOnUndoStateChange(() => setCanUndo(game.canUndo()));
-    return () => game.setOnUndoStateChange(null);
+    game.onToolChange((tool) => setActiveTool(tool));
+    return () => {
+      game.setOnUndoStateChange(null);
+      game.onToolChange(null);
+    };
   }, [game]);
   const handleUndo = useCallback(() => game.performUndo(), [game]);
   const handleToggleMusic = useCallback(() => {
@@ -37,6 +42,9 @@ export function GameUI({ game }: { game: Game }) {
   return (
     <div className="absolute inset-0 pointer-events-none">
       <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} onToggleSettings={handleToggleSettings} />
+      {(state === GameState.Playing || state === GameState.Paused) && (
+        <Toolbar activeTool={activeTool} onSelectTool={(tool) => game.setActiveTool(tool)} />
+      )}
       {settingsOpen && (
         <SettingsOverlay onClose={handleToggleSettings} musicEnabled={musicEnabled} onToggleMusic={handleToggleMusic} />
       )}
@@ -114,6 +122,32 @@ function SettingsOverlay({ onClose, musicEnabled, onToggleMusic }: { onClose: ()
   );
 }
 
+function Toolbar({ activeTool, onSelectTool }: { activeTool: Tool; onSelectTool: (tool: Tool) => void }) {
+  const tools = [
+    { tool: Tool.Road, icon: Pencil, label: 'Road', shortcut: 'R' },
+    { tool: Tool.Eraser, icon: Eraser, label: 'Eraser', shortcut: 'E' },
+  ] as const;
+
+  return (
+    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-auto">
+      {tools.map(({ tool, icon: Icon, label, shortcut }) => (
+        <button
+          key={tool}
+          onClick={() => onSelectTool(tool)}
+          title={`${label} (${shortcut})`}
+          className={`w-10 h-10 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-colors ${
+            activeTool === tool
+              ? 'bg-white border-black text-black'
+              : 'bg-white/50 border-transparent text-black/40 hover:bg-white/80 hover:text-black/70'
+          }`}
+        >
+          <Icon size={20} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function StartOverlay({ onStart }: { onStart: () => void }) {
   return (
     <div className="absolute inset-0 bg-black/60 flex flex-col justify-center items-center gap-5 pointer-events-auto">
@@ -134,6 +168,8 @@ function StartOverlay({ onStart }: { onStart: () => void }) {
           <span className="text-white/70 text-sm">Draw a road</span>
           <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">Shift + Click</kbd>
           <span className="text-white/70 text-sm">Auto-connect two points</span>
+          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">R / E</kbd>
+          <span className="text-white/70 text-sm">Road / Eraser tool</span>
         </div>
       </div>
     </div>

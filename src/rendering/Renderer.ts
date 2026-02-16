@@ -32,6 +32,7 @@ export class Renderer {
   private debugLayer: DebugLayer;
   private obstacleLayer: ObstacleLayer;
   private lakeCells: GridPos[] = [];
+  private indicatorMesh: THREE.Mesh | null = null;
 
   private offscreenCanvas: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
@@ -296,6 +297,34 @@ export class Renderer {
     this.scene.add(this.waterSurface);
   }
 
+  updateIndicator(pos: GridPos | null): void {
+    if (!pos) {
+      if (this.indicatorMesh) this.indicatorMesh.visible = false;
+      return;
+    }
+
+    if (!this.indicatorMesh) {
+      const geom = new THREE.RingGeometry(TILE_SIZE * 0.35, TILE_SIZE * 0.42, 32);
+      geom.rotateX(-Math.PI / 2);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x333333,
+        transparent: true,
+        opacity: 0.35,
+        depthTest: false,
+      });
+      this.indicatorMesh = new THREE.Mesh(geom, mat);
+      this.indicatorMesh.renderOrder = 999;
+      this.scene.add(this.indicatorMesh);
+    }
+
+    this.indicatorMesh.position.set(
+      (pos.gx + 0.5) * TILE_SIZE,
+      1.5,
+      (pos.gy + 0.5) * TILE_SIZE,
+    );
+    this.indicatorMesh.visible = true;
+  }
+
   markGroundDirty(): void {
     this.groundDirty = true;
   }
@@ -341,6 +370,12 @@ export class Renderer {
     this.carLayer.dispose(this.scene);
     this.debugLayer.dispose(this.scene);
     this.obstacleLayer.disposeAll(this.scene);
+    if (this.indicatorMesh) {
+      this.scene.remove(this.indicatorMesh);
+      this.indicatorMesh.geometry.dispose();
+      (this.indicatorMesh.material as THREE.Material).dispose();
+      this.indicatorMesh = null;
+    }
     if (this.waterSurface) {
       this.scene.remove(this.waterSurface);
       this.waterSurface.geometry.dispose();

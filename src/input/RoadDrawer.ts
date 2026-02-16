@@ -5,7 +5,7 @@ import type { Grid } from '../core/Grid';
 import { OPPOSITE_DIR } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { GridPos } from '../types';
-import { CellType, Direction } from '../types';
+import { CellType, Direction, Tool } from '../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COST, ROAD_REFUND } from '../constants';
 import { findRoadPlacementPath } from '../pathfinding/RoadPlacementPathfinder';
 
@@ -29,6 +29,7 @@ export class RoadDrawer {
   private money: MoneyInterface;
   private getHouses: () => House[];
   private undoSystem: UndoSystem;
+  private getActiveTool: () => Tool;
 
   private mode: DrawMode = 'none';
   private prevPlacedPos: GridPos | null = null;
@@ -45,6 +46,7 @@ export class RoadDrawer {
     money: MoneyInterface,
     getHouses: () => House[],
     undoSystem: UndoSystem,
+    getActiveTool: () => Tool = () => Tool.Road,
   ) {
     this.input = input;
     this.roadSystem = roadSystem;
@@ -52,10 +54,22 @@ export class RoadDrawer {
     this.money = money;
     this.getHouses = getHouses;
     this.undoSystem = undoSystem;
+    this.getActiveTool = getActiveTool;
+  }
+
+  getLastBuiltPos(): GridPos | null {
+    return this.lastBuiltPos;
   }
 
   update(): void {
-    const { leftDown, rightDown, gridPos } = this.input.state;
+    const { gridPos } = this.input.state;
+    const isEraser = this.getActiveTool() === Tool.Eraser;
+
+    // Remap inputs: eraser tool makes left-click erase
+    const leftDown = isEraser ? false : this.input.state.leftDown;
+    const rightDown = isEraser
+      ? (this.input.state.leftDown || this.input.state.rightDown)
+      : this.input.state.rightDown;
 
     if (leftDown) {
       if (!this.wasLeftDown) {
@@ -236,12 +250,26 @@ export class RoadDrawer {
       if (!this.wasRightDown) {
         this.undoSystem.beginGroup();
         this.lastGridPos = { ...gridPos };
-        this.tryErase(gridPos.gx, gridPos.gy);
+
+        if (isEraser && this.input.state.shiftDown && this.lastBuiltPos) {
+          // Shift-click erase: find A* path and erase along it
+          const path = findRoadPlacementPath(this.grid, this.lastBuiltPos, gridPos);
+          if (path) {
+            for (const p of path) {
+              this.tryErase(p.gx, p.gy);
+            }
+            this.lastBuiltPos = { ...gridPos };
+          }
+        } else {
+          this.tryErase(gridPos.gx, gridPos.gy);
+          this.lastBuiltPos = { ...gridPos };
+        }
       } else if (this.lastGridPos && (gridPos.gx !== this.lastGridPos.gx || gridPos.gy !== this.lastGridPos.gy)) {
         this.bresenhamLine(this.lastGridPos.gx, this.lastGridPos.gy, gridPos.gx, gridPos.gy, (x, y) => {
           this.tryErase(x, y);
         });
         this.lastGridPos = { ...gridPos };
+        this.lastBuiltPos = { ...gridPos };
       }
     }
 
