@@ -4,7 +4,7 @@ import type { House } from '../entities/House';
 import type { Business } from '../entities/Business';
 import type { Car } from '../entities/Car';
 import type { GridPos } from '../types';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, TILE_SIZE, LAKE_DEPTH, LAKE_WATER_SURFACE_Y, LAKE_WATER_COLOR_HEX, LAKE_WATER_OPACITY } from '../constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, TILE_SIZE, LAKE_DEPTH, LAKE_WATER_SURFACE_Y, LAKE_WATER_COLOR_HEX, LAKE_WATER_OPACITY, ROAD_DEBUG } from '../constants';
 import { lerp, clamp } from '../utils/math';
 import { TerrainLayer } from './layers/TerrainLayer';
 import { RoadLayer } from './layers/RoadLayer';
@@ -12,6 +12,7 @@ import { BuildingLayer } from './layers/BuildingLayer';
 import { CarLayer } from './layers/CarLayer';
 import { DebugLayer } from './layers/DebugLayer';
 import { ObstacleLayer } from './layers/ObstacleLayer';
+import { RoadDebugLayer } from './layers/RoadDebugLayer';
 
 const GROUND_SUBDIV = 3; // subdivisions per grid cell for smooth lake bevel
 const MIN_ZOOM = 0.5;
@@ -31,6 +32,8 @@ export class Renderer {
   private carLayer: CarLayer;
   private debugLayer: DebugLayer;
   private obstacleLayer: ObstacleLayer;
+  private roadDebugLayer: RoadDebugLayer;
+  private grid: Grid;
   private lakeCells: GridPos[] = [];
   private indicatorMesh: THREE.Mesh | null = null;
 
@@ -103,6 +106,8 @@ export class Renderer {
     this.carLayer = new CarLayer();
     this.debugLayer = new DebugLayer();
     this.obstacleLayer = new ObstacleLayer();
+    this.roadDebugLayer = new RoadDebugLayer();
+    this.grid = grid;
 
     // Render initial ground state (terrain only, roads are 3D)
     this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -360,6 +365,7 @@ export class Renderer {
     this.buildingLayer.update(this.scene, houses, businesses);
     this.carLayer.update(this.scene, cars, alpha);
     this.debugLayer.update(this.scene, spawnBounds);
+    if (ROAD_DEBUG) this.roadDebugLayer.update(this.scene, this.grid, cars);
     // Render
     this.webglRenderer.render(this.scene, this.camera);
   }
@@ -369,6 +375,7 @@ export class Renderer {
     this.buildingLayer.dispose(this.scene);
     this.carLayer.dispose(this.scene);
     this.debugLayer.dispose(this.scene);
+    this.roadDebugLayer.dispose(this.scene);
     this.obstacleLayer.disposeAll(this.scene);
     if (this.indicatorMesh) {
       this.scene.remove(this.indicatorMesh);
