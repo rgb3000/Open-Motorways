@@ -560,9 +560,9 @@ export class RoadLayer {
       if (chain) chains.push(chain);
     }
 
-    // Add straight spur chains from every Connector to its House/ParkingLot.
-    // These are always separate 2-node chains (not appended to main chains)
-    // so they render as straight segments without unwanted Bezier curves.
+    // Append building cells (House/ParkingLot) to chains that end at their Connector.
+    // This eliminates visual gaps where road chains meet building connectors.
+    const connectorToBuilding = new Map<number, number>();
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
@@ -576,10 +576,32 @@ export class RoadLayer {
           const ny = gy + off.dy;
           const nCell = this.grid.getCell(nx, ny);
           if (nCell?.type === CellType.House || nCell?.type === CellType.ParkingLot) {
-            chains.push([key, cellKey(nx, ny)]);
+            connectorToBuilding.set(key, cellKey(nx, ny));
             break;
           }
         }
+      }
+    }
+
+    // Extend chains that start/end at a connector by appending the building cell
+    const attachedConnectors = new Set<number>();
+    for (const chain of chains) {
+      const last = chain[chain.length - 1];
+      if (connectorToBuilding.has(last)) {
+        chain.push(connectorToBuilding.get(last)!);
+        attachedConnectors.add(last);
+      }
+      const first = chain[0];
+      if (connectorToBuilding.has(first)) {
+        chain.unshift(connectorToBuilding.get(first)!);
+        attachedConnectors.add(first);
+      }
+    }
+
+    // Fall back to 2-node spur chains for any connectors not attached to a chain
+    for (const [connKey, buildingKey] of connectorToBuilding) {
+      if (!attachedConnectors.has(connKey)) {
+        chains.push([connKey, buildingKey]);
       }
     }
 
