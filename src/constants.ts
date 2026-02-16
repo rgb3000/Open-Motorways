@@ -13,7 +13,7 @@ export const MAX_FRAME_TIME = 0.2;       // spiral-of-death cap
 
 // Demand
 export const MAX_DEMAND_PINS = 8;
-export const DEMAND_BASE_RATE = 0.8;   // pins/min for a fresh business
+export const DEMAND_BASE_RATE = 1.5;   // pins/min for a fresh business
 export const DEMAND_RATE_GROWTH = 0.3; // additional pins/min per minute of age
 export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to the same business
 
@@ -97,6 +97,7 @@ export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. thi
 // Debug
 export const SPAWN_DEBUG = true;
 export const DEMAND_DEBUG = true;
+export const ROAD_DEBUG = false;
 
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';

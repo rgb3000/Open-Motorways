@@ -25,6 +25,8 @@ export interface DemandStat {
   demand: number;
   supplyPerMin: number;
   demandPerMin: number;
+  houses: number;
+  businesses: number;
 }
 
 export class Game {
@@ -411,6 +413,8 @@ export class Game {
         demand: colorDemands.get(color) ?? 0,
         supplyPerMin: this.spawnSystem.getHouses().filter(h => h.color === color).length * HOUSE_SUPPLY_PER_MINUTE,
         demandPerMin: this.demandSystem.getColorPinOutputRate(color),
+        houses: this.spawnSystem.getHouses().filter(h => h.color === color).length,
+        businesses: this.spawnSystem.getBusinesses().filter(b => b.color === color).length,
       }));
     }
     this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money, demandStats);
