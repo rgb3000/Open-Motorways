@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GameState, Tool } from '../types';
+import { CellType, GameState, Tool } from '../types';
+import type { GameColor } from '../types';
 import { Grid } from './Grid';
 import { GameLoop } from './GameLoop';
 import { Renderer } from '../rendering/Renderer';
@@ -15,8 +16,9 @@ import { MusicSystem } from '../systems/MusicSystem';
 import { SoundEffectSystem } from '../systems/SoundEffectSystem';
 import { ObstacleSystem } from '../systems/ObstacleSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
-import { STARTING_MONEY, DELIVERY_REWARD, SPAWN_DEBUG, DEMAND_DEBUG, MAX_DEMAND_PINS, CARS_PER_HOUSE } from '../constants';
-import type { GameColor } from '../types';
+import { PendingDeletionSystem } from '../systems/PendingDeletionSystem';
+import { CarState } from '../entities/Car';
+import { STARTING_MONEY, DELIVERY_REWARD, ROAD_REFUND, SPAWN_DEBUG, DEMAND_DEBUG, MAX_DEMAND_PINS, CARS_PER_HOUSE } from '../constants';
 
 export interface DemandStat {
   color: GameColor;
@@ -37,6 +39,7 @@ export class Game {
   private demandSystem: DemandSystem;
   private demandWarnPrevSin = 0;
   private carSystem: CarSystem;
+  private pendingDeletionSystem: PendingDeletionSystem;
   private obstacleSystem: ObstacleSystem;
   private pathfinder: Pathfinder;
   private musicSystem: MusicSystem = new MusicSystem();
@@ -70,9 +73,10 @@ export class Game {
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
+    this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
     this.demandSystem = new DemandSystem();
     this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem);
-    this.carSystem = new CarSystem(this.pathfinder, this.grid);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
@@ -83,6 +87,7 @@ export class Game {
     );
     this.undoSystem = new UndoSystem(this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
+    this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -220,13 +225,15 @@ export class Game {
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
+    this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
     this.demandSystem = new DemandSystem();
     this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem);
     this.demandWarnPrevSin = 0;
-    this.carSystem = new CarSystem(this.pathfinder, this.grid);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem);
     this.money = STARTING_MONEY;
     this.undoSystem = new UndoSystem(this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
+    this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
     this.setActiveTool(Tool.Road);
     this.renderer = new Renderer(this.webglRenderer, this.grid);
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
@@ -292,6 +299,38 @@ export class Game {
     this.toolChangeCallback = cb;
   }
 
+  private handleTryErase(gx: number, gy: number): boolean {
+    const cell = this.grid.getCell(gx, gy);
+    if (!cell || cell.type !== CellType.Road) return false;
+
+    if (cell.pendingDeletion) return false;
+
+    // Only GoingHome cars currently traversing this cell matter
+    const cars = this.carSystem.getCars();
+    const dependentCarIds: string[] = [];
+    for (const car of cars) {
+      if (car.state !== CarState.GoingHome || car.path.length === 0) continue;
+      for (let i = car.pathIndex; i < car.path.length; i++) {
+        if (car.path[i].gx === gx && car.path[i].gy === gy) {
+          dependentCarIds.push(car.id);
+          break;
+        }
+      }
+    }
+
+    if (dependentCarIds.length === 0) {
+      if (this.roadSystem.removeRoad(gx, gy)) {
+        this.money += ROAD_REFUND;
+        return true;
+      }
+      return false;
+    }
+
+    // GoingHome cars need this road — defer deletion
+    this.pendingDeletionSystem.markPending(gx, gy, dependentCarIds);
+    return true;
+  }
+
   private update(dt: number): void {
     if (this.state === GameState.WaitingToStart) return;
 
@@ -329,6 +368,7 @@ export class Game {
       this.demandWarnPrevSin = 0;
     }
     this.carSystem.update(dt, this.spawnSystem.getHouses(), this.spawnSystem.getBusinesses());
+    this.pendingDeletionSystem.update();
 
     if (this.demandSystem.isGameOver) {
       this.state = GameState.GameOver;

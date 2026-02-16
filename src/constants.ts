@@ -48,10 +48,10 @@ export const SPAWN_AREA_INTERVALS = [
   { threshold: 12, inset: 0.30 },  // 12 entities: 40% of grid
   { threshold: 16, inset: 0.25 },  // 16 entities: 50% of grid
   { threshold: 20, inset: 0.20 },  // 20 entities: 60% of grid
-  { threshold: 24, inset: 0.15 },  // 24 entities: 70% of grid
-  { threshold: 28, inset: 0.10 },  // 28 entities: 80% of grid
-  { threshold: 32, inset: 0.05 },  // 32 entities: 90% of grid
-  { threshold: 36, inset: 0.00 },  // 36 entities: full grid
+  { threshold: 30, inset: 0.15 },  // 24 entities: 70% of grid
+  { threshold: 40, inset: 0.10 },  // 28 entities: 80% of grid
+  { threshold: 50, inset: 0.05 },  // 32 entities: 90% of grid
+  { threshold: 60, inset: 0.00 },  // 36 entities: full grid
 ];
 
 // Money

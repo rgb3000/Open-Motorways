@@ -77,10 +77,10 @@ export class CarParkingManager {
     }
     onSetCooldown(biz.id);
 
-    // Path home from connector
+    // Path home from connector (allow pending-deletion roads)
     const home = houses.find(h => h.id === car.homeHouseId);
     if (home) {
-      const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
+      const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
       if (homePath) {
         car.state = CarState.GoingHome;
         car.targetBusinessId = null;
@@ -161,10 +161,10 @@ export class CarParkingManager {
       car.prevPixelPos.x = car.pixelPos.x;
       car.prevPixelPos.y = car.pixelPos.y;
     } else {
-      // No free slot — path home immediately
+      // No free slot — path home immediately (allow pending-deletion roads)
       const home = houses.find(h => h.id === car.homeHouseId);
       if (home) {
-        const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos);
+        const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
         if (homePath) {
           car.state = CarState.GoingHome;
           car.targetBusinessId = null;

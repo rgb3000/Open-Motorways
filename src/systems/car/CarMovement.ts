@@ -10,16 +10,19 @@ import type { CarTrafficManager } from './CarTrafficManager';
 import { occupancyKey, isIntersection } from './CarTrafficManager';
 import type { IntersectionEntry } from './CarTrafficManager';
 import type { CarRouter } from './CarRouter';
+import type { PendingDeletionSystem } from '../PendingDeletionSystem';
 
 export class CarMovement {
   private grid: Grid;
   private trafficManager: CarTrafficManager;
   private router: CarRouter;
+  private pendingDeletionSystem: PendingDeletionSystem;
 
-  constructor(grid: Grid, trafficManager: CarTrafficManager, router: CarRouter) {
+  constructor(grid: Grid, trafficManager: CarTrafficManager, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem) {
     this.grid = grid;
     this.trafficManager = trafficManager;
     this.router = router;
+    this.pendingDeletionSystem = pendingDeletionSystem;
   }
 
   interpolateCarPosition(car: Car): void {
@@ -95,7 +98,15 @@ export class CarMovement {
     // Advance through path segments
     while (car.segmentProgress >= 1 && car.pathIndex < car.path.length - 1) {
       car.segmentProgress -= 1;
+      const leftTile = car.path[car.pathIndex];
       car.pathIndex++;
+      // Notify pending deletion system when a GoingHome car leaves a pending cell
+      if (car.state === CarState.GoingHome) {
+        const leftCell = this.grid.getCell(leftTile.gx, leftTile.gy);
+        if (leftCell?.pendingDeletion) {
+          this.pendingDeletionSystem.notifyCarPassed(car.id, leftTile.gx, leftTile.gy);
+        }
+      }
     }
 
     // Check if next tile on path is still traversable

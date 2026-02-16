@@ -35,20 +35,20 @@ export class Pathfinder {
     this.cache.clear();
   }
 
-  findPath(from: GridPos, to: GridPos): GridPos[] | null {
+  findPath(from: GridPos, to: GridPos, allowPendingDeletion = false): GridPos[] | null {
     if (gridPosEqual(from, to)) return [from];
 
-    const cacheKey = `${gridPosKey(from)}->${gridPosKey(to)}`;
+    const cacheKey = `${gridPosKey(from)}->${gridPosKey(to)}${allowPendingDeletion ? ':pd' : ''}`;
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey)!;
     }
 
-    const result = this.astar(from, to);
+    const result = this.astar(from, to, allowPendingDeletion);
     this.cache.set(cacheKey, result);
     return result;
   }
 
-  private astar(from: GridPos, to: GridPos): GridPos[] | null {
+  private astar(from: GridPos, to: GridPos, allowPendingDeletion = false): GridPos[] | null {
     const open = new PriorityQueue<AStarNode>((a, b) => a.f - b.f);
     const closed = new Map<string, AStarNode>();
 
@@ -95,6 +95,7 @@ export class Pathfinder {
 
         const cell = this.grid.getCell(nx, ny);
         if (!cell) continue;
+        if (cell.pendingDeletion && !allowPendingDeletion) continue;
 
         // Can traverse: roads always, house/parkingLot only as destination, business is impassable
         const isDestination = nx === to.gx && ny === to.gy;

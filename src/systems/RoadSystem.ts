@@ -29,6 +29,7 @@ export class RoadSystem {
     this.grid.setCell(gx, gy, {
       type: CellType.Road,
       roadConnections: [],
+      pendingDeletion: false,
     });
 
     this.dirty = true;
@@ -62,6 +63,7 @@ export class RoadSystem {
       roadConnections: [],
       color: null,
       connectorDir: null,
+      pendingDeletion: false,
     });
 
     this.dirty = true;

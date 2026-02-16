@@ -74,4 +74,5 @@ export interface Cell {
   roadConnections: Direction[];
   color: GameColor | null;
   connectorDir: Direction | null;
+  pendingDeletion: boolean;
 }

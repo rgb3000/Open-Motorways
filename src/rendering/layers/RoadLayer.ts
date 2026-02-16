@@ -285,6 +285,8 @@ export class RoadLayer {
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
   private roadNoiseTexture = RoadLayer.createRoadNoiseTexture();
   private roadSurfaceMat = new THREE.MeshStandardMaterial({ color: ROAD_COLOR, side: THREE.DoubleSide, map: this.roadNoiseTexture });
+  private pendingOverlayMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false });
+  private pendingOverlayGeom = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
 
   private static createRoadNoiseTexture(): THREE.CanvasTexture {
     const size = 64;
@@ -609,6 +611,20 @@ export class RoadLayer {
       }
     }
 
+    // Semi-transparent overlay for pending-deletion road cells
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const cell = this.grid.getCell(gx, gy);
+        if (!cell || !cell.pendingDeletion) continue;
+        const cx = gx * TILE_SIZE + half;
+        const cz = gy * TILE_SIZE + half;
+        const overlay = new THREE.Mesh(this.pendingOverlayGeom, this.pendingOverlayMat);
+        overlay.rotation.x = -Math.PI / 2;
+        overlay.position.set(cx, ROAD_SURFACE_Y + 0.2, cz);
+        group.add(overlay);
+      }
+    }
+
     this.group = group;
     scene.add(group);
   }
@@ -635,5 +651,7 @@ export class RoadLayer {
     this.circleGeom.dispose();
     this.roadSurfaceMat.dispose();
     this.roadNoiseTexture.dispose();
+    this.pendingOverlayMat.dispose();
+    this.pendingOverlayGeom.dispose();
   }
 }

@@ -40,6 +40,7 @@ export class RoadDrawer {
 
   onRoadPlace: (() => void) | null = null;
   onRoadDelete: (() => void) | null = null;
+  onTryErase: ((gx: number, gy: number) => boolean) | null = null;
 
   constructor(
     input: InputHandler, roadSystem: RoadSystem, grid: Grid,
@@ -341,6 +342,7 @@ export class RoadDrawer {
           roadConnections: [],
           color: null,
           connectorDir: null,
+          pendingDeletion: false,
         });
       }
     }
@@ -427,6 +429,14 @@ export class RoadDrawer {
 
   private tryErase(gx: number, gy: number): void {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
+    // If a delegate is set, let it decide (immediate delete vs pending)
+    if (this.onTryErase) {
+      this.undoSystem.snapshotCellAndNeighbors(gx, gy);
+      if (this.onTryErase(gx, gy)) {
+        this.onRoadDelete?.();
+      }
+      return;
+    }
     this.undoSystem.snapshotCellAndNeighbors(gx, gy);
     if (this.roadSystem.removeRoad(gx, gy)) {
       this.money.refund(ROAD_REFUND);

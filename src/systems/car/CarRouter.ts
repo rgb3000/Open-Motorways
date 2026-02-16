@@ -93,9 +93,9 @@ export class CarRouter {
       car.targetBusinessId = null;
     }
 
-    // 3. Try path home
+    // 3. Try path home (allow pending-deletion roads so car can still get home)
     if (home) {
-      const homePath = this.pathfinder.findPath(currentTile, home.pos);
+      const homePath = this.pathfinder.findPath(currentTile, home.pos, true);
       if (homePath) {
         car.state = CarState.GoingHome;
         car.destination = home.pos;
