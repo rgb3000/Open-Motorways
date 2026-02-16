@@ -20,7 +20,7 @@ export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to
 // Cars
 export const CARS_PER_HOUSE = 2;
 export const CAR_SPEED = 1; // tiles per second
-export const LANE_OFFSET = TILE_SIZE * 0.15;    // px from tile center to lane center
+export const LANE_OFFSET = TILE_SIZE * 0.12;    // px from tile center to lane center
 export const CAR_WIDTH = TILE_SIZE * 0.15;       // px (narrow dimension, perpendicular to travel)
 export const CAR_LENGTH = TILE_SIZE * 0.25;      // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
@@ -103,7 +103,7 @@ export const ROAD_DEBUG = false;
 export const BG_COLOR = '#E8D8B4';
 export const GRID_LINE_COLOR = '#D4C4A0';
 // Roads
-export const ROAD_HALF_WIDTH = TILE_SIZE * 0.25;
+export const ROAD_HALF_WIDTH = TILE_SIZE * 0.2;
 export const ROAD_COLOR = '#B8B8B8';
 export const ROAD_OUTLINE_COLOR = '#C0C0C0';
 export const ROAD_LANE_DIVIDER_COLOR = '#DDDDDD';
