@@ -305,15 +305,33 @@ export class Game {
 
     if (cell.pendingDeletion) return false;
 
-    // Only GoingHome cars currently traversing this cell matter
+    // Check all car states that depend on this cell
     const cars = this.carSystem.getCars();
     const dependentCarIds: string[] = [];
     for (const car of cars) {
-      if (car.state !== CarState.GoingHome || car.path.length === 0) continue;
-      for (let i = car.pathIndex; i < car.path.length; i++) {
-        if (car.path[i].gx === gx && car.path[i].gy === gy) {
-          dependentCarIds.push(car.id);
-          break;
+      if (car.state === CarState.GoingToBusiness && car.path.length > 0) {
+        // Cells already passed are reserved for return trip
+        for (let i = 0; i < car.pathIndex; i++) {
+          if (car.path[i].gx === gx && car.path[i].gy === gy) {
+            dependentCarIds.push(car.id);
+            break;
+          }
+        }
+      } else if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) {
+        // Entire outbound path is reserved
+        for (const p of car.outboundPath) {
+          if (p.gx === gx && p.gy === gy) {
+            dependentCarIds.push(car.id);
+            break;
+          }
+        }
+      } else if (car.state === CarState.GoingHome && car.path.length > 0) {
+        // Cells still ahead are reserved
+        for (let i = car.pathIndex; i < car.path.length; i++) {
+          if (car.path[i].gx === gx && car.path[i].gy === gy) {
+            dependentCarIds.push(car.id);
+            break;
+          }
         }
       }
     }

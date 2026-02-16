@@ -1,4 +1,5 @@
 import type { Grid } from '../core/Grid';
+import type { GridPos } from '../types';
 import type { RoadSystem } from './RoadSystem';
 
 export class PendingDeletionSystem {
@@ -42,6 +43,19 @@ export class PendingDeletionSystem {
   notifyCarRemoved(carId: string): void {
     for (const set of this.pendingCells.values()) {
       set.delete(carId);
+    }
+  }
+
+  notifyCarTransitionedHome(carId: string, newPath: GridPos[]): void {
+    // Remove carId from all pending cells
+    for (const set of this.pendingCells.values()) {
+      set.delete(carId);
+    }
+    // Re-add carId to pending cells that are in the new GoingHome path
+    for (const pos of newPath) {
+      const key = this.cellKey(pos.gx, pos.gy);
+      const set = this.pendingCells.get(key);
+      if (set) set.add(carId);
     }
   }
 

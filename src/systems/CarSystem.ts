@@ -41,7 +41,7 @@ export class CarSystem {
     this.router = new CarRouter(pathfinder, grid);
     this.trafficManager = new CarTrafficManager(grid);
     this.dispatcher = new CarDispatcher(pathfinder, this.router);
-    this.parkingManager = new CarParkingManager(pathfinder, this.router);
+    this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem);
     this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem);
   }
 
