@@ -591,12 +591,16 @@ export class RoadLayer {
       }
     }
 
-    // Extend chains that start/end at a connector by appending the building cell
+    // Extend chains that start/end at a connector by appending the building cell.
+    // Use a fixed length so newly pushed spur chains aren't re-processed (avoids
+    // infinite loop when two houses share a connector).
     const attachedConnectors = new Set<number>();
-    for (const chain of chains) {
+    const originalChainCount = chains.length;
+    for (let ci = 0; ci < originalChainCount; ci++) {
+      const chain = chains[ci];
       const last = chain[chain.length - 1];
       const lastBuildings = connectorToBuildings.get(last);
-      if (lastBuildings) {
+      if (lastBuildings && !attachedConnectors.has(last)) {
         chain.push(lastBuildings[0]);
         attachedConnectors.add(last);
         for (let i = 1; i < lastBuildings.length; i++) {
@@ -605,7 +609,7 @@ export class RoadLayer {
       }
       const first = chain[0];
       const firstBuildings = connectorToBuildings.get(first);
-      if (firstBuildings) {
+      if (firstBuildings && !attachedConnectors.has(first)) {
         chain.unshift(firstBuildings[0]);
         attachedConnectors.add(first);
         for (let i = 1; i < firstBuildings.length; i++) {

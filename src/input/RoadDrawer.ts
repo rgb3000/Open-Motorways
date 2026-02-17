@@ -499,8 +499,11 @@ export class RoadDrawer {
 
     this.relocateHouseConnector(house, newDir);
 
-    // Connect the incoming road to the new connector
-    this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, house.connectorPos.gx, house.connectorPos.gy);
+    // Connect the incoming road to the new connector (skip if same cell, e.g. shared connector)
+    const cp = house.connectorPos;
+    if (this.prevPlacedPos.gx !== cp.gx || this.prevPlacedPos.gy !== cp.gy) {
+      this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, cp.gx, cp.gy);
+    }
     return true;
   }
 
