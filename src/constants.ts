@@ -45,7 +45,7 @@ export const SPAWN_AREA_INTERVALS = [
   { threshold: 4, inset: 0.40 },   //  4 entities: 20% of grid
   { threshold: 8, inset: 0.35 },   //  8 entities: 30% of grid
   { threshold: 12, inset: 0.30 },  // 12 entities: 40% of grid
-  { threshold: 16, inset: 0.25 },  // 16 entities: 50% of grid
+  { threshold: 20, inset: 0.25 },  // 16 entities: 50% of grid
   { threshold: 30, inset: 0.20 },  // 20 entities: 60% of grid
   { threshold: 60, inset: 0.15 },  // 24 entities: 70% of grid
   { threshold: 120, inset: 0.10 },  // 28 entities: 80% of grid
@@ -98,7 +98,7 @@ export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. thi
 export const SPAWN_DEBUG = true;
 export const DEMAND_DEBUG = true;
 export const ROAD_DEBUG = false;
-export const ROAD_GRAPH_DEBUG = false;
+export const ROAD_GRAPH_DEBUG = true;
 
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';
