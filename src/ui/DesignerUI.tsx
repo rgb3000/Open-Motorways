@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Pencil, Eraser, Home, Store, Mountain, X, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Pencil, Eraser, Home, Store, Mountain, X, Copy, Check, Play } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapDesigner, DesignerTool } from '../designer/MapDesigner';
 import { GameColor, Direction } from '../types';
 import { COLOR_MAP } from '../constants';
 
-export function DesignerUI({ designer }: { designer: MapDesigner }) {
+export function DesignerUI({ designer, onTestPlay }: { designer: MapDesigner; onTestPlay: () => void }) {
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<DesignerTool>(designer.activeTool);
   const [activeColor, setActiveColor] = useState<GameColor>(designer.activeColor);
@@ -102,12 +102,20 @@ export function DesignerUI({ designer }: { designer: MapDesigner }) {
           </button>
           <span className="text-black font-bold font-mono text-lg">Map Designer</span>
         </div>
-        <button
-          onClick={handleExport}
-          className="pointer-events-auto bg-black text-white font-mono text-sm font-bold px-4 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-800 transition-colors"
-        >
-          Export
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onTestPlay}
+            className="pointer-events-auto flex items-center gap-1.5 bg-black text-white font-mono text-sm font-bold px-4 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-800 transition-colors"
+          >
+            <Play size={14} /> Play
+          </button>
+          <button
+            onClick={handleExport}
+            className="pointer-events-auto bg-black text-white font-mono text-sm font-bold px-4 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-800 transition-colors"
+          >
+            Export
+          </button>
+        </div>
       </div>
 
       {/* Left toolbar */}
