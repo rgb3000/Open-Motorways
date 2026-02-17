@@ -17,7 +17,8 @@ export class CarDispatcher {
   }
 
   dispatch(cars: Car[], houses: House[], businesses: Business[]): Car[] {
-    const demandBusinesses = businesses.filter(b => b.demandPins > 0);
+    const demandBusinesses = businesses.filter(b => b.demandPins > 0)
+      .sort((a, b) => b.demandPins - a.demandPins);
     if (demandBusinesses.length === 0) return [];
 
     const carsEnRoute = this._carsEnRoute;
