@@ -21,6 +21,7 @@ import { CarState } from '../entities/Car';
 import { SPAWN_DEBUG, DEMAND_DEBUG, buildConfig } from '../constants';
 import type { MapConfig } from '../maps/types';
 import type { GameConstants } from '../maps/types';
+import { forEachDirection, opposite } from '../utils/direction';
 
 export interface DemandStat {
   color: GameColor;
@@ -287,7 +288,7 @@ export class Game {
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
     this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
     this.setActiveTool(Tool.Road);
-    this.renderer = new Renderer(this.webglRenderer, this.grid);
+    this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
@@ -431,25 +432,18 @@ export class Game {
       const cell = this.grid.getCell(r.gx, r.gy);
       if (!cell || cell.type !== CellType.Road) continue;
 
-      if (r.connections) {
-        // Use exact connections from the designer
-        cell.roadConnections = r.connections;
-        // Also connect to adjacent connector/parking cells (for house/business access)
-        for (const dir of this.grid.getAllDirections()) {
-          const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
-          if (neighbor && (neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.ParkingLot)) {
-            this.roadSystem.connectRoads(r.gx, r.gy, neighbor.gx, neighbor.gy);
-          }
+      cell.roadConnections = r.connections ?? 0;
+    }
+    // Restore road-side bits on connector cells
+    for (const r of this.mapConfig.roads) {
+      const cell = this.grid.getCell(r.gx, r.gy);
+      if (!cell || cell.type !== CellType.Road) continue;
+      forEachDirection(cell.roadConnections, (dir) => {
+        const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
+        if (neighbor && neighbor.cell.type === CellType.Connector) {
+          neighbor.cell.roadConnections |= opposite(dir);
         }
-      } else {
-        // Fallback: auto-connect all adjacent road/connector/parking neighbors
-        for (const dir of this.grid.getAllDirections()) {
-          const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
-          if (neighbor && (neighbor.cell.type === CellType.Road || neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.ParkingLot)) {
-            this.roadSystem.connectRoads(r.gx, r.gy, neighbor.gx, neighbor.gy);
-          }
-        }
-      }
+      });
     }
     this.roadSystem.markDirty();
   }
