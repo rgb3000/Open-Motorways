@@ -4,8 +4,8 @@ import { GameColor } from './types';
 export const GRID_COLS = 70;
 export const GRID_ROWS = 40;
 export const TILE_SIZE = 50;
-export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;  // 960
-export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE; // 600
+export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;
+export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE;
 
 // Game loop
 export const FIXED_DT = 1 / 60;         // 60 updates/sec
@@ -98,7 +98,7 @@ export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. thi
 export const SPAWN_DEBUG = true;
 export const DEMAND_DEBUG = true;
 export const ROAD_DEBUG = false;
-export const ROAD_GRAPH_DEBUG = true;
+export const ROAD_GRAPH_DEBUG = false;
 
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';
