@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser } from 'lucide-react';
+import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { Game, DemandStat } from '../core/Game';
 import { GameState, Tool } from '../types';
 import { COLOR_MAP } from '../constants';
 
 export function GameUI({ game }: { game: Game }) {
+  const navigate = useNavigate();
   const [state, setState] = useState<GameState>(game.getState());
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
@@ -37,6 +39,7 @@ export function GameUI({ game }: { game: Game }) {
     setMusicEnabled(next);
   }, [game]);
   const handleToggleSettings = useCallback(() => setSettingsOpen(o => !o), []);
+  const handleBack = useCallback(() => navigate('/'), [navigate]);
 
   const minutes = Math.floor(time / 60);
   const seconds = Math.floor(time % 60);
@@ -44,7 +47,7 @@ export function GameUI({ game }: { game: Game }) {
 
   return (
     <div className="absolute inset-0 pointer-events-none">
-      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} onToggleSettings={handleToggleSettings} />
+      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} onToggleSettings={handleToggleSettings} onBack={handleBack} />
       {(state === GameState.Playing || state === GameState.Paused) && (
         <Toolbar activeTool={activeTool} onSelectTool={(tool) => game.setActiveTool(tool)} />
       )}
@@ -54,9 +57,6 @@ export function GameUI({ game }: { game: Game }) {
       {demandStats && demandStats.length > 0 && (
         <DemandDebugOverlay stats={demandStats} />
       )}
-      {state === GameState.WaitingToStart && (
-        <StartOverlay onStart={() => game.startGame()} />
-      )}
       {state === GameState.GameOver && (
         <GameOverOverlay score={score} onRestart={() => game.restart()} />
       )}
@@ -64,16 +64,25 @@ export function GameUI({ game }: { game: Game }) {
   );
 }
 
-function HUD({ score, money, time, state, onPause, canUndo, onUndo, onToggleSettings }: { score: number; money: number; time: string; state: GameState; onPause: () => void; canUndo: boolean; onUndo: () => void; onToggleSettings: () => void }) {
+function HUD({ score, money, time, state, onPause, canUndo, onUndo, onToggleSettings, onBack }: { score: number; money: number; time: string; state: GameState; onPause: () => void; canUndo: boolean; onUndo: () => void; onToggleSettings: () => void; onBack: () => void }) {
   return (
     <div className="flex justify-between items-start p-2.5">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-black font-bold font-mono text-lg">
-          Score: {score}
-        </span>
-        <span className="text-[#2a7d2a] font-bold font-mono text-lg">
-          ${money}
-        </span>
+      <div className="flex items-start gap-2.5">
+        <button
+          onClick={onBack}
+          title="Back to map select"
+          className="pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center text-black mt-0.5"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-black font-bold font-mono text-lg">
+            Score: {score}
+          </span>
+          <span className="text-[#2a7d2a] font-bold font-mono text-lg">
+            ${money}
+          </span>
+        </div>
       </div>
       <div className="flex items-center gap-2.5">
         <span className="text-black font-bold font-mono text-lg">
@@ -150,34 +159,6 @@ function Toolbar({ activeTool, onSelectTool }: { activeTool: Tool; onSelectTool:
           <Icon size={20} />
         </button>
       ))}
-    </div>
-  );
-}
-
-function StartOverlay({ onStart }: { onStart: () => void }) {
-  return (
-    <div className="absolute inset-0 bg-black/60 flex flex-col justify-center items-center gap-5 pointer-events-auto">
-      <div className="text-white font-bold font-mono text-5xl">Open Motorways</div>
-      <button
-        onClick={onStart}
-        className="font-bold font-mono text-xl py-3 px-8 rounded-lg border-none bg-white text-black cursor-pointer"
-      >
-        Start Game
-      </button>
-      <div className="absolute bottom-6 left-6 bg-white/10 rounded-xl p-4">
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center">
-          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">Space + Drag</kbd>
-          <span className="text-white/70 text-sm">Pan the map</span>
-          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">+ / −</kbd>
-          <span className="text-white/70 text-sm">Zoom in / out</span>
-          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">Click + Drag</kbd>
-          <span className="text-white/70 text-sm">Draw a road</span>
-          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">Shift + Click</kbd>
-          <span className="text-white/70 text-sm">Auto-connect two points</span>
-          <kbd className="font-mono text-xs bg-white/20 border border-white/30 rounded px-2 py-0.5 text-white text-center">R / E</kbd>
-          <span className="text-white/70 text-sm">Road / Eraser tool</span>
-        </div>
-      </div>
     </div>
   );
 }

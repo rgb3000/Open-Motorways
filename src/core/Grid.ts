@@ -24,11 +24,13 @@ export const OPPOSITE_DIR: Record<Direction, Direction> = {
 };
 
 export class Grid {
-  readonly cols = GRID_COLS;
-  readonly rows = GRID_ROWS;
+  readonly cols: number;
+  readonly rows: number;
   private cells: Cell[];
 
-  constructor() {
+  constructor(cols: number = GRID_COLS, rows: number = GRID_ROWS) {
+    this.cols = cols;
+    this.rows = rows;
     this.cells = new Array(this.cols * this.rows);
     for (let i = 0; i < this.cells.length; i++) {
       this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, connectorDir: null, pendingDeletion: false };

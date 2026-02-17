@@ -3,14 +3,11 @@
 @layer base {
   body {
     background: #efefef;
-    height: 100vh;
-    overflow: hidden;
+    margin: 0;
   }
 
-  #game-container {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
+  #app {
+    min-height: 100vh;
   }
 
   canvas {

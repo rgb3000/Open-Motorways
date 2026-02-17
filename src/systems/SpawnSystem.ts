@@ -7,8 +7,6 @@ import {
   COLOR_UNLOCK_ORDER,
   COLOR_UNLOCK_INTERVAL,
   HOUSE_SUPPLY_PER_MINUTE,
-  GRID_COLS,
-  GRID_ROWS,
   HOUSE_CLUSTER_RADIUS,
   INITIAL_SPAWN_DELAY,
   SPAWN_AREA_INTERVALS,
@@ -18,6 +16,7 @@ import {
   SPAWN_INTERVAL_DECAY,
 } from '../constants';
 import { manhattanDist } from '../utils/math';
+import type { GameConstants } from '../maps/types';
 
 interface EmptyLShape {
   pos: GridPos;
@@ -31,13 +30,19 @@ export class SpawnSystem {
   private unlockedColors: GameColor[] = [COLOR_UNLOCK_ORDER[0]];
   private nextColorIndex = 1;
   private elapsedTime = 0;
-  private nextColorUnlockTime = INITIAL_SPAWN_DELAY;
+  private nextColorUnlockTime: number;
   private spawnTimer = 0;
-  private currentSpawnInterval = SPAWN_INTERVAL;
+  private currentSpawnInterval: number;
   private grid: Grid;
   private demandSystem: DemandSystem;
   private dirty = false;
   onSpawn: (() => void) | null = null;
+  private colorUnlockInterval: number;
+  private houseClusterRadius: number;
+  private minBusinessDistance: number;
+  private minSpawnInterval: number;
+  private spawnIntervalDecay: number;
+  private houseSupplyPerMinute: number;
 
   get isDirty(): boolean {
     return this.dirty;
@@ -47,9 +52,17 @@ export class SpawnSystem {
     this.dirty = false;
   }
 
-  constructor(grid: Grid, demandSystem: DemandSystem) {
+  constructor(grid: Grid, demandSystem: DemandSystem, config?: Partial<GameConstants>) {
     this.grid = grid;
     this.demandSystem = demandSystem;
+    this.nextColorUnlockTime = config?.INITIAL_SPAWN_DELAY ?? INITIAL_SPAWN_DELAY;
+    this.currentSpawnInterval = config?.SPAWN_INTERVAL ?? SPAWN_INTERVAL;
+    this.colorUnlockInterval = config?.COLOR_UNLOCK_INTERVAL ?? COLOR_UNLOCK_INTERVAL;
+    this.houseClusterRadius = config?.HOUSE_CLUSTER_RADIUS ?? HOUSE_CLUSTER_RADIUS;
+    this.minBusinessDistance = config?.MIN_BUSINESS_DISTANCE ?? MIN_BUSINESS_DISTANCE;
+    this.minSpawnInterval = config?.MIN_SPAWN_INTERVAL ?? MIN_SPAWN_INTERVAL;
+    this.spawnIntervalDecay = config?.SPAWN_INTERVAL_DECAY ?? SPAWN_INTERVAL_DECAY;
+    this.houseSupplyPerMinute = config?.HOUSE_SUPPLY_PER_MINUTE ?? HOUSE_SUPPLY_PER_MINUTE;
   }
 
   getHouses(): House[] {
@@ -65,13 +78,13 @@ export class SpawnSystem {
   }
 
   spawnInitial(): void {
-    const hx = Math.floor(GRID_COLS * 0.45) + Math.floor(Math.random() * 5 - 2);
-    const hy = Math.floor(GRID_ROWS * 0.45) + Math.floor(Math.random() * 3 - 1);
+    const hx = Math.floor(this.grid.cols * 0.45) + Math.floor(Math.random() * 5 - 2);
+    const hy = Math.floor(this.grid.rows * 0.45) + Math.floor(Math.random() * 3 - 1);
     this.spawnHouse({ gx: hx, gy: hy }, COLOR_UNLOCK_ORDER[0]);
 
     // For initial business, find an L-shape spot near desired location
-    const bx = Math.floor(GRID_COLS * 0.55) + Math.floor(Math.random() * 5 - 2);
-    const by = Math.floor(GRID_ROWS * 0.55) + Math.floor(Math.random() * 3 - 1);
+    const bx = Math.floor(this.grid.cols * 0.55) + Math.floor(Math.random() * 5 - 2);
+    const by = Math.floor(this.grid.rows * 0.55) + Math.floor(Math.random() * 3 - 1);
     const spot = this.findEmptyLShapeNear({ gx: bx, gy: by }, 5);
     if (spot) {
       this.spawnBusiness(spot.pos, COLOR_UNLOCK_ORDER[0], spot.orientation, spot.connectorSide);
@@ -85,14 +98,14 @@ export class SpawnSystem {
       const newColor = COLOR_UNLOCK_ORDER[this.nextColorIndex];
       this.unlockedColors.push(newColor);
       this.nextColorIndex++;
-      this.nextColorUnlockTime += COLOR_UNLOCK_INTERVAL;
+      this.nextColorUnlockTime += this.colorUnlockInterval;
       this.spawnPairForColor(newColor);
     }
 
     this.spawnTimer += dt;
     if (this.spawnTimer >= this.currentSpawnInterval) {
       this.spawnTimer = 0;
-      this.currentSpawnInterval = Math.max(MIN_SPAWN_INTERVAL, this.currentSpawnInterval * SPAWN_INTERVAL_DECAY);
+      this.currentSpawnInterval = Math.max(this.minSpawnInterval, this.currentSpawnInterval * this.spawnIntervalDecay);
       this.spawnRandom();
     }
   }
@@ -102,7 +115,7 @@ export class SpawnSystem {
     const balances = this.unlockedColors.map(color => {
       const demandRate = this.demandSystem.getColorPinOutputRate(color);
       const houseCount = this.houses.filter(h => h.color === color).length;
-      const supplyRate = houseCount * HOUSE_SUPPLY_PER_MINUTE;
+      const supplyRate = houseCount * this.houseSupplyPerMinute;
       return { color, balance: supplyRate - demandRate };
     });
 
@@ -133,7 +146,7 @@ export class SpawnSystem {
 
     if (sameColorHouses.length > 0) {
       const anchor = sameColorHouses[Math.floor(Math.random() * sameColorHouses.length)];
-      pos = this.findEmptyWithAdjacentEmpty(anchor.pos, HOUSE_CLUSTER_RADIUS);
+      pos = this.findEmptyWithAdjacentEmpty(anchor.pos, this.houseClusterRadius);
     }
 
     if (!pos) {
@@ -151,7 +164,7 @@ export class SpawnSystem {
     let spot: EmptyLShape | null = null;
 
     if (sameColorHouses.length > 0) {
-      spot = this.findEmptyLShapeFarFrom(sameColorHouses.map(h => h.pos), MIN_BUSINESS_DISTANCE);
+      spot = this.findEmptyLShapeFarFrom(sameColorHouses.map(h => h.pos), this.minBusinessDistance);
     }
 
     if (!spot) {
@@ -251,10 +264,10 @@ export class SpawnSystem {
       }
     }
     return {
-      minX: Math.floor(GRID_COLS * inset),
-      maxX: Math.floor(GRID_COLS * (1 - inset)) - 1,
-      minY: Math.floor(GRID_ROWS * inset),
-      maxY: Math.floor(GRID_ROWS * (1 - inset)) - 1,
+      minX: Math.floor(this.grid.cols * inset),
+      maxX: Math.floor(this.grid.cols * (1 - inset)) - 1,
+      minY: Math.floor(this.grid.rows * inset),
+      maxY: Math.floor(this.grid.rows * (1 - inset)) - 1,
     };
   }
 
@@ -294,8 +307,8 @@ export class SpawnSystem {
 
   private getAllEmptyLShapes(): EmptyLShape[] {
     const results: EmptyLShape[] = [];
-    for (let gy = 0; gy < GRID_ROWS; gy++) {
-      for (let gx = 0; gx < GRID_COLS; gx++) {
+    for (let gy = 0; gy < this.grid.rows; gy++) {
+      for (let gx = 0; gx < this.grid.cols; gx++) {
         this.tryLShapeCandidates(gx, gy, results);
       }
     }

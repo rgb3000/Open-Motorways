@@ -18,7 +18,9 @@ import { ObstacleSystem } from '../systems/ObstacleSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
 import { PendingDeletionSystem } from '../systems/PendingDeletionSystem';
 import { CarState } from '../entities/Car';
-import { STARTING_MONEY, DELIVERY_REWARD, ROAD_REFUND, SPAWN_DEBUG, DEMAND_DEBUG, MAX_DEMAND_PINS, HOUSE_SUPPLY_PER_MINUTE } from '../constants';
+import { SPAWN_DEBUG, DEMAND_DEBUG, buildConfig } from '../constants';
+import type { MapConfig } from '../maps/types';
+import type { GameConstants } from '../maps/types';
 
 export interface DemandStat {
   color: GameColor;
@@ -46,9 +48,9 @@ export class Game {
   private pathfinder: Pathfinder;
   private musicSystem: MusicSystem = new MusicSystem();
   private soundEffects: SoundEffectSystem = new SoundEffectSystem();
-  private state: GameState = GameState.WaitingToStart;
+  private state: GameState = GameState.Playing;
   private elapsedTime = 0;
-  private money = STARTING_MONEY;
+  private money: number;
   private stateCallback: ((state: GameState, score: number, time: number, money: number, demandStats: DemandStat[] | null) => void) | null = null;
   private spaceDown = false;
   private isPanning = false;
@@ -60,9 +62,21 @@ export class Game {
   private musicEnabled = true;
   private activeTool: Tool = Tool.Road;
   private toolChangeCallback: ((tool: Tool) => void) | null = null;
+  private mapConfig?: MapConfig;
+  private cfg: GameConstants;
+  private audioInitialized = false;
 
-  constructor(canvas: HTMLCanvasElement) {
+  // Event listener references for cleanup
+  private resizeHandler: () => void;
+  private keydownHandler: (e: KeyboardEvent) => void;
+  private keyupHandler: (e: KeyboardEvent) => void;
+
+  constructor(canvas: HTMLCanvasElement, mapConfig?: MapConfig) {
     this.canvas = canvas;
+    this.mapConfig = mapConfig;
+    this.cfg = buildConfig(mapConfig?.constants);
+    this.money = this.cfg.STARTING_MONEY;
+
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     this.webglRenderer = new THREE.WebGLRenderer({ canvas, antialias: !isSafari });
     this.webglRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -70,14 +84,14 @@ export class Game {
     this.webglRenderer.shadowMap.enabled = true;
     this.webglRenderer.shadowMap.type = THREE.PCFShadowMap;
 
-    this.grid = new Grid();
-    this.obstacleSystem = new ObstacleSystem(this.grid);
+    this.grid = new Grid(this.cfg.GRID_COLS, this.cfg.GRID_ROWS);
+    this.obstacleSystem = new ObstacleSystem(this.grid, mapConfig?.obstacles, this.cfg);
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
     this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
-    this.demandSystem = new DemandSystem();
-    this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem);
+    this.demandSystem = new DemandSystem(this.cfg);
+    this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem, this.cfg);
     this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
@@ -100,10 +114,11 @@ export class Game {
     canvas.addEventListener('wheel', (e) => this.renderer.onWheel(e), { passive: false });
 
     // Window resize
-    window.addEventListener('resize', () => this.onResize());
+    this.resizeHandler = () => this.onResize();
+    window.addEventListener('resize', this.resizeHandler);
 
     // Keyboard zoom + pause + tool shortcuts + space panning
-    window.addEventListener('keydown', (e) => {
+    this.keydownHandler = (e: KeyboardEvent) => {
       if (e.key === '+' || e.key === '=') this.renderer.zoomByKey(1);
       if (e.key === '-') this.renderer.zoomByKey(-1);
       if (e.key === 'Escape' || e.key === 'p') this.togglePause();
@@ -119,16 +134,18 @@ export class Game {
         this.input.panningActive = true;
         this.canvas.style.cursor = 'grab';
       }
-    });
+    };
+    window.addEventListener('keydown', this.keydownHandler);
 
-    window.addEventListener('keyup', (e) => {
+    this.keyupHandler = (e: KeyboardEvent) => {
       if (e.key === ' ') {
         this.spaceDown = false;
         this.isPanning = false;
         this.input.panningActive = false;
         this.canvas.style.cursor = this.activeTool === Tool.Eraser ? 'crosshair' : 'default';
       }
-    });
+    };
+    window.addEventListener('keyup', this.keyupHandler);
 
     // Space+drag panning
     canvas.addEventListener('mousedown', (e) => {
@@ -162,10 +179,40 @@ export class Game {
     this.spawnSystem.spawnInitial();
     this.renderer.markGroundDirty();
     this.spawnSystem.clearDirty();
+
+    // Wire up sound callbacks immediately (audio inits lazily on first interaction)
+    this.carSystem.onHomeReturn = () => { this.money += this.cfg.DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
+    this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
+    this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
+    this.spawnSystem.onSpawn = () => this.soundEffects.playSpawn();
+
+    // Init audio on first user interaction (required by browsers)
+    const initAudioOnce = () => {
+      this.initAudio();
+      canvas.removeEventListener('pointerdown', initAudioOnce);
+      window.removeEventListener('keydown', initAudioOnce);
+    };
+    canvas.addEventListener('pointerdown', initAudioOnce);
+    window.addEventListener('keydown', initAudioOnce);
   }
 
   start(): void {
     this.gameLoop.start();
+  }
+
+  stop(): void {
+    this.gameLoop.stop();
+  }
+
+  dispose(): void {
+    this.gameLoop.stop();
+    this.musicSystem.dispose();
+    this.soundEffects.dispose();
+    this.renderer.dispose();
+    this.webglRenderer.dispose();
+    window.removeEventListener('resize', this.resizeHandler);
+    window.removeEventListener('keydown', this.keydownHandler);
+    window.removeEventListener('keyup', this.keyupHandler);
   }
 
   getState(): GameState {
@@ -196,16 +243,12 @@ export class Game {
     this.stateCallback = cb;
   }
 
-  async startGame(): Promise<void> {
-    if (this.state !== GameState.WaitingToStart) return;
+  private async initAudio(): Promise<void> {
+    if (this.audioInitialized) return;
+    this.audioInitialized = true;
     await this.musicSystem.init();
     await this.soundEffects.init();
     if (this.musicEnabled) this.musicSystem.startMusic();
-    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
-    this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
-    this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
-    this.spawnSystem.onSpawn = () => this.soundEffects.playSpawn();
-    this.state = GameState.Playing;
   }
 
   togglePause(): void {
@@ -222,17 +265,17 @@ export class Game {
     this.musicSystem.dispose();
     this.soundEffects.dispose();
     this.renderer.dispose();
-    this.grid = new Grid();
-    this.obstacleSystem = new ObstacleSystem(this.grid);
+    this.grid = new Grid(this.cfg.GRID_COLS, this.cfg.GRID_ROWS);
+    this.obstacleSystem = new ObstacleSystem(this.grid, this.mapConfig?.obstacles, this.cfg);
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid);
     this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
-    this.demandSystem = new DemandSystem();
-    this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem);
+    this.demandSystem = new DemandSystem(this.cfg);
+    this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem, this.cfg);
     this.demandWarnPrevSin = 0;
     this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem);
-    this.money = STARTING_MONEY;
+    this.money = this.cfg.STARTING_MONEY;
     this.undoSystem = new UndoSystem(this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
     this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
@@ -246,17 +289,17 @@ export class Game {
     this.spawnSystem.clearDirty();
     this.musicSystem = new MusicSystem();
     this.soundEffects = new SoundEffectSystem();
-    await this.musicSystem.init();
-    await this.soundEffects.init();
-    if (this.musicEnabled) this.musicSystem.startMusic();
-    this.carSystem.onHomeReturn = () => { this.money += DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
+    this.audioInitialized = false;
+    await this.initAudio();
+    this.carSystem.onHomeReturn = () => { this.money += this.cfg.DELIVERY_REWARD; this.soundEffects.playHomeReturn(); };
     this.roadDrawer.onRoadPlace = () => this.soundEffects.playRoadPlace();
     this.roadDrawer.onRoadDelete = () => this.soundEffects.playRoadDelete();
+    this.spawnSystem.onSpawn = () => this.soundEffects.playSpawn();
     this.state = GameState.Playing;
   }
 
   performUndo(): void {
-    if (this.state === GameState.WaitingToStart || this.state === GameState.GameOver) return;
+    if (this.state === GameState.GameOver) return;
     const group = this.undoSystem.undo();
     if (!group) return;
     // Reverse the money change
@@ -340,7 +383,7 @@ export class Game {
 
     if (dependentCarIds.length === 0) {
       if (this.roadSystem.removeRoad(gx, gy)) {
-        this.money += ROAD_REFUND;
+        this.money += this.cfg.ROAD_REFUND;
         return true;
       }
       return false;
@@ -377,7 +420,7 @@ export class Game {
 
     this.demandSystem.update(dt, this.spawnSystem.getBusinesses());
     // Chirp in sync with pulse animation (sin wave crossing from negative to positive)
-    const hasWarning = this.spawnSystem.getBusinesses().some(b => b.demandPins >= MAX_DEMAND_PINS - 2);
+    const hasWarning = this.spawnSystem.getBusinesses().some(b => b.demandPins >= this.cfg.MAX_DEMAND_PINS - 2);
     if (hasWarning) {
       const sinVal = Math.sin(Date.now() * 0.006);
       if (sinVal >= 0 && this.demandWarnPrevSin < 0) {
@@ -411,7 +454,7 @@ export class Game {
       demandStats = this.spawnSystem.getUnlockedColors().map(color => ({
         color,
         demand: colorDemands.get(color) ?? 0,
-        supplyPerMin: this.spawnSystem.getHouses().filter(h => h.color === color).length * HOUSE_SUPPLY_PER_MINUTE,
+        supplyPerMin: this.spawnSystem.getHouses().filter(h => h.color === color).length * this.cfg.HOUSE_SUPPLY_PER_MINUTE,
         demandPerMin: this.demandSystem.getColorPinOutputRate(color),
         houses: this.spawnSystem.getHouses().filter(h => h.color === color).length,
         businesses: this.spawnSystem.getBusinesses().filter(b => b.color === color).length,

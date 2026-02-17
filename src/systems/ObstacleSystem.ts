@@ -2,21 +2,43 @@ import type { Grid } from '../core/Grid';
 import type { GridPos } from '../types';
 import { CellType } from '../types';
 import {
-  GRID_COLS, GRID_ROWS,
   MOUNTAIN_CLUSTER_COUNT, MOUNTAIN_CLUSTER_MIN_SIZE, MOUNTAIN_CLUSTER_MAX_SIZE,
   LAKE_CLUSTER_COUNT, LAKE_CLUSTER_MIN_SIZE, LAKE_CLUSTER_MAX_SIZE,
   OBSTACLE_EDGE_MARGIN, OBSTACLE_CENTER_EXCLUSION,
   MOUNTAIN_MIN_HEIGHT, MOUNTAIN_MAX_HEIGHT,
 } from '../constants';
+import type { ObstacleDefinition, GameConstants } from '../maps/types';
 
 export class ObstacleSystem {
   private grid: Grid;
   private mountainCells: GridPos[] = [];
   private lakeCells: GridPos[] = [];
   private mountainHeightMap = new Map<string, number>();
+  private predefinedObstacles?: ObstacleDefinition[];
+  private cfg: {
+    MOUNTAIN_CLUSTER_COUNT: number;
+    MOUNTAIN_CLUSTER_MIN_SIZE: number;
+    MOUNTAIN_CLUSTER_MAX_SIZE: number;
+    LAKE_CLUSTER_COUNT: number;
+    LAKE_CLUSTER_MIN_SIZE: number;
+    LAKE_CLUSTER_MAX_SIZE: number;
+    OBSTACLE_EDGE_MARGIN: number;
+    OBSTACLE_CENTER_EXCLUSION: number;
+  };
 
-  constructor(grid: Grid) {
+  constructor(grid: Grid, predefinedObstacles?: ObstacleDefinition[], config?: Partial<GameConstants>) {
     this.grid = grid;
+    this.predefinedObstacles = predefinedObstacles;
+    this.cfg = {
+      MOUNTAIN_CLUSTER_COUNT: config?.MOUNTAIN_CLUSTER_COUNT ?? MOUNTAIN_CLUSTER_COUNT,
+      MOUNTAIN_CLUSTER_MIN_SIZE: config?.MOUNTAIN_CLUSTER_MIN_SIZE ?? MOUNTAIN_CLUSTER_MIN_SIZE,
+      MOUNTAIN_CLUSTER_MAX_SIZE: config?.MOUNTAIN_CLUSTER_MAX_SIZE ?? MOUNTAIN_CLUSTER_MAX_SIZE,
+      LAKE_CLUSTER_COUNT: config?.LAKE_CLUSTER_COUNT ?? LAKE_CLUSTER_COUNT,
+      LAKE_CLUSTER_MIN_SIZE: config?.LAKE_CLUSTER_MIN_SIZE ?? LAKE_CLUSTER_MIN_SIZE,
+      LAKE_CLUSTER_MAX_SIZE: config?.LAKE_CLUSTER_MAX_SIZE ?? LAKE_CLUSTER_MAX_SIZE,
+      OBSTACLE_EDGE_MARGIN: config?.OBSTACLE_EDGE_MARGIN ?? OBSTACLE_EDGE_MARGIN,
+      OBSTACLE_CENTER_EXCLUSION: config?.OBSTACLE_CENTER_EXCLUSION ?? OBSTACLE_CENTER_EXCLUSION,
+    };
   }
 
   generate(): void {
@@ -24,9 +46,14 @@ export class ObstacleSystem {
     this.lakeCells = [];
     this.mountainHeightMap.clear();
 
+    if (this.predefinedObstacles) {
+      this.placePredefined(this.predefinedObstacles);
+      return;
+    }
+
     // Generate mountains first
-    for (let i = 0; i < MOUNTAIN_CLUSTER_COUNT; i++) {
-      const size = MOUNTAIN_CLUSTER_MIN_SIZE + Math.floor(Math.random() * (MOUNTAIN_CLUSTER_MAX_SIZE - MOUNTAIN_CLUSTER_MIN_SIZE + 1));
+    for (let i = 0; i < this.cfg.MOUNTAIN_CLUSTER_COUNT; i++) {
+      const size = this.cfg.MOUNTAIN_CLUSTER_MIN_SIZE + Math.floor(Math.random() * (this.cfg.MOUNTAIN_CLUSTER_MAX_SIZE - this.cfg.MOUNTAIN_CLUSTER_MIN_SIZE + 1));
       const cluster = this.growCluster(size, CellType.Mountain);
       if (cluster.length > 0) {
         // Assign heights — cells near cluster center are taller
@@ -45,10 +72,28 @@ export class ObstacleSystem {
     }
 
     // Generate lakes (avoid mountains)
-    for (let i = 0; i < LAKE_CLUSTER_COUNT; i++) {
-      const size = LAKE_CLUSTER_MIN_SIZE + Math.floor(Math.random() * (LAKE_CLUSTER_MAX_SIZE - LAKE_CLUSTER_MIN_SIZE + 1));
+    for (let i = 0; i < this.cfg.LAKE_CLUSTER_COUNT; i++) {
+      const size = this.cfg.LAKE_CLUSTER_MIN_SIZE + Math.floor(Math.random() * (this.cfg.LAKE_CLUSTER_MAX_SIZE - this.cfg.LAKE_CLUSTER_MIN_SIZE + 1));
       const cluster = this.growCluster(size, CellType.Lake);
       this.lakeCells.push(...cluster);
+    }
+  }
+
+  private placePredefined(obstacles: ObstacleDefinition[]): void {
+    for (const obs of obstacles) {
+      if (!this.grid.inBounds(obs.gx, obs.gy)) continue;
+      const cell = this.grid.getCell(obs.gx, obs.gy);
+      if (!cell || cell.type !== CellType.Empty) continue;
+
+      if (obs.type === 'mountain') {
+        this.grid.setCell(obs.gx, obs.gy, { type: CellType.Mountain });
+        const height = obs.height ?? (MOUNTAIN_MIN_HEIGHT + Math.random() * (MOUNTAIN_MAX_HEIGHT - MOUNTAIN_MIN_HEIGHT));
+        this.mountainHeightMap.set(`${obs.gx},${obs.gy}`, height);
+        this.mountainCells.push({ gx: obs.gx, gy: obs.gy });
+      } else {
+        this.grid.setCell(obs.gx, obs.gy, { type: CellType.Lake });
+        this.lakeCells.push({ gx: obs.gx, gy: obs.gy });
+      }
     }
   }
 
@@ -65,20 +110,22 @@ export class ObstacleSystem {
   }
 
   private growCluster(targetSize: number, cellType: CellType): GridPos[] {
-    const centerX = GRID_COLS / 2;
-    const centerY = GRID_ROWS / 2;
+    const centerX = this.grid.cols / 2;
+    const centerY = this.grid.rows / 2;
+    const margin = this.cfg.OBSTACLE_EDGE_MARGIN;
+    const exclusion = this.cfg.OBSTACLE_CENTER_EXCLUSION;
 
     // Try to find a valid seed cell
     for (let attempt = 0; attempt < 100; attempt++) {
-      const seedX = OBSTACLE_EDGE_MARGIN + Math.floor(Math.random() * (GRID_COLS - 2 * OBSTACLE_EDGE_MARGIN));
-      const seedY = OBSTACLE_EDGE_MARGIN + Math.floor(Math.random() * (GRID_ROWS - 2 * OBSTACLE_EDGE_MARGIN));
+      const seedX = margin + Math.floor(Math.random() * (this.grid.cols - 2 * margin));
+      const seedY = margin + Math.floor(Math.random() * (this.grid.rows - 2 * margin));
 
       // Must be empty
       const cell = this.grid.getCell(seedX, seedY);
       if (!cell || cell.type !== CellType.Empty) continue;
 
       // Must be outside center exclusion zone
-      if (Math.abs(seedX - centerX) < OBSTACLE_CENTER_EXCLUSION && Math.abs(seedY - centerY) < OBSTACLE_CENTER_EXCLUSION) continue;
+      if (Math.abs(seedX - centerX) < exclusion && Math.abs(seedY - centerY) < exclusion) continue;
 
       // Must not be adjacent to existing obstacles
       if (this.hasAdjacentObstacle(seedX, seedY)) continue;
@@ -98,8 +145,8 @@ export class ObstacleSystem {
             const key = `${nx},${ny}`;
             if (used.has(key)) continue;
             if (!this.grid.inBounds(nx, ny)) continue;
-            if (nx < OBSTACLE_EDGE_MARGIN || nx >= GRID_COLS - OBSTACLE_EDGE_MARGIN) continue;
-            if (ny < OBSTACLE_EDGE_MARGIN || ny >= GRID_ROWS - OBSTACLE_EDGE_MARGIN) continue;
+            if (nx < margin || nx >= this.grid.cols - margin) continue;
+            if (ny < margin || ny >= this.grid.rows - margin) continue;
             const neighborCell = this.grid.getCell(nx, ny);
             if (!neighborCell || neighborCell.type !== CellType.Empty) continue;
             frontier.push({ gx: nx, gy: ny });

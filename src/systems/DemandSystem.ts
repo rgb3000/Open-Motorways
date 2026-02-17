@@ -6,11 +6,23 @@ import {
   DEMAND_PIN_COOLDOWN,
   MAX_DEMAND_PINS,
 } from '../constants';
+import type { GameConstants } from '../maps/types';
 
 export class DemandSystem {
   private _gameOver = false;
   private colorDemands: Map<GameColor, number> = new Map();
   private colorPinOutputRates: Map<GameColor, number> = new Map();
+  private demandBaseRate: number;
+  private demandRateGrowth: number;
+  private demandPinCooldown: number;
+  private maxDemandPins: number;
+
+  constructor(config?: Partial<GameConstants>) {
+    this.demandBaseRate = config?.DEMAND_BASE_RATE ?? DEMAND_BASE_RATE;
+    this.demandRateGrowth = config?.DEMAND_RATE_GROWTH ?? DEMAND_RATE_GROWTH;
+    this.demandPinCooldown = config?.DEMAND_PIN_COOLDOWN ?? DEMAND_PIN_COOLDOWN;
+    this.maxDemandPins = config?.MAX_DEMAND_PINS ?? MAX_DEMAND_PINS;
+  }
 
   get isGameOver(): boolean {
     return this._gameOver;
@@ -51,20 +63,20 @@ export class DemandSystem {
       biz.pinCooldown = Math.max(0, biz.pinCooldown - dt);
 
       // Compute pin output rate (pins/min)
-      biz.pinOutputRate = DEMAND_BASE_RATE + DEMAND_RATE_GROWTH * (biz.age / 60);
+      biz.pinOutputRate = this.demandBaseRate + this.demandRateGrowth * (biz.age / 60);
 
       // Accumulate fractional pins
       biz.pinAccumulator += (biz.pinOutputRate / 60) * dt;
 
       // Add pin when accumulator reaches 1.0, respecting cooldown and max
-      if (biz.pinAccumulator >= 1.0 && biz.pinCooldown <= 0 && biz.demandPins < MAX_DEMAND_PINS) {
+      if (biz.pinAccumulator >= 1.0 && biz.pinCooldown <= 0 && biz.demandPins < this.maxDemandPins) {
         biz.demandPins++;
         biz.pinAccumulator -= 1.0;
-        biz.pinCooldown = DEMAND_PIN_COOLDOWN;
+        biz.pinCooldown = this.demandPinCooldown;
       }
 
       // Prevent backlog when at max pins
-      if (biz.demandPins >= MAX_DEMAND_PINS) {
+      if (biz.demandPins >= this.maxDemandPins) {
         biz.pinAccumulator = 0;
       }
 
@@ -77,7 +89,7 @@ export class DemandSystem {
       this.colorPinOutputRates.set(biz.color, prevRate + biz.pinOutputRate);
 
       // Game over check
-      if (biz.demandPins >= MAX_DEMAND_PINS) {
+      if (biz.demandPins >= this.maxDemandPins) {
         this._gameOver = true;
         return;
       }

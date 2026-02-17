@@ -123,3 +123,45 @@ export const COLOR_UNLOCK_ORDER: GameColor[] = [
   GameColor.Purple,
   GameColor.Orange,
 ];
+
+// --- Configurable constants bundle ---
+import type { GameConstants } from './maps/types';
+
+export const DEFAULT_GAME_CONSTANTS: GameConstants = {
+  GRID_COLS,
+  GRID_ROWS,
+  MAX_DEMAND_PINS,
+  DEMAND_BASE_RATE,
+  DEMAND_RATE_GROWTH,
+  DEMAND_PIN_COOLDOWN,
+  CARS_PER_HOUSE,
+  CAR_SPEED,
+  PARKING_SLOTS,
+  UNLOAD_TIME,
+  PARKING_EXIT_DELAY,
+  INITIAL_SPAWN_DELAY,
+  COLOR_UNLOCK_INTERVAL,
+  HOUSE_CLUSTER_RADIUS,
+  MIN_BUSINESS_DISTANCE,
+  SPAWN_INTERVAL,
+  MIN_SPAWN_INTERVAL,
+  SPAWN_INTERVAL_DECAY,
+  STARTING_MONEY,
+  ROAD_COST,
+  DELIVERY_REWARD,
+  ROAD_REFUND,
+  MOUNTAIN_CLUSTER_COUNT,
+  MOUNTAIN_CLUSTER_MIN_SIZE,
+  MOUNTAIN_CLUSTER_MAX_SIZE,
+  LAKE_CLUSTER_COUNT,
+  LAKE_CLUSTER_MIN_SIZE,
+  LAKE_CLUSTER_MAX_SIZE,
+  OBSTACLE_EDGE_MARGIN,
+  OBSTACLE_CENTER_EXCLUSION,
+  HOUSE_SUPPLY_PER_MINUTE,
+};
+
+export function buildConfig(overrides?: Partial<GameConstants>): GameConstants {
+  if (!overrides) return { ...DEFAULT_GAME_CONSTANTS };
+  return { ...DEFAULT_GAME_CONSTANTS, ...overrides };
+}
