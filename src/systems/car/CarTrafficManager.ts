@@ -7,8 +7,8 @@ import type { GridPos } from '../../types';
 import {
   getDirection, directionToLane,
   isPerpendicularAxis, YIELD_TO_DIRECTION,
+  connectionCount, isDiagonalDir,
 } from '../../utils/direction';
-import { isDiagonal } from '../../utils/math';
 
 export function occupancyKey(gx: number, gy: number, lane: LaneId): string {
   return `${gx},${gy},${lane}`;
@@ -22,7 +22,7 @@ export function isIntersection(grid: Grid, gx: number, gy: number): boolean {
   const cell = grid.getCell(gx, gy);
   if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
   if (cell.type === CellType.Connector) return false;
-  return cell.roadConnections.length >= 3;
+  return connectionCount(cell.roadConnections) >= 3;
 }
 
 export interface IntersectionEntry {
@@ -187,7 +187,7 @@ export class CarTrafficManager {
     const isNextInt = isIntersection(this.grid, nextTile.gx, nextTile.gy);
     const effectiveSpeed = (isCurrentInt || isNextInt)
       ? CAR_SPEED * INTERSECTION_SPEED_MULTIPLIER : CAR_SPEED;
-    const segmentLength = isDiagonal(dir) ? Math.SQRT2 : 1;
+    const segmentLength = isDiagonalDir(dir) ? Math.SQRT2 : 1;
     return { effectiveSpeed, segmentLength };
   }
 }

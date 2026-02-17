@@ -25,7 +25,7 @@ export interface BusinessDefinition {
 export interface RoadDefinition {
   gx: number;
   gy: number;
-  connections?: Direction[];
+  connections?: number;  // bitmask of Direction flags
 }
 
 export interface GameConstants {

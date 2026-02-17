@@ -1,4 +1,5 @@
-import { OPPOSITE_DIR, type Grid } from '../core/Grid';
+import { type Grid } from '../core/Grid';
+import { opposite } from '../utils/direction';
 import { House } from '../entities/House';
 import { Business } from '../entities/Business';
 import { CellType, Direction, type GameColor, type GridPos } from '../types';
@@ -235,7 +236,7 @@ export class SpawnSystem {
       type: CellType.Connector,
       entityId: house.id,
       color: null,
-      roadConnections: [connToHouseDir],
+      roadConnections: connToHouseDir,
       connectorDir: null,
     });
   }
@@ -264,7 +265,7 @@ export class SpawnSystem {
       type: CellType.ParkingLot,
       entityId: business.id,
       color,
-      connectorDir: OPPOSITE_DIR[connToParkingDir],
+      connectorDir: opposite(connToParkingDir),
     });
 
     // Connector cell owned by the business
@@ -272,7 +273,7 @@ export class SpawnSystem {
       type: CellType.Connector,
       entityId: business.id,
       color: null,
-      roadConnections: [connToParkingDir],
+      roadConnections: connToParkingDir,
       connectorDir: null,
     });
   }

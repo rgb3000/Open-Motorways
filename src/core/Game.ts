@@ -433,7 +433,7 @@ export class Game {
 
       if (r.connections) {
         // Use exact connections from the designer
-        cell.roadConnections = [...r.connections];
+        cell.roadConnections = r.connections;
         // Also connect to adjacent connector/parking cells (for house/business access)
         for (const dir of this.grid.getAllDirections()) {
           const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);

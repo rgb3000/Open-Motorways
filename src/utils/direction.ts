@@ -4,6 +4,89 @@ import { LANE_OFFSET } from '../constants';
 
 const INV_SQRT2 = 1 / Math.sqrt(2);
 
+// --- Bitmask direction utilities ---
+
+/** Compute opposite direction via bit-pair swap.
+ *  Pairs: Up/Down (bits 0-1), Left/Right (bits 2-3), UpLeft/DownRight (bits 4-5), UpRight/DownLeft (bits 6-7) */
+// But our layout is: Up=1,Down=2,Left=4,Right=8,UpLeft=16,UpRight=32,DownLeft=64,DownRight=128
+// Pairs: (Up,Down)=(1,2), (Left,Right)=(4,8), (UpLeft,DownRight)=(16,128), (UpRight,DownLeft)=(32,64)
+// Bit swap for pairs at bits 0-1 and 2-3 works with 0x55/0xAA pattern within each pair
+// But (UpLeft,DownRight) are bits 4 and 7, (UpRight,DownLeft) are bits 5 and 6
+// So we need a lookup table instead for correctness.
+const OPPOSITE_TABLE = new Uint8Array(256);
+OPPOSITE_TABLE[Direction.Up] = Direction.Down;
+OPPOSITE_TABLE[Direction.Down] = Direction.Up;
+OPPOSITE_TABLE[Direction.Left] = Direction.Right;
+OPPOSITE_TABLE[Direction.Right] = Direction.Left;
+OPPOSITE_TABLE[Direction.UpLeft] = Direction.DownRight;
+OPPOSITE_TABLE[Direction.DownRight] = Direction.UpLeft;
+OPPOSITE_TABLE[Direction.UpRight] = Direction.DownLeft;
+OPPOSITE_TABLE[Direction.DownLeft] = Direction.UpRight;
+
+export function opposite(dir: Direction): Direction {
+  return OPPOSITE_TABLE[dir] as Direction;
+}
+
+/** Lookup table: index = (dx+1)*3 + (dy+1), value = Direction */
+const DELTA_TO_DIR = new Uint8Array(9);
+DELTA_TO_DIR[(-1 + 1) * 3 + (-1 + 1)] = Direction.UpLeft;     // dx=-1, dy=-1
+DELTA_TO_DIR[(-1 + 1) * 3 + (0 + 1)]  = Direction.Left;       // dx=-1, dy=0
+DELTA_TO_DIR[(-1 + 1) * 3 + (1 + 1)]  = Direction.DownLeft;   // dx=-1, dy=1
+DELTA_TO_DIR[(0 + 1) * 3 + (-1 + 1)]  = Direction.Up;         // dx=0, dy=-1
+DELTA_TO_DIR[(0 + 1) * 3 + (0 + 1)]   = 0;                    // dx=0, dy=0 (invalid)
+DELTA_TO_DIR[(0 + 1) * 3 + (1 + 1)]   = Direction.Down;       // dx=0, dy=1
+DELTA_TO_DIR[(1 + 1) * 3 + (-1 + 1)]  = Direction.UpRight;    // dx=1, dy=-1
+DELTA_TO_DIR[(1 + 1) * 3 + (0 + 1)]   = Direction.Right;      // dx=1, dy=0
+DELTA_TO_DIR[(1 + 1) * 3 + (1 + 1)]   = Direction.DownRight;  // dx=1, dy=1
+
+export function directionFromDelta(dx: number, dy: number): Direction {
+  return DELTA_TO_DIR[(dx + 1) * 3 + (dy + 1)] as Direction;
+}
+
+export function isDiagonalDir(dir: Direction): boolean {
+  return (dir & 0xF0) !== 0;
+}
+
+export function connectionCount(mask: number): number {
+  // Popcount for 8-bit value
+  let v = mask;
+  v = (v & 0x55) + ((v >> 1) & 0x55);
+  v = (v & 0x33) + ((v >> 2) & 0x33);
+  return (v & 0x0F) + ((v >> 4) & 0x0F);
+}
+
+export function forEachDirection(mask: number, callback: (dir: Direction) => void): void {
+  let bits = mask;
+  while (bits !== 0) {
+    const lowest = bits & (-bits); // isolate lowest set bit
+    callback(lowest as Direction);
+    bits &= bits - 1; // clear lowest set bit
+  }
+}
+
+/** All 8 directions as a constant array (allocated once) */
+export const ALL_DIRECTIONS: readonly Direction[] = [
+  Direction.Up, Direction.Down, Direction.Left, Direction.Right,
+  Direction.UpLeft, Direction.UpRight, Direction.DownLeft, Direction.DownRight,
+];
+
+/** Cardinal directions only */
+export const CARDINAL_DIRECTIONS: readonly Direction[] = [
+  Direction.Up, Direction.Down, Direction.Left, Direction.Right,
+];
+
+/** Direction offsets: single source of truth */
+export const DIRECTION_OFFSETS: Record<Direction, GridPos> = {
+  [Direction.Up]:        { gx: 0, gy: -1 },
+  [Direction.Down]:      { gx: 0, gy: 1 },
+  [Direction.Left]:      { gx: -1, gy: 0 },
+  [Direction.Right]:     { gx: 1, gy: 0 },
+  [Direction.UpLeft]:    { gx: -1, gy: -1 },
+  [Direction.UpRight]:   { gx: 1, gy: -1 },
+  [Direction.DownLeft]:  { gx: -1, gy: 1 },
+  [Direction.DownRight]: { gx: 1, gy: 1 },
+};
+
 export function getDirection(from: GridPos, to: GridPos): Direction {
   const dx = to.gx - from.gx;
   const dy = to.gy - from.gy;
@@ -62,14 +145,7 @@ export function unitVector(dir: Direction): PixelPos {
 }
 
 export function isOpposite(d1: Direction, d2: Direction): boolean {
-  return (d1 === Direction.Up && d2 === Direction.Down) ||
-         (d1 === Direction.Down && d2 === Direction.Up) ||
-         (d1 === Direction.Left && d2 === Direction.Right) ||
-         (d1 === Direction.Right && d2 === Direction.Left) ||
-         (d1 === Direction.UpLeft && d2 === Direction.DownRight) ||
-         (d1 === Direction.DownRight && d2 === Direction.UpLeft) ||
-         (d1 === Direction.UpRight && d2 === Direction.DownLeft) ||
-         (d1 === Direction.DownLeft && d2 === Direction.UpRight);
+  return d2 === opposite(d1);
 }
 
 export function isPerpendicularAxis(d1: Direction, d2: Direction): boolean {

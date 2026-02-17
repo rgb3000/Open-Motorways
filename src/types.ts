@@ -31,14 +31,14 @@ export const CellType = {
 export type CellType = (typeof CellType)[keyof typeof CellType];
 
 export const Direction = {
-  Up: 0,
-  Down: 1,
-  Left: 2,
-  Right: 3,
-  UpLeft: 4,
-  UpRight: 5,
-  DownLeft: 6,
-  DownRight: 7,
+  Up:        1,    // 0b00000001
+  Down:      2,    // 0b00000010
+  Left:      4,    // 0b00000100
+  Right:     8,    // 0b00001000
+  UpLeft:    16,   // 0b00010000
+  UpRight:   32,   // 0b00100000
+  DownLeft:  64,   // 0b01000000
+  DownRight: 128,  // 0b10000000
 } as const;
 export type Direction = (typeof Direction)[keyof typeof Direction];
 
@@ -71,7 +71,7 @@ export type Tool = (typeof Tool)[keyof typeof Tool];
 export interface Cell {
   type: CellType;
   entityId: string | null;
-  roadConnections: Direction[];
+  roadConnections: number;  // bitmask of Direction flags
   color: GameColor | null;
   connectorDir: Direction | null;
   pendingDeletion: boolean;

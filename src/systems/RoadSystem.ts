@@ -1,6 +1,6 @@
 import type { Grid } from '../core/Grid';
-import { OPPOSITE_DIR } from '../core/Grid';
-import { CellType, Direction } from '../types';
+import { CellType } from '../types';
+import { opposite, directionFromDelta, ALL_DIRECTIONS } from '../utils/direction';
 
 export class RoadSystem {
   private dirty = false;
@@ -28,7 +28,7 @@ export class RoadSystem {
 
     this.grid.setCell(gx, gy, {
       type: CellType.Road,
-      roadConnections: [],
+      roadConnections: 0,
       pendingDeletion: false,
     });
 
@@ -43,24 +43,24 @@ export class RoadSystem {
     // Can't remove connectors
     if (cell.type === CellType.Connector) return false;
 
-    for (const dir of this.grid.getAllDirections()) {
+    for (const dir of ALL_DIRECTIONS) {
       const neighbor = this.grid.getNeighbor(gx, gy, dir);
       if (neighbor) {
-        const oppDir = OPPOSITE_DIR[dir];
+        const oppDir = opposite(dir);
         // Skip disconnecting connector cells' permanent connections
         if (neighbor.cell.type === CellType.Connector) {
           // Check if this connection points toward the parking lot or house (permanent)
           const permanentNeighbor = this.grid.getNeighbor(neighbor.gx, neighbor.gy, oppDir);
           if (permanentNeighbor && (permanentNeighbor.cell.type === CellType.ParkingLot || permanentNeighbor.cell.type === CellType.House)) continue;
         }
-        neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
+        neighbor.cell.roadConnections &= ~oppDir;
       }
     }
 
     this.grid.setCell(gx, gy, {
       type: CellType.Empty,
       entityId: null,
-      roadConnections: [],
+      roadConnections: 0,
       color: null,
       connectorDir: null,
       pendingDeletion: false,
@@ -83,25 +83,11 @@ export class RoadSystem {
     const dy = gy2 - gy1;
     if (Math.max(Math.abs(dx), Math.abs(dy)) !== 1) return false;
 
-    // Determine directions
-    let dir: Direction;
-    if (dx === 1 && dy === 0) dir = Direction.Right;
-    else if (dx === -1 && dy === 0) dir = Direction.Left;
-    else if (dx === 0 && dy === 1) dir = Direction.Down;
-    else if (dx === 0 && dy === -1) dir = Direction.Up;
-    else if (dx === 1 && dy === -1) dir = Direction.UpRight;
-    else if (dx === -1 && dy === -1) dir = Direction.UpLeft;
-    else if (dx === 1 && dy === 1) dir = Direction.DownRight;
-    else dir = Direction.DownLeft;
+    const dir = directionFromDelta(dx, dy);
+    const oppDir = opposite(dir);
 
-    const oppDir = OPPOSITE_DIR[dir];
-
-    if (!cell1.roadConnections.includes(dir)) {
-      cell1.roadConnections.push(dir);
-    }
-    if (!cell2.roadConnections.includes(oppDir)) {
-      cell2.roadConnections.push(oppDir);
-    }
+    cell1.roadConnections |= dir;
+    cell2.roadConnections |= oppDir;
 
     this.dirty = true;
     return true;
