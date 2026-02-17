@@ -58,29 +58,21 @@ export function exportMapConfig(
   }
 
   // Roads - scan grid
-  const roads: GridPos[] = [];
+  const roads: { gx: number; gy: number; connections: Direction[] }[] = [];
   for (let gy = 0; gy < grid.rows; gy++) {
     for (let gx = 0; gx < grid.cols; gx++) {
       const cell = grid.getCell(gx, gy);
       if (cell && cell.type === CellType.Road) {
-        roads.push({ gx, gy });
+        roads.push({ gx, gy, connections: [...cell.roadConnections] });
       }
     }
   }
 
   if (roads.length > 0) {
     lines.push('const roads = [');
-    // Group into rows for readability
-    let currentRow: string[] = [];
     for (const r of roads) {
-      currentRow.push(`{ gx: ${r.gx}, gy: ${r.gy} }`);
-      if (currentRow.length >= 8) {
-        lines.push(`  ${currentRow.join(', ')},`);
-        currentRow = [];
-      }
-    }
-    if (currentRow.length > 0) {
-      lines.push(`  ${currentRow.join(', ')},`);
+      const conns = r.connections.map(d => DIR_NAMES[d]).join(', ');
+      lines.push(`  { gx: ${r.gx}, gy: ${r.gy}, connections: [${conns}] },`);
     }
     lines.push('];');
     lines.push('');

@@ -427,14 +427,27 @@ export class Game {
     for (const r of this.mapConfig.roads) {
       this.roadSystem.placeRoad(r.gx, r.gy);
     }
-    // Connect all road cells to adjacent road/connector/parking neighbors
     for (const r of this.mapConfig.roads) {
       const cell = this.grid.getCell(r.gx, r.gy);
       if (!cell || cell.type !== CellType.Road) continue;
-      for (const dir of this.grid.getAllDirections()) {
-        const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
-        if (neighbor && (neighbor.cell.type === CellType.Road || neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.ParkingLot)) {
-          this.roadSystem.connectRoads(r.gx, r.gy, neighbor.gx, neighbor.gy);
+
+      if (r.connections) {
+        // Use exact connections from the designer
+        cell.roadConnections = [...r.connections];
+        // Also connect to adjacent connector/parking cells (for house/business access)
+        for (const dir of this.grid.getAllDirections()) {
+          const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
+          if (neighbor && (neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.ParkingLot)) {
+            this.roadSystem.connectRoads(r.gx, r.gy, neighbor.gx, neighbor.gy);
+          }
+        }
+      } else {
+        // Fallback: auto-connect all adjacent road/connector/parking neighbors
+        for (const dir of this.grid.getAllDirections()) {
+          const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
+          if (neighbor && (neighbor.cell.type === CellType.Road || neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.ParkingLot)) {
+            this.roadSystem.connectRoads(r.gx, r.gy, neighbor.gx, neighbor.gy);
+          }
         }
       }
     }

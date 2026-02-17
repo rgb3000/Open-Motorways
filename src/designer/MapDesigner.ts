@@ -9,6 +9,7 @@ import { buildConfig, MOUNTAIN_MIN_HEIGHT, MOUNTAIN_MAX_HEIGHT } from '../consta
 import { InputHandler } from '../input/InputHandler';
 import { RoadDrawer } from '../input/RoadDrawer';
 import { exportMapConfig } from './exportMapConfig';
+import type { MapConfig, ObstacleDefinition } from '../maps/types';
 
 export const DesignerTool = {
   Road: 0,
@@ -31,6 +32,7 @@ export class MapDesigner {
   private canvas: HTMLCanvasElement;
   private animationId = 0;
   private disposed = false;
+  private paused = false;
 
   // Pan/zoom state
   private spaceDown = false;
@@ -222,7 +224,7 @@ export class MapDesigner {
 
   start(): void {
     const loop = () => {
-      if (this.disposed) return;
+      if (this.disposed || this.paused) return;
       this.roadDrawer.update();
       if (this.roadSystem.isDirty) {
         this.roadSystem.clearDirty();
@@ -446,6 +448,79 @@ export class MapDesigner {
     );
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.renderer.markGroundDirty();
+  }
+
+  pause(): void {
+    this.paused = true;
+    cancelAnimationFrame(this.animationId);
+  }
+
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.start();
+  }
+
+  toMapConfig(): MapConfig {
+    const houses = this.spawnSystem.getHouses().map(h => ({
+      gx: h.pos.gx,
+      gy: h.pos.gy,
+      color: h.color,
+      connectorDir: h.connectorDir,
+    }));
+
+    const businesses = this.spawnSystem.getBusinesses().map(b => ({
+      gx: b.pos.gx,
+      gy: b.pos.gy,
+      color: b.color,
+      orientation: b.orientation,
+      connectorSide: b.connectorSide,
+    }));
+
+    const roads: { gx: number; gy: number; connections?: Direction[] }[] = [];
+    for (let gy = 0; gy < this.grid.rows; gy++) {
+      for (let gx = 0; gx < this.grid.cols; gx++) {
+        const cell = this.grid.getCell(gx, gy);
+        if (cell && cell.type === CellType.Road) {
+          roads.push({
+            gx,
+            gy,
+            connections: cell.roadConnections.length > 0 ? [...cell.roadConnections] : undefined,
+          });
+        }
+      }
+    }
+
+    const obstacles: ObstacleDefinition[] = [
+      ...this.obstacleSystem.getMountainCells().map(c => ({
+        gx: c.gx,
+        gy: c.gy,
+        type: 'mountain' as const,
+        height: this.obstacleSystem.getMountainHeightMap().get(`${c.gx},${c.gy}`),
+      })),
+      ...this.obstacleSystem.getLakeCells().map(c => ({
+        gx: c.gx,
+        gy: c.gy,
+        type: 'lake' as const,
+      })),
+    ];
+
+    return {
+      id: 'designer-test',
+      name: 'Designer Test',
+      description: 'Test play from Map Designer',
+      houses,
+      businesses,
+      roads,
+      obstacles: obstacles.length > 0 ? obstacles : [],
+      constants: {
+        STARTING_MONEY: 99999,
+        SPAWN_INTERVAL: 999999,
+        MIN_SPAWN_INTERVAL: 999999,
+        MOUNTAIN_CLUSTER_COUNT: 0,
+        LAKE_CLUSTER_COUNT: 0,
+      },
+    };
   }
 
   exportConfig(): string {
