@@ -26,7 +26,7 @@ function deepCopyCell(cell: Cell): Cell {
   return {
     type: cell.type,
     entityId: cell.entityId,
-    roadConnections: [...cell.roadConnections],
+    roadConnections: cell.roadConnections,
     color: cell.color,
     connectorDir: cell.connectorDir,
     pendingDeletion: cell.pendingDeletion,

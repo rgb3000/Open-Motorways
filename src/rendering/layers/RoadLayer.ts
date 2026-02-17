@@ -5,17 +5,7 @@ import type { Business } from '../../entities/Business';
 import { CellType, Direction } from '../../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COLOR, ROAD_HALF_WIDTH, ROAD_GRAPH_DEBUG } from '../../constants';
 import { cubicBezier, lerp } from '../../utils/math';
-
-const DIRECTION_OFFSETS: Record<Direction, { dx: number; dy: number }> = {
-  [Direction.Up]: { dx: 0, dy: -1 },
-  [Direction.Down]: { dx: 0, dy: 1 },
-  [Direction.Left]: { dx: -1, dy: 0 },
-  [Direction.Right]: { dx: 1, dy: 0 },
-  [Direction.UpLeft]: { dx: -1, dy: -1 },
-  [Direction.UpRight]: { dx: 1, dy: -1 },
-  [Direction.DownLeft]: { dx: -1, dy: 1 },
-  [Direction.DownRight]: { dx: 1, dy: 1 },
-};
+import { forEachDirection, opposite, DIRECTION_OFFSETS } from '../../utils/direction';
 
 const CIRCLE_RADIUS = 3;
 const CIRCLE_SEGMENTS = 16;
@@ -347,12 +337,12 @@ export class RoadLayer {
 
           // Lines to connected neighbors (only draw if neighbor index > current to avoid duplicates)
           const currentIdx = gy * GRID_COLS + gx;
-          for (const dir of cell.roadConnections) {
+          forEachDirection(cell.roadConnections, (dir) => {
             const off = DIRECTION_OFFSETS[dir];
-            const nx = gx + off.dx;
-            const ny = gy + off.dy;
+            const nx = gx + off.gx;
+            const ny = gy + off.gy;
             const neighborIdx = ny * GRID_COLS + nx;
-            if (neighborIdx <= currentIdx) continue;
+            if (neighborIdx <= currentIdx) return;
 
             const ncx = nx * TILE_SIZE + half;
             const ncz = ny * TILE_SIZE + half;
@@ -364,7 +354,7 @@ export class RoadLayer {
             const geom = new THREE.BufferGeometry().setFromPoints(points);
             const line = new THREE.Line(geom, this.lineMat);
             group.add(line);
-          }
+          });
         }
       }
     }
@@ -430,33 +420,23 @@ export class RoadLayer {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
         if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) continue;
-        if (cell.roadConnections.length === 0) continue;
+        if (cell.roadConnections === 0) continue;
 
         const key = cellKey(gx, gy);
         const neighbors: Array<{ neighbor: number; dir: Direction }> = [];
-        for (const dir of cell.roadConnections) {
+        forEachDirection(cell.roadConnections, (dir) => {
           const off = DIRECTION_OFFSETS[dir];
-          const nx = gx + off.dx;
-          const ny = gy + off.dy;
+          const nx = gx + off.gx;
+          const ny = gy + off.gy;
           const nCell = this.grid.getCell(nx, ny);
-          if (!nCell || (nCell.type !== CellType.Road && nCell.type !== CellType.Connector)) continue;
+          if (!nCell || (nCell.type !== CellType.Road && nCell.type !== CellType.Connector)) return;
           neighbors.push({ neighbor: cellKey(nx, ny), dir });
-        }
+        });
         adjacency.set(key, neighbors);
       }
     }
 
     // Opposite direction lookup for routing chains through intersections
-    const oppositeDir: Record<Direction, Direction> = {
-      [Direction.Up]: Direction.Down,
-      [Direction.Down]: Direction.Up,
-      [Direction.Left]: Direction.Right,
-      [Direction.Right]: Direction.Left,
-      [Direction.UpLeft]: Direction.DownRight,
-      [Direction.DownRight]: Direction.UpLeft,
-      [Direction.UpRight]: Direction.DownLeft,
-      [Direction.DownLeft]: Direction.UpRight,
-    };
 
     // Trace chains, routing through intersections when opposite directions pair up
     const visited = new Set<string>(); // edge keys "a-b"
@@ -487,7 +467,7 @@ export class RoadLayer {
       if (incomingDir === null) return null;
 
       // The "through" direction is the opposite of incoming
-      const throughDir = oppositeDir[incomingDir];
+      const throughDir = opposite(incomingDir);
       const currNeighbors = adjacency.get(currKey);
       if (!currNeighbors) return null;
 
@@ -571,13 +551,13 @@ export class RoadLayer {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
         if (!cell || cell.type !== CellType.Connector) continue;
-        if (cell.roadConnections.length === 0) continue;
+        if (cell.roadConnections === 0) continue;
 
         const key = cellKey(gx, gy);
-        for (const dir of cell.roadConnections) {
+        forEachDirection(cell.roadConnections, (dir) => {
           const off = DIRECTION_OFFSETS[dir];
-          const nx = gx + off.dx;
-          const ny = gy + off.dy;
+          const nx = gx + off.gx;
+          const ny = gy + off.gy;
           const nCell = this.grid.getCell(nx, ny);
           if (nCell?.type === CellType.House || nCell?.type === CellType.ParkingLot) {
             let buildings = connectorToBuildings.get(key);
@@ -587,7 +567,7 @@ export class RoadLayer {
             }
             buildings.push(cellKey(nx, ny));
           }
-        }
+        });
       }
     }
 

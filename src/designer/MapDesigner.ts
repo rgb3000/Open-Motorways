@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CellType, Direction, GameColor, Tool } from '../types';
-import { Grid, OPPOSITE_DIR } from '../core/Grid';
+import { Grid } from '../core/Grid';
+import { opposite, ALL_DIRECTIONS } from '../utils/direction';
 import { Renderer } from '../rendering/Renderer';
 import { RoadSystem } from '../systems/RoadSystem';
 import { SpawnSystem } from '../systems/SpawnSystem';
@@ -354,7 +355,7 @@ export class MapDesigner {
       this.grid.setCell(gx, gy, {
         type: CellType.Empty,
         entityId: null,
-        roadConnections: [],
+        roadConnections: 0,
         color: null,
         connectorDir: null,
         pendingDeletion: false,
@@ -371,7 +372,7 @@ export class MapDesigner {
       this.grid.setCell(gx, gy, {
         type: CellType.Empty,
         entityId: null,
-        roadConnections: [],
+        roadConnections: 0,
         color: null,
         connectorDir: null,
         pendingDeletion: false,
@@ -409,7 +410,7 @@ export class MapDesigner {
     this.grid.setCell(gx, gy, {
       type: CellType.Empty,
       entityId: null,
-      roadConnections: [],
+      roadConnections: 0,
       color: null,
       connectorDir: null,
       pendingDeletion: false,
@@ -418,11 +419,11 @@ export class MapDesigner {
 
   private clearConnectorCell(gx: number, gy: number): void {
     // Disconnect any road neighbors pointing into this cell
-    for (const dir of this.grid.getAllDirections()) {
+    for (const dir of ALL_DIRECTIONS) {
       const neighbor = this.grid.getNeighbor(gx, gy, dir);
       if (neighbor && neighbor.cell.type === CellType.Road) {
-        const oppDir = OPPOSITE_DIR[dir];
-        neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
+        const oppDir = opposite(dir);
+        neighbor.cell.roadConnections &= ~oppDir;
       }
     }
     this.clearCell(gx, gy);
@@ -477,7 +478,7 @@ export class MapDesigner {
       connectorSide: b.connectorSide,
     }));
 
-    const roads: { gx: number; gy: number; connections?: Direction[] }[] = [];
+    const roads: { gx: number; gy: number; connections?: number }[] = [];
     for (let gy = 0; gy < this.grid.rows; gy++) {
       for (let gx = 0; gx < this.grid.cols; gx++) {
         const cell = this.grid.getCell(gx, gy);
@@ -485,7 +486,7 @@ export class MapDesigner {
           roads.push({
             gx,
             gy,
-            connections: cell.roadConnections.length > 0 ? [...cell.roadConnections] : undefined,
+            connections: cell.roadConnections,
           });
         }
       }

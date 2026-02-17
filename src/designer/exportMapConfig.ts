@@ -58,12 +58,12 @@ export function exportMapConfig(
   }
 
   // Roads - scan grid
-  const roads: { gx: number; gy: number; connections: Direction[] }[] = [];
+  const roads: { gx: number; gy: number; connections: number }[] = [];
   for (let gy = 0; gy < grid.rows; gy++) {
     for (let gx = 0; gx < grid.cols; gx++) {
       const cell = grid.getCell(gx, gy);
       if (cell && cell.type === CellType.Road) {
-        roads.push({ gx, gy, connections: [...cell.roadConnections] });
+        roads.push({ gx, gy, connections: cell.roadConnections });
       }
     }
   }
@@ -71,8 +71,14 @@ export function exportMapConfig(
   if (roads.length > 0) {
     lines.push('const roads = [');
     for (const r of roads) {
-      const conns = r.connections.map(d => DIR_NAMES[d]).join(', ');
-      lines.push(`  { gx: ${r.gx}, gy: ${r.gy}, connections: [${conns}] },`);
+      const dirParts: string[] = [];
+      for (const [name, value] of Object.entries(Direction)) {
+        if (r.connections & (value as number)) {
+          dirParts.push(`Direction.${name}`);
+        }
+      }
+      const conns = dirParts.length > 0 ? dirParts.join(' | ') : '0';
+      lines.push(`  { gx: ${r.gx}, gy: ${r.gy}, connections: ${conns} },`);
     }
     lines.push('];');
     lines.push('');

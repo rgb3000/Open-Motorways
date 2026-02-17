@@ -2,12 +2,12 @@ import type { InputHandler } from './InputHandler';
 import type { UndoSystem } from './UndoSystem';
 import type { RoadSystem } from '../systems/RoadSystem';
 import type { Grid } from '../core/Grid';
-import { OPPOSITE_DIR } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { GridPos } from '../types';
 import { CellType, Direction, Tool } from '../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COST, ROAD_REFUND } from '../constants';
 import { findRoadPlacementPath } from '../pathfinding/RoadPlacementPathfinder';
+import { opposite, ALL_DIRECTIONS } from '../utils/direction';
 
 const DRAG_THRESHOLD_SQ = (TILE_SIZE * 0.5) ** 2;
 
@@ -336,13 +336,13 @@ export class RoadDrawer {
 
       if (sharingHouse) {
         // Keep cell as Connector for the remaining house, just remove the moving house's inward direction
-        oldCell.roadConnections = oldCell.roadConnections.filter(d => d !== connToHouseDirOld);
+        oldCell.roadConnections &= ~connToHouseDirOld;
         this.grid.setCell(oldConnectorPos.gx, oldConnectorPos.gy, { entityId: sharingHouse.id });
       } else {
         // Filter out the connection to the house to find remaining road connections
-        const remainingConnections = oldCell.roadConnections.filter(d => d !== connToHouseDirOld);
+        const remainingConnections = oldCell.roadConnections & ~connToHouseDirOld;
 
-        if (remainingConnections.length > 0) {
+        if (remainingConnections !== 0) {
           // Revert to Road — preserve road connections
           this.grid.setCell(oldConnectorPos.gx, oldConnectorPos.gy, {
             type: CellType.Road,
@@ -351,18 +351,18 @@ export class RoadDrawer {
           });
         } else {
           // No remaining connections — disconnect neighbors and revert to Empty
-          for (const dir of this.grid.getAllDirections()) {
+          for (const dir of ALL_DIRECTIONS) {
             const neighbor = this.grid.getNeighbor(oldConnectorPos.gx, oldConnectorPos.gy, dir);
             if (!neighbor) continue;
-            const oppDir = OPPOSITE_DIR[dir];
+            const oppDir = opposite(dir);
             if (neighbor.cell.type === CellType.House) continue;
-            neighbor.cell.roadConnections = neighbor.cell.roadConnections.filter(d => d !== oppDir);
+            neighbor.cell.roadConnections &= ~oppDir;
           }
 
           this.grid.setCell(oldConnectorPos.gx, oldConnectorPos.gy, {
             type: CellType.Empty,
             entityId: null,
-            roadConnections: [],
+            roadConnections: 0,
             color: null,
             connectorDir: null,
             pendingDeletion: false,
@@ -383,9 +383,7 @@ export class RoadDrawer {
     const connToHouseDir = house.getConnectorToHouseDir();
     if (targetIsRoad || targetIsConnector) {
       // Merge into existing Road or Connector — preserve road connections
-      if (!targetCell.roadConnections.includes(connToHouseDir)) {
-        targetCell.roadConnections.push(connToHouseDir);
-      }
+      targetCell.roadConnections |= connToHouseDir;
       this.grid.setCell(newConnX, newConnY, {
         type: CellType.Connector,
         entityId: house.id,
@@ -395,7 +393,7 @@ export class RoadDrawer {
         type: CellType.Connector,
         entityId: house.id,
         color: null,
-        roadConnections: [connToHouseDir],
+        roadConnections: connToHouseDir,
         connectorDir: null,
       });
     }

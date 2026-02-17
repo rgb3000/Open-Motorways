@@ -1,8 +1,8 @@
 import type { Grid } from '../core/Grid';
-import { OPPOSITE_DIR } from '../core/Grid';
-import { CellType, Direction, type GridPos } from '../types';
-import { gridPosEqual, gridPosKey, octileDist, isDiagonal } from '../utils/math';
+import { CellType, type GridPos } from '../types';
+import { gridPosEqual, gridPosKey, octileDist } from '../utils/math';
 import { PriorityQueue } from '../utils/PriorityQueue';
+import { opposite, isDiagonalDir, ALL_DIRECTIONS, DIRECTION_OFFSETS } from '../utils/direction';
 
 interface AStarNode {
   gx: number;
@@ -11,17 +11,6 @@ interface AStarNode {
   f: number;
   parentKey: string | null;
 }
-
-const DIR_OFFSETS = [
-  { dir: Direction.Up, dx: 0, dy: -1 },
-  { dir: Direction.Down, dx: 0, dy: 1 },
-  { dir: Direction.Left, dx: -1, dy: 0 },
-  { dir: Direction.Right, dx: 1, dy: 0 },
-  { dir: Direction.UpLeft, dx: -1, dy: -1 },
-  { dir: Direction.UpRight, dx: 1, dy: -1 },
-  { dir: Direction.DownLeft, dx: -1, dy: 1 },
-  { dir: Direction.DownRight, dx: 1, dy: 1 },
-] as const;
 
 export class Pathfinder {
   private cache = new Map<string, GridPos[] | null>();
@@ -74,12 +63,13 @@ export class Pathfinder {
 
       const currentCell = this.grid.getCell(current.gx, current.gy);
 
-      for (const { dir, dx, dy } of DIR_OFFSETS) {
-        const diag = isDiagonal(dir);
+      for (const dir of ALL_DIRECTIONS) {
+        const off = DIRECTION_OFFSETS[dir];
+        const diag = isDiagonalDir(dir);
 
         // Check road connections for exit from current cell
         if (currentCell && (currentCell.type === CellType.Road || currentCell.type === CellType.Connector)) {
-          if (!currentCell.roadConnections.includes(dir)) continue;
+          if (!(currentCell.roadConnections & dir)) continue;
         }
         // Houses can only exit in their connector direction
         if (currentCell && currentCell.type === CellType.House) {
@@ -90,8 +80,8 @@ export class Pathfinder {
           if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
         }
 
-        const nx = current.gx + dx;
-        const ny = current.gy + dy;
+        const nx = current.gx + off.gx;
+        const ny = current.gy + off.gy;
 
         const cell = this.grid.getCell(nx, ny);
         if (!cell) continue;
@@ -104,7 +94,7 @@ export class Pathfinder {
         if ((cell.type === CellType.House || cell.type === CellType.ParkingLot) && !isDestination) continue;
         // Houses can only be entered from the connector direction
         if (cell.type === CellType.House && cell.connectorDir !== null) {
-          if (dir !== OPPOSITE_DIR[cell.connectorDir]) continue;
+          if (dir !== opposite(cell.connectorDir)) continue;
         }
 
         const nKey = `${nx},${ny}`;

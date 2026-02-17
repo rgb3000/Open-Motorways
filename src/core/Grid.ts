@@ -1,27 +1,6 @@
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../constants';
 import { type Cell, CellType, Direction, type GridPos, type PixelPos } from '../types';
-
-const DIRECTION_OFFSETS: Record<Direction, GridPos> = {
-  [Direction.Up]: { gx: 0, gy: -1 },
-  [Direction.Down]: { gx: 0, gy: 1 },
-  [Direction.Left]: { gx: -1, gy: 0 },
-  [Direction.Right]: { gx: 1, gy: 0 },
-  [Direction.UpLeft]: { gx: -1, gy: -1 },
-  [Direction.UpRight]: { gx: 1, gy: -1 },
-  [Direction.DownLeft]: { gx: -1, gy: 1 },
-  [Direction.DownRight]: { gx: 1, gy: 1 },
-};
-
-export const OPPOSITE_DIR: Record<Direction, Direction> = {
-  [Direction.Up]: Direction.Down,
-  [Direction.Down]: Direction.Up,
-  [Direction.Left]: Direction.Right,
-  [Direction.Right]: Direction.Left,
-  [Direction.UpLeft]: Direction.DownRight,
-  [Direction.UpRight]: Direction.DownLeft,
-  [Direction.DownLeft]: Direction.UpRight,
-  [Direction.DownRight]: Direction.UpLeft,
-};
+import { ALL_DIRECTIONS, CARDINAL_DIRECTIONS, DIRECTION_OFFSETS } from '../utils/direction';
 
 export class Grid {
   readonly cols: number;
@@ -33,7 +12,7 @@ export class Grid {
     this.rows = rows;
     this.cells = new Array(this.cols * this.rows);
     for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: [], color: null, connectorDir: null, pendingDeletion: false };
+      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: 0, color: null, connectorDir: null, pendingDeletion: false };
     }
   }
 
@@ -77,7 +56,7 @@ export class Grid {
 
   getRoadNeighbors(gx: number, gy: number): { dir: Direction; gx: number; gy: number }[] {
     const results: { dir: Direction; gx: number; gy: number }[] = [];
-    for (const dir of this.getAllDirections()) {
+    for (const dir of ALL_DIRECTIONS) {
       const n = this.getNeighbor(gx, gy, dir);
       if (!n) continue;
       if (n.cell.type === CellType.Road || n.cell.type === CellType.Connector || n.cell.type === CellType.House || n.cell.type === CellType.ParkingLot) {
@@ -99,13 +78,12 @@ export class Grid {
     return empty;
   }
 
-  getAllDirections(): Direction[] {
-    return [Direction.Up, Direction.Down, Direction.Left, Direction.Right,
-            Direction.UpLeft, Direction.UpRight, Direction.DownLeft, Direction.DownRight];
+  getAllDirections(): readonly Direction[] {
+    return ALL_DIRECTIONS;
   }
 
-  getCardinalDirections(): Direction[] {
-    return [Direction.Up, Direction.Down, Direction.Left, Direction.Right];
+  getCardinalDirections(): readonly Direction[] {
+    return CARDINAL_DIRECTIONS;
   }
 
   getDirectionOffset(dir: Direction): GridPos {

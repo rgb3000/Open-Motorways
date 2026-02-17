@@ -1,5 +1,4 @@
 import type { GridPos, PixelPos, Direction } from '../types';
-import { Direction as Dir } from '../types';
 import { TILE_SIZE } from '../constants';
 
 let nextId = 0;
@@ -27,7 +26,7 @@ export function octileDist(a: GridPos, b: GridPos): number {
 }
 
 export function isDiagonal(dir: Direction): boolean {
-  return dir === Dir.UpLeft || dir === Dir.UpRight || dir === Dir.DownLeft || dir === Dir.DownRight;
+  return (dir & 0xF0) !== 0;
 }
 
 export function gridToPixelCenter(pos: GridPos): PixelPos {
