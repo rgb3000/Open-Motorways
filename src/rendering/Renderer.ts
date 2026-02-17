@@ -75,21 +75,21 @@ export class Renderer {
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
     dirLight.position.set(
-      CANVAS_WIDTH / 2 - 150,
-      60,
-      CANVAS_HEIGHT / 2 - 150,
+      CANVAS_WIDTH / 2 - 1500,
+      600,
+      CANVAS_HEIGHT / 2 - 1500,
     );
     dirLight.target.position.set(CANVAS_WIDTH / 2, 0, CANVAS_HEIGHT / 2);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.set(4096, 4096);
     dirLight.shadow.radius = 1;
-    const shadowMargin = 1.2;
+    const shadowMargin = 1.5;
     dirLight.shadow.camera.left = -CANVAS_WIDTH / 2 * shadowMargin;
     dirLight.shadow.camera.right = CANVAS_WIDTH / 2 * shadowMargin;
     dirLight.shadow.camera.top = CANVAS_HEIGHT / 2 * shadowMargin;
     dirLight.shadow.camera.bottom = -CANVAS_HEIGHT / 2 * shadowMargin;
-    dirLight.shadow.camera.near = 0.1;
-    dirLight.shadow.camera.far = 600;
+    dirLight.shadow.camera.near = 1;
+    dirLight.shadow.camera.far = 5000;
     this.scene.add(dirLight);
     this.scene.add(dirLight.target);
 
