@@ -83,10 +83,11 @@ export class Renderer {
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.set(4096, 4096);
     dirLight.shadow.radius = 1;
-    dirLight.shadow.camera.left = -CANVAS_WIDTH / 2;
-    dirLight.shadow.camera.right = CANVAS_WIDTH / 2;
-    dirLight.shadow.camera.top = CANVAS_HEIGHT / 2;
-    dirLight.shadow.camera.bottom = -CANVAS_HEIGHT / 2;
+    const shadowMargin = 1.2;
+    dirLight.shadow.camera.left = -CANVAS_WIDTH / 2 * shadowMargin;
+    dirLight.shadow.camera.right = CANVAS_WIDTH / 2 * shadowMargin;
+    dirLight.shadow.camera.top = CANVAS_HEIGHT / 2 * shadowMargin;
+    dirLight.shadow.camera.bottom = -CANVAS_HEIGHT / 2 * shadowMargin;
     dirLight.shadow.camera.near = 0.1;
     dirLight.shadow.camera.far = 600;
     this.scene.add(dirLight);
