@@ -33,6 +33,8 @@ export class CarLayer {
   private carGeometry: THREE.ExtrudeGeometry;
   private loadGeometry: THREE.ExtrudeGeometry;
   private loadMaterial: THREE.MeshStandardMaterial;
+  private tireGeometry: THREE.CylinderGeometry;
+  private tireMaterial: THREE.MeshStandardMaterial;
   private activeCarIds = new Set<string>();
 
   constructor() {
@@ -44,6 +46,13 @@ export class CarLayer {
     this.loadGeometry = new THREE.ExtrudeGeometry(loadShape, { depth: 2, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2, curveSegments: 3 });
     this.loadGeometry.rotateX(-Math.PI / 2);
     this.loadMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+    // Tire: small cylinder on its side
+    const tireRadius = 1.2;
+    const tireWidth = 1.0;
+    this.tireGeometry = new THREE.CylinderGeometry(tireRadius, tireRadius, tireWidth, 8);
+    this.tireGeometry.rotateX(Math.PI / 2); // lay flat so axis is along Z (car's side axis)
+    this.tireMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
   }
 
   private getMaterial(color: GameColor): THREE.MeshStandardMaterial {
@@ -75,6 +84,23 @@ export class CarLayer {
         load.position.y = 2;
         load.visible = false;
         group.add(load);
+
+        // Four tires at the corners of the car body
+        const tireOffsetX = CAR_LENGTH * 0.35; // along car length
+        const tireOffsetZ = CAR_WIDTH * 0.5 + 0.3; // just outside car width
+        const tireY = 0; // bottom of car
+        const tirePositions = [
+          { x: tireOffsetX, z: tireOffsetZ },   // front-right
+          { x: tireOffsetX, z: -tireOffsetZ },  // front-left
+          { x: -tireOffsetX, z: tireOffsetZ },  // rear-right
+          { x: -tireOffsetX, z: -tireOffsetZ }, // rear-left
+        ];
+        for (const tp of tirePositions) {
+          const tire = new THREE.Mesh(this.tireGeometry, this.tireMaterial);
+          tire.position.set(tp.x, tireY, tp.z);
+          tire.castShadow = true;
+          group.add(tire);
+        }
 
         scene.add(group);
         this.meshes.set(car.id, group);
@@ -111,6 +137,8 @@ export class CarLayer {
     this.carGeometry.dispose();
     this.loadGeometry.dispose();
     this.loadMaterial.dispose();
+    this.tireGeometry.dispose();
+    this.tireMaterial.dispose();
     for (const [, mat] of this.materialCache) {
       mat.dispose();
     }

@@ -156,10 +156,10 @@ function buildRoadShapeMesh(
   }
 
   const geom = new THREE.ExtrudeGeometry(shape, {
-    depth: 0.15,
+    depth: 0.5,
     bevelEnabled: true,
-    bevelThickness: 0.08,
-    bevelSize: 0.08,
+    bevelThickness: 0.15,
+    bevelSize: 0.15,
     bevelSegments: 2,
     curveSegments: 1,
   });

@@ -22,8 +22,8 @@ const ZOOM_STEP = 0.05;
 const KEY_ZOOM_STEP = 0.08;
 
 export class Renderer {
-  private scene: THREE.Scene;
-  private camera: THREE.OrthographicCamera;
+  protected scene: THREE.Scene;
+  protected camera: THREE.OrthographicCamera;
   private webglRenderer: THREE.WebGLRenderer;
 
   private terrainLayer: TerrainLayer;
@@ -49,12 +49,12 @@ export class Renderer {
   // Zoom state
   private currentZoom = MAX_ZOOM;
   private targetZoom = MAX_ZOOM;
-  private cameraCenterX = CANVAS_WIDTH / 2;
-  private cameraCenterZ = CANVAS_HEIGHT / 2;
-  private cameraTargetX = CANVAS_WIDTH / 2;
-  private cameraTargetZ = CANVAS_HEIGHT / 2;
-  private viewportWidth = CANVAS_WIDTH;
-  private viewportHeight = CANVAS_HEIGHT;
+  protected cameraCenterX = CANVAS_WIDTH / 2;
+  protected cameraCenterZ = CANVAS_HEIGHT / 2;
+  protected cameraTargetX = CANVAS_WIDTH / 2;
+  protected cameraTargetZ = CANVAS_HEIGHT / 2;
+  protected viewportWidth = CANVAS_WIDTH;
+  protected viewportHeight = CANVAS_HEIGHT;
 
   constructor(webglRenderer: THREE.WebGLRenderer, grid: Grid, getHouses: () => House[] = () => [], getBusinesses: () => Business[] = () => []) {
     this.webglRenderer = webglRenderer;
@@ -408,7 +408,7 @@ export class Renderer {
     this.groundTexture.dispose();
   }
 
-  private computeHalfSizes(zoom: number): { halfW: number; halfH: number } {
+  protected computeHalfSizes(zoom: number): { halfW: number; halfH: number } {
     const worldAspect = CANVAS_WIDTH / CANVAS_HEIGHT;
     const viewAspect = this.viewportWidth / this.viewportHeight;
 
@@ -431,7 +431,7 @@ export class Renderer {
     return { halfW, halfH };
   }
 
-  private updateFrustum(): void {
+  protected updateFrustum(): void {
     const { halfW, halfH } = this.computeHalfSizes(this.currentZoom);
 
     this.camera.left = -halfW;
@@ -441,7 +441,7 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
-  private updateCameraPosition(): void {
+  protected updateCameraPosition(): void {
     this.camera.position.set(this.cameraCenterX, 100, this.cameraCenterZ);
     this.camera.lookAt(this.cameraCenterX, 0, this.cameraCenterZ);
   }

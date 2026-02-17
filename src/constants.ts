@@ -112,7 +112,7 @@ export const ROAD_CORNER_RADIUS = 3.0; // px
 export const UI_TEXT_COLOR = '#333333';
 export const GAME_OVER_OVERLAY = 'rgba(0, 0, 0, 0.6)';
 
-export const GROUND_Y_POSITION = 1;
+export const GROUND_Y_POSITION = 0.8;
 
 // Color unlock order
 export const COLOR_UNLOCK_ORDER: GameColor[] = [

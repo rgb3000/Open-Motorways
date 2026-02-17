@@ -108,24 +108,24 @@ export class BuildingLayer {
 
     // House plate
     const plateShape = roundedRectShape(plateSize, plateSize, 3);
-    this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
+    this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
     // Business body
     const buildingSize = TILE_SIZE * 0.6;
-    const buildingHeight = 7;
+    const buildingHeight = 14;
     const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
     this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
     this.bizBodyGeom.rotateX(-Math.PI / 2);
 
     // Business tower
     const towerSize = TILE_SIZE * 0.3;
-    this.bizTowerGeom = new THREE.BoxGeometry(towerSize, 3, towerSize);
+    this.bizTowerGeom = new THREE.BoxGeometry(towerSize, 5, towerSize);
 
     // Business chimney
     const chimneyShape = new THREE.Shape();
     chimneyShape.absarc(0, 0, 5, 0, Math.PI * 2, false);
-    this.bizChimneyGeom = new THREE.ExtrudeGeometry(chimneyShape, { depth: 4, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.7, bevelSegments: 3, curveSegments: 8 });
+    this.bizChimneyGeom = new THREE.ExtrudeGeometry(chimneyShape, { depth: 12, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.7, bevelSegments: 3, curveSegments: 8 });
     this.bizChimneyGeom.rotateX(-Math.PI / 2);
 
     // Business plates (horizontal and vertical)
@@ -133,10 +133,10 @@ export class BuildingLayer {
     const plateLong = TILE_SIZE * 2 - plateInset - TILE_SIZE * 0.15;
     const plateShort = TILE_SIZE * 0.7;
     const plateH = roundedRectShape(plateLong, plateShort, 3);
-    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
+    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.bizPlateGeomH.rotateX(-Math.PI / 2);
     const plateV = roundedRectShape(plateShort, plateLong, 3);
-    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 1.5, bevelEnabled: true, bevelThickness: 1.0, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
+    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.bizPlateGeomV.rotateX(-Math.PI / 2);
 
     // Business lot
@@ -327,7 +327,7 @@ export class BuildingLayer {
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
     const buildingSize = TILE_SIZE * 0.75;
-    const buildingHeight = 7;
+    const buildingHeight = 14;
     const buildingPx = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
     const buildingPz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
 
@@ -340,14 +340,14 @@ export class BuildingLayer {
 
     // Tower (cloned from prototype)
     const tower = new THREE.Mesh(this.bizTowerGeom.clone(), mat);
-    tower.position.set(buildingPx, buildingHeight + 3 / 2, buildingPz);
+    tower.position.set(buildingPx, buildingHeight + 5 / 2, buildingPz);
     tower.castShadow = true;
     tower.receiveShadow = true;
     group.add(tower);
 
     // Chimney
     const chimney = new THREE.Mesh(this.bizChimneyGeom, mat);
-    chimney.position.set(buildingPx + buildingSize * 0.25, buildingHeight + 2, buildingPz - buildingSize * 0.25);
+    chimney.position.set(buildingPx + buildingSize * 0.25, buildingHeight + 3, buildingPz - buildingSize * 0.25);
     chimney.castShadow = true;
     group.add(chimney);
 
@@ -387,7 +387,7 @@ export class BuildingLayer {
     // Demand pins — flat circles in a row on top of the building
     const pinSpacing = 8;
     const totalWidth = (MAX_DEMAND_PINS - 1) * pinSpacing;
-    const pinY = buildingHeight + 3 + 1.6; // above tower
+    const pinY = buildingHeight + 5 + 1.6; // above tower
     const pins: THREE.Mesh[] = [];
     for (let i = 0; i < MAX_DEMAND_PINS; i++) {
       const px = buildingPx - totalWidth / 2 + i * pinSpacing;
