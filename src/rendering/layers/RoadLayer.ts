@@ -566,7 +566,7 @@ export class RoadLayer {
 
     // Append building cells (House/ParkingLot) to chains that end at their Connector.
     // This eliminates visual gaps where road chains meet building connectors.
-    const connectorToBuilding = new Map<number, number>();
+    const connectorToBuildings = new Map<number, number[]>();
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
@@ -580,8 +580,12 @@ export class RoadLayer {
           const ny = gy + off.dy;
           const nCell = this.grid.getCell(nx, ny);
           if (nCell?.type === CellType.House || nCell?.type === CellType.ParkingLot) {
-            connectorToBuilding.set(key, cellKey(nx, ny));
-            break;
+            let buildings = connectorToBuildings.get(key);
+            if (!buildings) {
+              buildings = [];
+              connectorToBuildings.set(key, buildings);
+            }
+            buildings.push(cellKey(nx, ny));
           }
         }
       }
@@ -591,21 +595,31 @@ export class RoadLayer {
     const attachedConnectors = new Set<number>();
     for (const chain of chains) {
       const last = chain[chain.length - 1];
-      if (connectorToBuilding.has(last)) {
-        chain.push(connectorToBuilding.get(last)!);
+      const lastBuildings = connectorToBuildings.get(last);
+      if (lastBuildings) {
+        chain.push(lastBuildings[0]);
         attachedConnectors.add(last);
+        for (let i = 1; i < lastBuildings.length; i++) {
+          chains.push([lastBuildings[i], last]);
+        }
       }
       const first = chain[0];
-      if (connectorToBuilding.has(first)) {
-        chain.unshift(connectorToBuilding.get(first)!);
+      const firstBuildings = connectorToBuildings.get(first);
+      if (firstBuildings) {
+        chain.unshift(firstBuildings[0]);
         attachedConnectors.add(first);
+        for (let i = 1; i < firstBuildings.length; i++) {
+          chains.push([firstBuildings[i], first]);
+        }
       }
     }
 
     // Fall back to 2-node spur chains for any connectors not attached to a chain
-    for (const [connKey, buildingKey] of connectorToBuilding) {
+    for (const [connKey, buildingKeys] of connectorToBuildings) {
       if (!attachedConnectors.has(connKey)) {
-        chains.push([connKey, buildingKey]);
+        for (const buildingKey of buildingKeys) {
+          chains.push([connKey, buildingKey]);
+        }
       }
     }
 
