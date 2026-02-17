@@ -176,7 +176,14 @@ export class Game {
     });
 
     // Initial spawn
-    this.spawnSystem.spawnInitial();
+    if (mapConfig?.houses || mapConfig?.businesses) {
+      this.placePreDefinedEntities();
+    } else {
+      this.spawnSystem.spawnInitial();
+    }
+    if (mapConfig?.roads) {
+      this.placePreDefinedRoads();
+    }
     this.renderer.markGroundDirty();
     this.spawnSystem.clearDirty();
 
@@ -284,7 +291,14 @@ export class Game {
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
-    this.spawnSystem.spawnInitial();
+    if (this.mapConfig?.houses || this.mapConfig?.businesses) {
+      this.placePreDefinedEntities();
+    } else {
+      this.spawnSystem.spawnInitial();
+    }
+    if (this.mapConfig?.roads) {
+      this.placePreDefinedRoads();
+    }
     this.renderer.markGroundDirty();
     this.spawnSystem.clearDirty();
     this.musicSystem = new MusicSystem();
@@ -392,6 +406,39 @@ export class Game {
     // GoingHome cars need this road — defer deletion
     this.pendingDeletionSystem.markPending(gx, gy, dependentCarIds);
     return true;
+  }
+
+  private placePreDefinedEntities(): void {
+    if (this.mapConfig?.houses) {
+      for (const h of this.mapConfig.houses) {
+        this.spawnSystem.spawnHouse({ gx: h.gx, gy: h.gy }, h.color, h.connectorDir);
+      }
+    }
+    if (this.mapConfig?.businesses) {
+      for (const b of this.mapConfig.businesses) {
+        this.spawnSystem.spawnBusiness({ gx: b.gx, gy: b.gy }, b.color, b.orientation, b.connectorSide);
+      }
+    }
+    this.spawnSystem.unlockAllColors();
+  }
+
+  private placePreDefinedRoads(): void {
+    if (!this.mapConfig?.roads) return;
+    for (const r of this.mapConfig.roads) {
+      this.roadSystem.placeRoad(r.gx, r.gy);
+    }
+    // Connect all road cells to adjacent road/connector/parking neighbors
+    for (const r of this.mapConfig.roads) {
+      const cell = this.grid.getCell(r.gx, r.gy);
+      if (!cell || cell.type !== CellType.Road) continue;
+      for (const dir of this.grid.getAllDirections()) {
+        const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
+        if (neighbor && (neighbor.cell.type === CellType.Road || neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.ParkingLot)) {
+          this.roadSystem.connectRoads(r.gx, r.gy, neighbor.gx, neighbor.gy);
+        }
+      }
+    }
+    this.roadSystem.markDirty();
   }
 
   private update(dt: number): void {

@@ -77,6 +77,13 @@ export class SpawnSystem {
     return this.unlockedColors;
   }
 
+  unlockAllColors(): void {
+    for (let i = this.nextColorIndex; i < COLOR_UNLOCK_ORDER.length; i++) {
+      this.unlockedColors.push(COLOR_UNLOCK_ORDER[i]);
+    }
+    this.nextColorIndex = COLOR_UNLOCK_ORDER.length;
+  }
+
   spawnInitial(): void {
     const hx = Math.floor(this.grid.cols * 0.45) + Math.floor(Math.random() * 5 - 2);
     const hy = Math.floor(this.grid.rows * 0.45) + Math.floor(Math.random() * 3 - 1);
@@ -176,22 +183,27 @@ export class SpawnSystem {
     }
   }
 
-  private spawnHouse(pos: GridPos, color: GameColor): void {
+  spawnHouse(pos: GridPos, color: GameColor, connectorDir?: Direction): void {
     this.dirty = true;
 
     // Find an empty adjacent cell for the connector
-    const tryDirs = [
-      Direction.Down, Direction.Right, Direction.Up, Direction.Left,
-      Direction.DownRight, Direction.DownLeft, Direction.UpRight, Direction.UpLeft,
-    ];
-    let connDir: Direction = Direction.Down;
-    for (const dir of tryDirs) {
-      const off = this.grid.getDirectionOffset(dir);
-      const nx = pos.gx + off.gx;
-      const ny = pos.gy + off.gy;
-      if (this.isCellEmpty(nx, ny)) {
-        connDir = dir;
-        break;
+    let connDir: Direction;
+    if (connectorDir !== undefined) {
+      connDir = connectorDir;
+    } else {
+      const tryDirs = [
+        Direction.Down, Direction.Right, Direction.Up, Direction.Left,
+        Direction.DownRight, Direction.DownLeft, Direction.UpRight, Direction.UpLeft,
+      ];
+      connDir = Direction.Down;
+      for (const dir of tryDirs) {
+        const off = this.grid.getDirectionOffset(dir);
+        const nx = pos.gx + off.gx;
+        const ny = pos.gy + off.gy;
+        if (this.isCellEmpty(nx, ny)) {
+          connDir = dir;
+          break;
+        }
       }
     }
 
@@ -218,7 +230,7 @@ export class SpawnSystem {
     });
   }
 
-  private spawnBusiness(
+  spawnBusiness(
     pos: GridPos, color: GameColor,
     orientation: 'horizontal' | 'vertical',
     connectorSide: 'positive' | 'negative',

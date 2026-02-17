@@ -1,8 +1,30 @@
+import type { GameColor, Direction } from '../types';
+
 export interface ObstacleDefinition {
   gx: number;
   gy: number;
   type: 'mountain' | 'lake';
   height?: number; // mountains only
+}
+
+export interface HouseDefinition {
+  gx: number;
+  gy: number;
+  color: GameColor;
+  connectorDir?: Direction;
+}
+
+export interface BusinessDefinition {
+  gx: number;
+  gy: number;
+  color: GameColor;
+  orientation: 'horizontal' | 'vertical';
+  connectorSide: 'positive' | 'negative';
+}
+
+export interface RoadDefinition {
+  gx: number;
+  gy: number;
 }
 
 export interface GameConstants {
@@ -58,6 +80,10 @@ export interface MapConfig {
   id: string;
   name: string;
   description: string;
+  debug?: boolean;
   obstacles?: ObstacleDefinition[];
+  houses?: HouseDefinition[];
+  businesses?: BusinessDefinition[];
+  roads?: RoadDefinition[];
   constants?: Partial<GameConstants>;
 }
