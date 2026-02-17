@@ -1,14 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useNavDirection } from '../app/SlideTransition';
 import type { Game, DemandStat } from '../core/Game';
 import { GameState, Tool } from '../types';
 import { COLOR_MAP } from '../constants';
 
 export function GameUI({ game }: { game: Game }) {
   const navigate = useNavigate();
-  const { setDirection } = useNavDirection();
   const [state, setState] = useState<GameState>(game.getState());
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
@@ -41,10 +39,7 @@ export function GameUI({ game }: { game: Game }) {
     setMusicEnabled(next);
   }, [game]);
   const handleToggleSettings = useCallback(() => setSettingsOpen(o => !o), []);
-  const handleBack = useCallback(() => {
-    setDirection('back');
-    navigate('/');
-  }, [navigate, setDirection]);
+  const handleBack = useCallback(() => navigate('/'), [navigate]);
 
   const minutes = Math.floor(time / 60);
   const seconds = Math.floor(time % 60);
