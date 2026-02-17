@@ -486,7 +486,7 @@ export class MapDesigner {
           roads.push({
             gx,
             gy,
-            connections: cell.roadConnections || undefined,
+            connections: cell.roadConnections,
           });
         }
       }
