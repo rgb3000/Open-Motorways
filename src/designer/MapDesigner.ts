@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CellType, Direction, GameColor, type GridPos } from '../types';
+import { CellType, Direction, GameColor, Tool } from '../types';
 import { Grid, OPPOSITE_DIR } from '../core/Grid';
 import { Renderer } from '../rendering/Renderer';
 import { RoadSystem } from '../systems/RoadSystem';
@@ -7,7 +7,7 @@ import { SpawnSystem } from '../systems/SpawnSystem';
 import { ObstacleSystem } from '../systems/ObstacleSystem';
 import { buildConfig, MOUNTAIN_MIN_HEIGHT, MOUNTAIN_MAX_HEIGHT } from '../constants';
 import { InputHandler } from '../input/InputHandler';
-import { findRoadPlacementPath } from '../pathfinding/RoadPlacementPathfinder';
+import { RoadDrawer } from '../input/RoadDrawer';
 import { exportMapConfig } from './exportMapConfig';
 
 export const DesignerTool = {
@@ -27,6 +27,7 @@ export class MapDesigner {
   private spawnSystem: SpawnSystem;
   private obstacleSystem: ObstacleSystem;
   private input: InputHandler;
+  private roadDrawer: RoadDrawer;
   private canvas: HTMLCanvasElement;
   private animationId = 0;
   private disposed = false;
@@ -36,12 +37,6 @@ export class MapDesigner {
   private isPanning = false;
   private lastPanX = 0;
   private lastPanY = 0;
-
-  // Road drawing state
-  private isDrawingRoad = false;
-  private isErasingRoad = false;
-  private lastRoadCell: GridPos | null = null;
-  private lastBuiltPos: GridPos | null = null;
 
   // Designer state
   activeTool: DesignerTool = DesignerTool.Road;
@@ -109,6 +104,19 @@ export class MapDesigner {
       (sx, sy) => this.renderer.screenToWorld(sx, sy),
     );
 
+    const infiniteMoney = { canAfford: () => true, spend: () => {}, refund: () => {} };
+    this.roadDrawer = new RoadDrawer(
+      this.input, this.roadSystem, this.grid,
+      infiniteMoney,
+      () => this.spawnSystem.getHouses(),
+      null,
+      () => this.activeTool === DesignerTool.Eraser ? Tool.Eraser : Tool.Road,
+    );
+    this.roadDrawer.onTryErase = (gx, gy) => {
+      this.eraseAt(gx, gy);
+      return true;
+    };
+
     // Wheel: pan/zoom
     this.wheelHandler = (e) => this.renderer.onWheel(e);
     canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
@@ -153,7 +161,7 @@ export class MapDesigner {
     };
     window.addEventListener('keyup', this.keyupHandler);
 
-    // Mouse: space+drag pan, left-click placement, right-click erase
+    // Mouse: space+drag pan, left-click placement for non-road tools
     this.mousedownHandler = (e: MouseEvent) => {
       if (this.spaceDown && e.button === 0) {
         this.isPanning = true;
@@ -166,32 +174,14 @@ export class MapDesigner {
       const pos = this.input.state.gridPos;
 
       if (e.button === 0) {
-        // Left click
-        if (this.activeTool === DesignerTool.Road) {
-          if (e.shiftKey && this.lastBuiltPos) {
-            // Shift+click: pathfind L-shaped road from lastBuiltPos to clicked cell
-            this.placeRoadPath(this.lastBuiltPos, pos);
-          } else {
-            this.isDrawingRoad = true;
-            this.lastRoadCell = null;
-            this.placeRoadAt(pos.gx, pos.gy);
-            this.lastRoadCell = pos;
-            this.lastBuiltPos = { ...pos };
-          }
-        } else if (this.activeTool === DesignerTool.Eraser) {
-          this.eraseAt(pos.gx, pos.gy);
-          this.isErasingRoad = true;
-        } else if (this.activeTool === DesignerTool.House) {
+        // Left click — only handle non-road tools here; Road/Eraser handled by RoadDrawer
+        if (this.activeTool === DesignerTool.House) {
           this.placeHouse(pos.gx, pos.gy);
         } else if (this.activeTool === DesignerTool.Business) {
           this.placeBusiness(pos.gx, pos.gy);
         } else if (this.activeTool === DesignerTool.Obstacle) {
           this.placeObstacle(pos.gx, pos.gy);
         }
-      } else if (e.button === 2) {
-        // Right click: erase
-        this.eraseAt(pos.gx, pos.gy);
-        this.isErasingRoad = true;
       }
     };
     canvas.addEventListener('mousedown', this.mousedownHandler);
@@ -207,47 +197,20 @@ export class MapDesigner {
         return;
       }
 
-      const pos = this.input.state.gridPos;
-
-      if (this.isDrawingRoad) {
-        if (!this.lastRoadCell || pos.gx !== this.lastRoadCell.gx || pos.gy !== this.lastRoadCell.gy) {
-          this.placeRoadAt(pos.gx, pos.gy);
-          if (this.lastRoadCell) {
-            // Connect to previous road cell if adjacent
-            const dx = Math.abs(pos.gx - this.lastRoadCell.gx);
-            const dy = Math.abs(pos.gy - this.lastRoadCell.gy);
-            if (dx <= 1 && dy <= 1 && (dx + dy > 0)) {
-              this.roadSystem.connectRoads(this.lastRoadCell.gx, this.lastRoadCell.gy, pos.gx, pos.gy);
-            }
-          }
-          this.lastRoadCell = pos;
-          this.lastBuiltPos = { ...pos };
-        }
-      } else if (this.isErasingRoad) {
-        this.eraseAt(pos.gx, pos.gy);
-      } else if (this.activeTool === DesignerTool.Obstacle && (e.buttons & 1)) {
+      if (this.activeTool === DesignerTool.Obstacle && (e.buttons & 1)) {
+        const pos = this.input.state.gridPos;
         this.placeObstacle(pos.gx, pos.gy);
       }
+      // Road/Eraser drag handled by RoadDrawer.update()
     };
     canvas.addEventListener('mousemove', this.mousemoveHandler);
 
     this.mouseupHandler = (e: MouseEvent) => {
-      if (e.button === 0) {
-        if (this.isPanning) {
-          this.isPanning = false;
-          this.canvas.style.cursor = this.spaceDown ? 'grab' : this.getCursorForTool();
-          return;
-        }
-        if (this.isDrawingRoad) {
-          this.isDrawingRoad = false;
-          this.lastRoadCell = null;
-          this.roadSystem.markDirty();
-          this.renderer.markGroundDirty();
-        }
-        this.isErasingRoad = false;
-      } else if (e.button === 2) {
-        this.isErasingRoad = false;
+      if (e.button === 0 && this.isPanning) {
+        this.isPanning = false;
+        this.canvas.style.cursor = this.spaceDown ? 'grab' : this.getCursorForTool();
       }
+      // Road/Eraser mouseup handled by RoadDrawer.update()
     };
     canvas.addEventListener('mouseup', this.mouseupHandler);
 
@@ -260,6 +223,12 @@ export class MapDesigner {
   start(): void {
     const loop = () => {
       if (this.disposed) return;
+      this.roadDrawer.update();
+      if (this.roadSystem.isDirty) {
+        this.roadSystem.clearDirty();
+        this.renderer.markGroundDirty();
+      }
+      this.renderer.updateIndicator(this.roadDrawer.getLastBuiltPos());
       this.renderer.render(
         0,
         this.spawnSystem.getHouses(),
@@ -296,43 +265,6 @@ export class MapDesigner {
     return 'default';
   }
 
-  private placeRoadAt(gx: number, gy: number): void {
-    const placed = this.roadSystem.placeRoad(gx, gy);
-    if (placed) {
-      // Auto-connect to all adjacent road/connector/parking cells
-      for (const dir of this.grid.getAllDirections()) {
-        const neighbor = this.grid.getNeighbor(gx, gy, dir);
-        if (neighbor && (
-          neighbor.cell.type === CellType.Road ||
-          neighbor.cell.type === CellType.Connector ||
-          neighbor.cell.type === CellType.ParkingLot
-        )) {
-          this.roadSystem.connectRoads(gx, gy, neighbor.gx, neighbor.gy);
-        }
-      }
-      this.roadSystem.markDirty();
-      this.renderer.markGroundDirty();
-    }
-  }
-
-  private placeRoadPath(from: GridPos, to: GridPos): void {
-    const path = findRoadPlacementPath(this.grid, from, to);
-    if (!path) return;
-
-    let prev = { ...path[0] };
-    for (let i = 0; i < path.length; i++) {
-      const { gx, gy } = path[i];
-      this.placeRoadAt(gx, gy);
-      if (prev.gx !== gx || prev.gy !== gy) {
-        this.roadSystem.connectRoads(prev.gx, prev.gy, gx, gy);
-      }
-      prev = { gx, gy };
-    }
-    this.lastBuiltPos = { ...to };
-    this.roadSystem.markDirty();
-    this.renderer.markGroundDirty();
-  }
-
   placeHouse(gx: number, gy: number): void {
     const cell = this.grid.getCell(gx, gy);
     if (!cell || cell.type !== CellType.Empty) return;
@@ -345,7 +277,6 @@ export class MapDesigner {
     if (!connCell || connCell.type !== CellType.Empty) return;
 
     this.spawnSystem.spawnHouse({ gx, gy }, this.activeColor, this.houseConnectorDir);
-    this.autoConnectCell(cx, cy);
     this.renderer.markGroundDirty();
   }
 
@@ -373,7 +304,6 @@ export class MapDesigner {
     if (!connCell || connCell.type !== CellType.Empty) return;
 
     this.spawnSystem.spawnBusiness({ gx, gy }, this.activeColor, this.businessOrientation, this.businessConnectorSide);
-    this.autoConnectCell(connGx, connGy);
     this.renderer.markGroundDirty();
   }
 
@@ -497,15 +427,6 @@ export class MapDesigner {
     this.roadSystem.markDirty();
   }
 
-  private autoConnectCell(gx: number, gy: number): void {
-    // Auto-connect a connector cell to adjacent road cells
-    for (const dir of this.grid.getAllDirections()) {
-      const neighbor = this.grid.getNeighbor(gx, gy, dir);
-      if (neighbor && neighbor.cell.type === CellType.Road) {
-        this.roadSystem.connectRoads(gx, gy, neighbor.gx, neighbor.gy);
-      }
-    }
-  }
 
   private rebuildObstacles(): void {
     // Rebuild the 3D obstacle rendering

@@ -28,7 +28,7 @@ export class RoadDrawer {
   private grid: Grid;
   private money: MoneyInterface;
   private getHouses: () => House[];
-  private undoSystem: UndoSystem;
+  private undoSystem: UndoSystem | null;
   private getActiveTool: () => Tool;
 
   private mode: DrawMode = 'none';
@@ -46,7 +46,7 @@ export class RoadDrawer {
     input: InputHandler, roadSystem: RoadSystem, grid: Grid,
     money: MoneyInterface,
     getHouses: () => House[],
-    undoSystem: UndoSystem,
+    undoSystem: UndoSystem | null,
     getActiveTool: () => Tool = () => Tool.Road,
   ) {
     this.input = input;
@@ -75,7 +75,7 @@ export class RoadDrawer {
     if (leftDown) {
       if (!this.wasLeftDown) {
         // Starting a new left-click — determine mode
-        this.undoSystem.beginGroup();
+        this.undoSystem?.beginGroup();
         this.lastGridPos = { ...gridPos };
         const { canvasX: startCX, canvasY: startCY } = this.input.state;
         this.prevCanvasX = startCX;
@@ -249,7 +249,7 @@ export class RoadDrawer {
 
     if (rightDown) {
       if (!this.wasRightDown) {
-        this.undoSystem.beginGroup();
+        this.undoSystem?.beginGroup();
         this.lastGridPos = { ...gridPos };
 
         if (isEraser && this.input.state.shiftDown && this.lastBuiltPos) {
@@ -275,10 +275,10 @@ export class RoadDrawer {
     }
 
     if (!leftDown && this.wasLeftDown) {
-      this.undoSystem.endGroup();
+      this.undoSystem?.endGroup();
     }
     if (!rightDown && this.wasRightDown) {
-      this.undoSystem.endGroup();
+      this.undoSystem?.endGroup();
     }
 
     if (!leftDown && !rightDown) {
@@ -319,10 +319,10 @@ export class RoadDrawer {
     const targetIsConnector = targetType === CellType.Connector;
 
     // Snapshot old and new connector positions + neighbors before mutation
-    this.undoSystem.snapshotCellAndNeighbors(oldConnectorPos.gx, oldConnectorPos.gy);
-    this.undoSystem.snapshotCellAndNeighbors(newConnX, newConnY);
-    this.undoSystem.snapshotCellAndNeighbors(house.pos.gx, house.pos.gy);
-    this.undoSystem.setHouseConnectorChange(house, oldDir);
+    this.undoSystem?.snapshotCellAndNeighbors(oldConnectorPos.gx, oldConnectorPos.gy);
+    this.undoSystem?.snapshotCellAndNeighbors(newConnX, newConnY);
+    this.undoSystem?.snapshotCellAndNeighbors(house.pos.gx, house.pos.gy);
+    this.undoSystem?.setHouseConnectorChange(house, oldDir);
 
     // Remove old connector cell — preserve underlying road if it had other connections
     const oldCell = this.grid.getCell(oldConnectorPos.gx, oldConnectorPos.gy);
@@ -443,10 +443,10 @@ export class RoadDrawer {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
 
     if (!this.money.canAfford(ROAD_COST)) return;
-    this.undoSystem.snapshotCellAndNeighbors(gx, gy);
+    this.undoSystem?.snapshotCellAndNeighbors(gx, gy);
     if (this.roadSystem.placeRoad(gx, gy)) {
       this.money.spend(ROAD_COST);
-      this.undoSystem.addMoneyDelta(-ROAD_COST);
+      this.undoSystem?.addMoneyDelta(-ROAD_COST);
       this.onRoadPlace?.();
     }
   }
@@ -455,16 +455,16 @@ export class RoadDrawer {
     if (gx < 0 || gx >= GRID_COLS || gy < 0 || gy >= GRID_ROWS) return;
     // If a delegate is set, let it decide (immediate delete vs pending)
     if (this.onTryErase) {
-      this.undoSystem.snapshotCellAndNeighbors(gx, gy);
+      this.undoSystem?.snapshotCellAndNeighbors(gx, gy);
       if (this.onTryErase(gx, gy)) {
         this.onRoadDelete?.();
       }
       return;
     }
-    this.undoSystem.snapshotCellAndNeighbors(gx, gy);
+    this.undoSystem?.snapshotCellAndNeighbors(gx, gy);
     if (this.roadSystem.removeRoad(gx, gy)) {
       this.money.refund(ROAD_REFUND);
-      this.undoSystem.addMoneyDelta(ROAD_REFUND);
+      this.undoSystem?.addMoneyDelta(ROAD_REFUND);
       this.onRoadDelete?.();
     }
   }
