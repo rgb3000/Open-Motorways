@@ -73,6 +73,16 @@ export class SpawnSystem {
     return this.businesses;
   }
 
+  removeHouse(id: string): void {
+    this.houses = this.houses.filter(h => h.id !== id);
+    this.dirty = true;
+  }
+
+  removeBusiness(id: string): void {
+    this.businesses = this.businesses.filter(b => b.id !== id);
+    this.dirty = true;
+  }
+
   getUnlockedColors(): GameColor[] {
     return this.unlockedColors;
   }

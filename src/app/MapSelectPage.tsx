@@ -39,6 +39,12 @@ export function MapSelectPage() {
           </div>
         </>
       )}
+      <Link
+        to="/designer"
+        className="mt-8 inline-block bg-white rounded-2xl shadow-lg px-6 py-3 hover:shadow-xl hover:-translate-y-1 transition-all no-underline"
+      >
+        <span className="text-lg font-bold font-mono text-[#333]">Map Designer</span>
+      </Link>
     </div>
   );
 }

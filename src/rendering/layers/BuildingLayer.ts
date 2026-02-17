@@ -158,6 +158,35 @@ export class BuildingLayer {
   }
 
   update(scene: THREE.Scene, houses: House[], businesses: Business[]): void {
+    // Remove meshes for deleted houses
+    const houseIds = new Set(houses.map(h => h.id));
+    for (const [id, group] of this.houseMeshes) {
+      if (!houseIds.has(id)) {
+        scene.remove(group);
+        this.disposeGroup(group);
+        this.houseMeshes.delete(id);
+        this.houseConnectorDirs.delete(id);
+      }
+    }
+
+    // Remove meshes for deleted businesses
+    const bizIds = new Set(businesses.map(b => b.id));
+    for (const [id, group] of this.businessMeshes) {
+      if (!bizIds.has(id)) {
+        scene.remove(group);
+        this.disposeGroup(group);
+        this.businessMeshes.delete(id);
+        this.demandPinRefs.delete(id);
+        const sprite = this.debugSprites.get(id);
+        if (sprite) {
+          scene.remove(sprite);
+          (sprite.material as THREE.SpriteMaterial).map?.dispose();
+          sprite.material.dispose();
+          this.debugSprites.delete(id);
+        }
+      }
+    }
+
     // Add or update meshes for houses
     for (const house of houses) {
       const prevDir = this.houseConnectorDirs.get(house.id);
