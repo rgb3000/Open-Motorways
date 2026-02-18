@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import type { Highway } from '../../highways/types';
 import type { HighwaySystem } from '../../systems/HighwaySystem';
-import { HIGHWAY_HALF_WIDTH, HIGHWAY_SURFACE_Y, HIGHWAY_COLOR_HEX, TILE_SIZE } from '../../constants';
+import { HIGHWAY_HALF_WIDTH, HIGHWAY_COLOR_HEX, HIGHWAY_PEAK_Y, GROUND_Y_POSITION, TILE_SIZE } from '../../constants';
 import { Tool } from '../../types';
 import type { HighwayPlacementState } from '../../input/HighwayDrawer';
 
 const CONTROL_POINT_RADIUS = 8;
 const CONTROL_POINT_SEGMENTS = 16;
-const GUIDE_LINE_Y = HIGHWAY_SURFACE_Y + 0.3;
+const CONTROL_POINT_Y = HIGHWAY_PEAK_Y + 2;
 const PREVIEW_MARKER_RADIUS = TILE_SIZE * 0.3;
+const HIGHWAY_DEPTH = 1.5;
 
 export class HighwayLayer {
   private group: THREE.Group | null = null;
@@ -46,7 +47,7 @@ export class HighwayLayer {
         marker.rotation.x = -Math.PI / 2;
         marker.position.set(
           (placementState.firstPos.gx + 0.5) * TILE_SIZE,
-          GUIDE_LINE_Y,
+          GROUND_Y_POSITION + 0.5,
           (placementState.firstPos.gy + 0.5) * TILE_SIZE,
         );
         marker.renderOrder = 999;
@@ -65,9 +66,10 @@ export class HighwayLayer {
           const fromZ = (hw.fromPos.gy + 0.5) * TILE_SIZE;
           const toX = (hw.toPos.gx + 0.5) * TILE_SIZE;
           const toZ = (hw.toPos.gy + 0.5) * TILE_SIZE;
+          const endpointY = this.computeElevation(0); // road level at endpoints
 
-          this.addGuideLine(group, fromX, fromZ, hw.cp1.x, hw.cp1.y);
-          this.addGuideLine(group, toX, toZ, hw.cp2.x, hw.cp2.y);
+          this.addGuideLine(group, fromX, fromZ, endpointY, hw.cp1.x, hw.cp1.y, CONTROL_POINT_Y);
+          this.addGuideLine(group, toX, toZ, endpointY, hw.cp2.x, hw.cp2.y, CONTROL_POINT_Y);
         }
       }
     }
@@ -76,60 +78,106 @@ export class HighwayLayer {
     scene.add(group);
   }
 
+  private computeElevation(t: number): number {
+    return GROUND_Y_POSITION + (HIGHWAY_PEAK_Y - GROUND_Y_POSITION) * Math.sin(Math.PI * t);
+  }
+
   private buildHighwayMesh(group: THREE.Group, hw: Highway): void {
     const polyline = hw.polyline;
     if (polyline.length < 2) return;
 
-    // Convert polyline to 3D center points
-    const center: THREE.Vector3[] = polyline.map(
-      p => new THREE.Vector3(p.x, HIGHWAY_SURFACE_Y, p.y),
-    );
-    const n = center.length;
+    const n = polyline.length;
 
-    const leftPts: { x: number; z: number }[] = [];
-    const rightPts: { x: number; z: number }[] = [];
+    // Compute perpendicular offsets and elevations per point
+    const lefts: THREE.Vector3[] = [];
+    const rights: THREE.Vector3[] = [];
 
     for (let i = 0; i < n; i++) {
+      const t = n > 1 ? i / (n - 1) : 0;
+      const elevation = this.computeElevation(t);
+
+      // Tangent direction
       let tx: number, tz: number;
       if (i === 0) {
-        tx = center[1].x - center[0].x;
-        tz = center[1].z - center[0].z;
+        tx = polyline[1].x - polyline[0].x;
+        tz = polyline[1].y - polyline[0].y;
       } else if (i === n - 1) {
-        tx = center[n - 1].x - center[n - 2].x;
-        tz = center[n - 1].z - center[n - 2].z;
+        tx = polyline[n - 1].x - polyline[n - 2].x;
+        tz = polyline[n - 1].y - polyline[n - 2].y;
       } else {
-        tx = center[i + 1].x - center[i - 1].x;
-        tz = center[i + 1].z - center[i - 1].z;
+        tx = polyline[i + 1].x - polyline[i - 1].x;
+        tz = polyline[i + 1].y - polyline[i - 1].y;
       }
       const len = Math.sqrt(tx * tx + tz * tz);
       if (len > 0) { tx /= len; tz /= len; }
 
+      // Perpendicular (in XZ plane)
       const px = -tz, pz = tx;
-      leftPts.push({ x: center[i].x + px * HIGHWAY_HALF_WIDTH, z: center[i].z + pz * HIGHWAY_HALF_WIDTH });
-      rightPts.push({ x: center[i].x - px * HIGHWAY_HALF_WIDTH, z: center[i].z - pz * HIGHWAY_HALF_WIDTH });
+      const cx = polyline[i].x;
+      const cz = polyline[i].y; // polyline uses {x, y} for world XZ
+
+      lefts.push(new THREE.Vector3(cx + px * HIGHWAY_HALF_WIDTH, elevation, cz + pz * HIGHWAY_HALF_WIDTH));
+      rights.push(new THREE.Vector3(cx - px * HIGHWAY_HALF_WIDTH, elevation, cz - pz * HIGHWAY_HALF_WIDTH));
     }
 
-    // Build shape in (worldX, -worldZ) space
-    const shape = new THREE.Shape();
-    shape.moveTo(leftPts[0].x, -leftPts[0].z);
-    for (let i = 1; i < leftPts.length; i++) {
-      shape.lineTo(leftPts[i].x, -leftPts[i].z);
-    }
-    for (let i = rightPts.length - 1; i >= 0; i--) {
-      shape.lineTo(rightPts[i].x, -rightPts[i].z);
+    // Build box-profile extrusion: 4 vertices per cross-section (TL, TR, BL, BR)
+    // Top = elevation, Bottom = elevation - HIGHWAY_DEPTH
+    const positions: number[] = [];
+    const indices: number[] = [];
+
+    // Helper to push a vertex and return its index
+    let vertexCount = 0;
+    const addVertex = (x: number, y: number, z: number): number => {
+      positions.push(x, y, z);
+      return vertexCount++;
+    };
+
+    // Per cross-section: TL, TR, BR, BL
+    const sections: { tl: number; tr: number; br: number; bl: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const elev = lefts[i].y;
+      const bottomY = elev - HIGHWAY_DEPTH;
+      const tl = addVertex(lefts[i].x, elev, lefts[i].z);
+      const tr = addVertex(rights[i].x, elev, rights[i].z);
+      const br = addVertex(rights[i].x, bottomY, rights[i].z);
+      const bl = addVertex(lefts[i].x, bottomY, lefts[i].z);
+      sections.push({ tl, tr, br, bl });
     }
 
-    const geom = new THREE.ExtrudeGeometry(shape, {
-      depth: 0.6,
-      bevelEnabled: true,
-      bevelThickness: 0.15,
-      bevelSize: 0.15,
-      bevelSegments: 2,
-      curveSegments: 1,
-    });
+    // Generate quads between consecutive sections
+    for (let i = 0; i < n - 1; i++) {
+      const a = sections[i];
+      const b = sections[i + 1];
+
+      // Top face (TL, TR → next TL, TR)
+      indices.push(a.tl, b.tl, b.tr, a.tl, b.tr, a.tr);
+
+      // Bottom face (BL, BR → next BL, BR) — reversed winding
+      indices.push(a.bl, b.br, b.bl, a.bl, a.br, b.br);
+
+      // Left wall (TL, BL → next TL, BL)
+      indices.push(a.tl, a.bl, b.bl, a.tl, b.bl, b.tl);
+
+      // Right wall (TR, BR → next TR, BR) — reversed winding
+      indices.push(a.tr, b.tr, b.br, a.tr, b.br, a.br);
+    }
+
+    // End caps
+    if (sections.length > 0) {
+      // Front cap (first section)
+      const f = sections[0];
+      indices.push(f.tl, f.bl, f.br, f.tl, f.br, f.tr);
+      // Back cap (last section)
+      const bk = sections[n - 1];
+      indices.push(bk.tl, bk.tr, bk.br, bk.tl, bk.br, bk.bl);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
     const mesh = new THREE.Mesh(geom, this.highwaySurfaceMat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = HIGHWAY_SURFACE_Y;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
@@ -137,15 +185,15 @@ export class HighwayLayer {
 
   private addControlPointHandle(group: THREE.Group, x: number, z: number): void {
     const sphere = new THREE.Mesh(this.cpGeom, this.cpMat);
-    sphere.position.set(x, GUIDE_LINE_Y, z);
+    sphere.position.set(x, CONTROL_POINT_Y, z);
     sphere.renderOrder = 999;
     group.add(sphere);
   }
 
-  private addGuideLine(group: THREE.Group, x1: number, z1: number, x2: number, z2: number): void {
+  private addGuideLine(group: THREE.Group, x1: number, z1: number, y1: number, x2: number, z2: number, y2: number): void {
     const pts = [
-      new THREE.Vector3(x1, GUIDE_LINE_Y, z1),
-      new THREE.Vector3(x2, GUIDE_LINE_Y, z2),
+      new THREE.Vector3(x1, y1, z1),
+      new THREE.Vector3(x2, y2, z2),
     ];
     const geom = new THREE.BufferGeometry().setFromPoints(pts);
     const line = new THREE.Line(geom, this.guideLineMat);

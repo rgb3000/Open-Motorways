@@ -13,7 +13,7 @@ import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
 import type { PendingDeletionSystem } from '../PendingDeletionSystem';
 import type { HighwaySystem } from '../HighwaySystem';
-import { CAR_SPEED, HIGHWAY_SPEED_MULTIPLIER, TILE_SIZE } from '../../constants';
+import { CAR_SPEED, HIGHWAY_SPEED_MULTIPLIER, TILE_SIZE, HIGHWAY_PEAK_Y, GROUND_Y_POSITION } from '../../constants';
 
 export class CarMovement {
   private grid: Grid;
@@ -204,6 +204,7 @@ export class CarMovement {
     car.onHighway = true;
     car.highwayProgress = 0;
     car.segmentProgress = 0;
+    car.elevationY = GROUND_Y_POSITION; // starts at road level
 
     // Determine direction: are we going from→to or to→from?
     const currentPos = this.router.getCarCurrentTile(car);
@@ -231,6 +232,7 @@ export class CarMovement {
       car.highwayPolyline = null;
       car.highwayCumDist = null;
       car.highwayProgress = 0;
+      car.elevationY = 0;
 
       // Advance pathIndex past the highway step
       car.pathIndex++;
@@ -255,5 +257,9 @@ export class CarMovement {
     car.pixelPos.x = result.x;
     car.pixelPos.y = result.y;
     car.renderAngle = result.angle;
+
+    // Compute elevation: sinusoidal arch from road level to peak
+    const t = car.highwayProgress / totalDist;
+    car.elevationY = GROUND_Y_POSITION + (HIGHWAY_PEAK_Y - GROUND_Y_POSITION) * Math.sin(Math.PI * t);
   }
 }

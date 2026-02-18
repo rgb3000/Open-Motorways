@@ -113,7 +113,8 @@ export class CarLayer {
       // Interpolate position
       const x = lerp(car.prevPixelPos.x, car.pixelPos.x, alpha);
       const y = lerp(car.prevPixelPos.y, car.pixelPos.y, alpha);
-      group.position.set(x, GROUND_Y_POSITION, y);
+      const yPos = car.elevationY > 0 ? car.elevationY : GROUND_Y_POSITION;
+      group.position.set(x, yPos, y);
 
       // Interpolate rotation
       const angle = lerpAngle(car.prevRenderAngle, car.renderAngle, alpha);
