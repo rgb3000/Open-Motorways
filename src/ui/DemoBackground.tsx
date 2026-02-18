@@ -28,9 +28,8 @@ export function DemoBackground() {
     <div
       ref={containerRef}
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 0,
+        width: '100%',
+        height: '100%',
         pointerEvents: 'none',
       }}
     />
