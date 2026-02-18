@@ -4,7 +4,7 @@ import type { House } from '../entities/House';
 import type { Business } from '../entities/Business';
 import type { Car } from '../entities/Car';
 import type { GridPos } from '../types';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, TILE_SIZE, LAKE_DEPTH, LAKE_WATER_SURFACE_Y, LAKE_WATER_COLOR_HEX, LAKE_WATER_OPACITY, ROAD_DEBUG } from '../constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, TILE_SIZE, LAKE_DEPTH, LAKE_WATER_SURFACE_Y, LAKE_WATER_COLOR_HEX, LAKE_WATER_OPACITY, ROAD_DEBUG, CAR_ROUTE_DEBUG } from '../constants';
 import { lerp, clamp } from '../utils/math';
 import { TerrainLayer } from './layers/TerrainLayer';
 import { RoadLayer } from './layers/RoadLayer';
@@ -13,6 +13,7 @@ import { CarLayer } from './layers/CarLayer';
 import { DebugLayer } from './layers/DebugLayer';
 import { ObstacleLayer } from './layers/ObstacleLayer';
 import { RoadDebugLayer } from './layers/RoadDebugLayer';
+import { CarRouteDebugLayer } from './layers/CarRouteDebugLayer';
 
 const GROUND_SUBDIV = 3; // subdivisions per grid cell for smooth lake bevel
 const MIN_ZOOM = 0.5;
@@ -33,6 +34,7 @@ export class Renderer {
   private debugLayer: DebugLayer;
   private obstacleLayer: ObstacleLayer;
   private roadDebugLayer: RoadDebugLayer;
+  private carRouteDebugLayer: CarRouteDebugLayer;
   private grid: Grid;
   private lakeCells: GridPos[] = [];
   private indicatorMesh: THREE.Mesh | null = null;
@@ -108,6 +110,7 @@ export class Renderer {
     this.debugLayer = new DebugLayer();
     this.obstacleLayer = new ObstacleLayer();
     this.roadDebugLayer = new RoadDebugLayer();
+    this.carRouteDebugLayer = new CarRouteDebugLayer();
     this.grid = grid;
 
     // Render initial ground state (terrain only, roads are 3D)
@@ -341,6 +344,8 @@ export class Renderer {
     businesses: Business[],
     cars: Car[],
     spawnBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null,
+    mouseWorldX = 0,
+    mouseWorldY = 0,
   ): void {
     // Smooth zoom/pan animation
     this.updateCamera();
@@ -367,6 +372,7 @@ export class Renderer {
     this.carLayer.update(this.scene, cars, alpha);
     this.debugLayer.update(this.scene, spawnBounds);
     if (ROAD_DEBUG) this.roadDebugLayer.update(this.scene, this.grid, cars);
+    if (CAR_ROUTE_DEBUG) this.carRouteDebugLayer.update(this.scene, cars, houses, businesses, mouseWorldX, mouseWorldY);
     // Render
     this.webglRenderer.render(this.scene, this.camera);
   }
@@ -377,6 +383,7 @@ export class Renderer {
     this.carLayer.dispose(this.scene);
     this.debugLayer.dispose(this.scene);
     this.roadDebugLayer.dispose(this.scene);
+    this.carRouteDebugLayer.dispose(this.scene);
     this.obstacleLayer.disposeAll(this.scene);
     if (this.indicatorMesh) {
       this.scene.remove(this.indicatorMesh);

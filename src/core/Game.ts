@@ -501,6 +501,8 @@ export class Game {
       this.spawnSystem.getBusinesses(),
       this.carSystem.getCars(),
       SPAWN_DEBUG ? this.spawnSystem.getSpawnBounds() : null,
+      this.input.state.canvasX,
+      this.input.state.canvasY,
     );
     let demandStats: DemandStat[] | null = null;
     if (DEMAND_DEBUG) {
