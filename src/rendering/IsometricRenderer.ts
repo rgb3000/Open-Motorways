@@ -4,7 +4,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../constants';
 const ISO_ELEVATION = 35 * (Math.PI / 180); // ~35° elevation
 const ISO_AZIMUTH = 45 * (Math.PI / 180);   // 45° azimuth
 const CAMERA_DISTANCE = 800;
-const PAN_SPEED = 0.00008; // radians per frame for slow drift
+const PAN_SPEED = 0; // no camera drift
 const PAN_RADIUS_X = CANVAS_WIDTH * 0.15;
 const PAN_RADIUS_Z = CANVAS_HEIGHT * 0.15;
 
