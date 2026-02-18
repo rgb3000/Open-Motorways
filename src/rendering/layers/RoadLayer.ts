@@ -267,11 +267,11 @@ export class RoadLayer {
   private getBusinesses: () => Business[];
   private group: THREE.Group | null = null;
 
-  private lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
-  private connectorLineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3 });
-  private pathLineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 3 });
-  private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  private lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3, depthTest: false });
+  private connectorLineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 3, depthTest: false });
+  private pathLineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 3, depthTest: false });
+  private circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
+  private connectorCircleMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
   private circleGeom = new THREE.CircleGeometry(CIRCLE_RADIUS, CIRCLE_SEGMENTS);
   private roadNoiseTexture = RoadLayer.createRoadNoiseTexture();
   private roadSurfaceMat = new THREE.MeshStandardMaterial({ color: ROAD_COLOR, side: THREE.DoubleSide, map: this.roadNoiseTexture });
@@ -333,6 +333,7 @@ export class RoadLayer {
           const circle = new THREE.Mesh(this.circleGeom, this.circleMat);
           circle.rotation.x = -Math.PI / 2;
           circle.position.set(cx, LINE_Y, cz);
+          circle.renderOrder = 900;
           group.add(circle);
 
           // Lines to connected neighbors (only draw if neighbor index > current to avoid duplicates)
@@ -353,6 +354,7 @@ export class RoadLayer {
             ];
             const geom = new THREE.BufferGeometry().setFromPoints(points);
             const line = new THREE.Line(geom, this.lineMat);
+            line.renderOrder = 900;
             group.add(line);
           });
         }
@@ -371,16 +373,20 @@ export class RoadLayer {
           new THREE.Vector3(hcx, LINE_Y, hcz),
         ];
         const geom = new THREE.BufferGeometry().setFromPoints(points);
-        group.add(new THREE.Line(geom, this.connectorLineMat));
+        const hLine = new THREE.Line(geom, this.connectorLineMat);
+        hLine.renderOrder = 900;
+        group.add(hLine);
 
         const hCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
         hCircle1.rotation.x = -Math.PI / 2;
         hCircle1.position.set(hcx, 10, hcz);
+        hCircle1.renderOrder = 900;
         group.add(hCircle1);
 
         const hCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
         hCircle2.rotation.x = -Math.PI / 2;
         hCircle2.position.set(ccx, LINE_Y, ccz);
+        hCircle2.renderOrder = 900;
         group.add(hCircle2);
       }
 
@@ -395,16 +401,20 @@ export class RoadLayer {
           new THREE.Vector3(pcx, LINE_Y, pcz),
         ];
         const geom = new THREE.BufferGeometry().setFromPoints(points);
-        group.add(new THREE.Line(geom, this.connectorLineMat));
+        const bLine = new THREE.Line(geom, this.connectorLineMat);
+        bLine.renderOrder = 900;
+        group.add(bLine);
 
         const bCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
         bCircle1.rotation.x = -Math.PI / 2;
         bCircle1.position.set(pcx, LINE_Y, pcz);
+        bCircle1.renderOrder = 900;
         group.add(bCircle1);
 
         const bCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
         bCircle2.rotation.x = -Math.PI / 2;
         bCircle2.position.set(ccx, LINE_Y, ccz);
+        bCircle2.renderOrder = 900;
         group.add(bCircle2);
       }
     }
@@ -632,7 +642,9 @@ export class RoadLayer {
 
         if (points.length >= 2) {
           const geom = new THREE.BufferGeometry().setFromPoints(points);
-          group.add(new THREE.Line(geom, this.pathLineMat));
+          const greenLine = new THREE.Line(geom, this.pathLineMat);
+          greenLine.renderOrder = 900;
+          group.add(greenLine);
         }
       }
 
