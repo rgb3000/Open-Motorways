@@ -30,28 +30,58 @@ function lerpAngle(a: number, b: number, t: number): number {
 export class CarLayer {
   private meshes = new Map<string, THREE.Group>();
   private materialCache = new Map<GameColor, THREE.MeshStandardMaterial>();
-  private carGeometry: THREE.ExtrudeGeometry;
+  // Pickup truck geometries
+  private cabBaseGeometry: THREE.ExtrudeGeometry;
+  private cabRoofGeometry: THREE.ExtrudeGeometry;
+  private bedFloorGeometry: THREE.ExtrudeGeometry;
+  private bedSideGeometry: THREE.BoxGeometry;
+  private bedRearGeometry: THREE.BoxGeometry;
+  private bumperGeometry: THREE.BoxGeometry;
   private loadGeometry: THREE.ExtrudeGeometry;
   private loadMaterial: THREE.MeshStandardMaterial;
+  private bumperMaterial: THREE.MeshStandardMaterial;
   private tireGeometry: THREE.CylinderGeometry;
   private tireMaterial: THREE.MeshStandardMaterial;
   private activeCarIds = new Set<string>();
 
   constructor() {
-    const carShape = roundedRectShape(CAR_LENGTH, CAR_WIDTH, 1);
-    this.carGeometry = new THREE.ExtrudeGeometry(carShape, { depth: 2, bevelEnabled: true, bevelThickness: 0.4, bevelSize: 0.4, bevelSegments: 2, curveSegments: 3 });
-    this.carGeometry.rotateX(-Math.PI / 2);
+    // Cab base: front 40% of truck
+    const cabLen = CAR_LENGTH * 0.38;
+    const cabBaseShape = roundedRectShape(cabLen, CAR_WIDTH, 1);
+    this.cabBaseGeometry = new THREE.ExtrudeGeometry(cabBaseShape, { depth: 1.8, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 2, curveSegments: 3 });
+    this.cabBaseGeometry.rotateX(-Math.PI / 2);
 
-    const loadShape = roundedRectShape(4, 3, 0.5);
-    this.loadGeometry = new THREE.ExtrudeGeometry(loadShape, { depth: 2, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2, curveSegments: 3 });
+    // Cab roof: slightly narrower and shorter than base
+    const roofShape = roundedRectShape(cabLen * 0.85, CAR_WIDTH * 0.75, 0.8);
+    this.cabRoofGeometry = new THREE.ExtrudeGeometry(roofShape, { depth: 2.0, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2, curveSegments: 3 });
+    this.cabRoofGeometry.rotateX(-Math.PI / 2);
+
+    // Bed floor: rear 55% of truck, low
+    const bedLen = CAR_LENGTH * 0.52;
+    const bedShape = roundedRectShape(bedLen, CAR_WIDTH, 0.8);
+    this.bedFloorGeometry = new THREE.ExtrudeGeometry(bedShape, { depth: 1.2, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 1, curveSegments: 3 });
+    this.bedFloorGeometry.rotateX(-Math.PI / 2);
+
+    // Bed side walls (thin boxes along each side of the bed)
+    this.bedSideGeometry = new THREE.BoxGeometry(bedLen * 0.9, 2.0, 0.6);
+    // Bed rear wall
+    this.bedRearGeometry = new THREE.BoxGeometry(0.6, 2.0, CAR_WIDTH * 0.75);
+
+    // Bumpers: small strips front and rear
+    this.bumperGeometry = new THREE.BoxGeometry(0.4, 0.8, CAR_WIDTH + 0.4);
+    this.bumperMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
+
+    // Load cargo in the bed
+    const loadShape = roundedRectShape(bedLen * 0.55, CAR_WIDTH * 0.55, 0.5);
+    this.loadGeometry = new THREE.ExtrudeGeometry(loadShape, { depth: 2.2, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 1, curveSegments: 3 });
     this.loadGeometry.rotateX(-Math.PI / 2);
     this.loadMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
-    // Tire: small cylinder on its side
+    // Tires
     const tireRadius = 1.2;
     const tireWidth = 1.0;
     this.tireGeometry = new THREE.CylinderGeometry(tireRadius, tireRadius, tireWidth, 8);
-    this.tireGeometry.rotateX(Math.PI / 2); // lay flat so axis is along Z (car's side axis)
+    this.tireGeometry.rotateX(Math.PI / 2);
     this.tireMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
   }
 
@@ -74,30 +104,73 @@ export class CarLayer {
       let group = this.meshes.get(car.id);
       if (!group) {
         group = new THREE.Group();
+        const mat = this.getMaterial(car.color);
 
-        const body = new THREE.Mesh(this.carGeometry, this.getMaterial(car.color));
-        body.castShadow = true;
-        group.add(body);
+        const cabOffsetX = CAR_LENGTH * 0.18; // cab sits in front half
+        const bedOffsetX = -CAR_LENGTH * 0.20; // bed sits in rear half
 
+        // Cab base (front)
+        const cabBase = new THREE.Mesh(this.cabBaseGeometry, mat);
+        cabBase.castShadow = true;
+        cabBase.position.x = cabOffsetX;
+        group.add(cabBase);
+
+        // Cab roof (narrower, on top of base)
+        const cabRoof = new THREE.Mesh(this.cabRoofGeometry, mat);
+        cabRoof.castShadow = true;
+        cabRoof.position.set(cabOffsetX, 1.8, 0);
+        group.add(cabRoof);
+
+        // Bed floor (rear, low)
+        const bedFloor = new THREE.Mesh(this.bedFloorGeometry, mat);
+        bedFloor.castShadow = true;
+        bedFloor.position.x = bedOffsetX;
+        group.add(bedFloor);
+
+        // Bed side walls
+        const sideY = 1.2;
+        const sideZ = CAR_WIDTH * 0.42;
+        const leftWall = new THREE.Mesh(this.bedSideGeometry, mat);
+        leftWall.position.set(bedOffsetX, sideY, sideZ);
+        group.add(leftWall);
+        const rightWall = new THREE.Mesh(this.bedSideGeometry, mat);
+        rightWall.position.set(bedOffsetX, sideY, -sideZ);
+        group.add(rightWall);
+
+        // Bed rear wall
+        const rearWall = new THREE.Mesh(this.bedRearGeometry, mat);
+        rearWall.position.set(bedOffsetX - CAR_LENGTH * 0.24, sideY, 0);
+        group.add(rearWall);
+
+        // Front bumper (flush against cab front edge)
+        const frontBumper = new THREE.Mesh(this.bumperGeometry, this.bumperMaterial);
+        frontBumper.position.set(cabOffsetX + CAR_LENGTH * 0.19 + 0.2, 0.3, 0);
+        group.add(frontBumper);
+
+        // Rear bumper (flush against bed rear edge)
+        const rearBumper = new THREE.Mesh(this.bumperGeometry, this.bumperMaterial);
+        rearBumper.position.set(bedOffsetX - CAR_LENGTH * 0.26 - 0.2, 0.3, 0);
+        group.add(rearBumper);
+
+        // Load (cargo in the bed, child index 7)
         const load = new THREE.Mesh(this.loadGeometry, this.loadMaterial);
         load.castShadow = true;
-        load.position.y = 2;
+        load.position.set(bedOffsetX, 1.5, 0);
         load.visible = false;
         group.add(load);
 
-        // Four tires at the corners of the car body
-        const tireOffsetX = CAR_LENGTH * 0.35; // along car length
-        const tireOffsetZ = CAR_WIDTH * 0.5 + 0.3; // just outside car width
-        const tireY = 0; // bottom of car
+        // Tires at four corners
+        const tireOffsetX = CAR_LENGTH * 0.25;
+        const tireOffsetZ = CAR_WIDTH * 0.5 + 0.3;
         const tirePositions = [
-          { x: tireOffsetX, z: tireOffsetZ },   // front-right
-          { x: tireOffsetX, z: -tireOffsetZ },  // front-left
-          { x: -tireOffsetX, z: tireOffsetZ },  // rear-right
-          { x: -tireOffsetX, z: -tireOffsetZ }, // rear-left
+          { x: tireOffsetX, z: tireOffsetZ },
+          { x: tireOffsetX, z: -tireOffsetZ },
+          { x: -tireOffsetX, z: tireOffsetZ },
+          { x: -tireOffsetX, z: -tireOffsetZ },
         ];
         for (const tp of tirePositions) {
           const tire = new THREE.Mesh(this.tireGeometry, this.tireMaterial);
-          tire.position.set(tp.x, tireY, tp.z);
+          tire.position.set(tp.x, 0, tp.z);
           tire.castShadow = true;
           group.add(tire);
         }
@@ -106,8 +179,8 @@ export class CarLayer {
         this.meshes.set(car.id, group);
       }
 
-      // Toggle load visibility based on car state
-      const load = group.children[1];
+      // Toggle load visibility based on car state (load is child index 8)
+      const load = group.children[8];
       load.visible = car.state === CarState.GoingHome;
 
       // Interpolate position
@@ -152,7 +225,13 @@ export class CarLayer {
       scene.remove(group);
     }
     this.meshes.clear();
-    this.carGeometry.dispose();
+    this.cabBaseGeometry.dispose();
+    this.cabRoofGeometry.dispose();
+    this.bedFloorGeometry.dispose();
+    this.bedSideGeometry.dispose();
+    this.bedRearGeometry.dispose();
+    this.bumperGeometry.dispose();
+    this.bumperMaterial.dispose();
     this.loadGeometry.dispose();
     this.loadMaterial.dispose();
     this.tireGeometry.dispose();
