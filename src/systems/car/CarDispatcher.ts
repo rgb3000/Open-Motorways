@@ -3,6 +3,7 @@ import type { Business } from '../../entities/Business';
 import { Car, CarState } from '../../entities/Car';
 import type { Pathfinder } from '../../pathfinding/Pathfinder';
 import type { CarRouter } from './CarRouter';
+import { stepGridPos } from './CarRouter';
 import { manhattanDist } from '../../utils/math';
 import { getDirection, directionAngle } from '../../utils/direction';
 
@@ -58,9 +59,13 @@ export class CarDispatcher {
           car.pixelPos.y = car.smoothPath[0].y;
           car.prevPixelPos.x = car.pixelPos.x;
           car.prevPixelPos.y = car.pixelPos.y;
-          const initDir = getDirection(path[0], path[1]);
-          car.renderAngle = directionAngle(initDir);
-          car.prevRenderAngle = car.renderAngle;
+          if (path.length >= 2) {
+            const p0 = stepGridPos(path[0]);
+            const p1 = stepGridPos(path[1]);
+            const initDir = getDirection(p0, p1);
+            car.renderAngle = directionAngle(initDir);
+            car.prevRenderAngle = car.renderAngle;
+          }
         }
 
         house.availableCars--;

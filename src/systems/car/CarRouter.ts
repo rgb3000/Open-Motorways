@@ -5,8 +5,15 @@ import type { Grid } from '../../core/Grid';
 import type { House } from '../../entities/House';
 import { CellType } from '../../types';
 import type { GridPos } from '../../types';
+import type { PathStep } from '../../highways/types';
 import { gridToPixelCenter, pixelToGrid } from '../../utils/math';
 import { computeSmoothLanePath } from '../../utils/roadGeometry';
+
+/** Get the grid position of a path step */
+export function stepGridPos(step: PathStep): GridPos {
+  if (step.kind === 'grid') return step.pos;
+  return step.to;
+}
 
 export class CarRouter {
   private pathfinder: Pathfinder;
@@ -18,40 +25,71 @@ export class CarRouter {
   }
 
   getCarCurrentTile(car: Car): GridPos {
+    if (car.onHighway) {
+      return pixelToGrid(car.pixelPos.x, car.pixelPos.y);
+    }
     if (car.path.length >= 2 && car.pathIndex < car.path.length - 1) {
-      return car.segmentProgress >= 0.5
-        ? car.path[car.pathIndex + 1]
-        : car.path[car.pathIndex];
+      const curPos = stepGridPos(car.path[car.pathIndex]);
+      const nxtPos = stepGridPos(car.path[car.pathIndex + 1]);
+      return car.segmentProgress >= 0.5 ? nxtPos : curPos;
     }
     if (car.path.length > 0 && car.pathIndex < car.path.length) {
-      return car.path[car.pathIndex];
+      return stepGridPos(car.path[car.pathIndex]);
     }
     return pixelToGrid(car.pixelPos.x, car.pixelPos.y);
   }
 
-  assignPath(car: Car, path: GridPos[]): void {
+  assignPath(car: Car, path: PathStep[]): void {
     car.path = path;
     car.pathIndex = 0;
     car.segmentProgress = 0;
+    car.onHighway = false;
+    car.highwayPolyline = null;
+    car.highwayCumDist = null;
+    car.highwayProgress = 0;
+
     if (path.length >= 2) {
+      const gridPositions = this.extractLeadingGridPositions(path, 0);
+      this.computeAndAssignSmoothPath(car, gridPositions, 0);
+    } else {
+      car.smoothPath = [];
+      car.smoothCumDist = [];
+      car.smoothCellDist = [];
+    }
+  }
+
+  /** Extract grid positions from path starting at startIdx up to (but not including) the next highway step */
+  private extractLeadingGridPositions(path: PathStep[], startIdx: number): GridPos[] {
+    const positions: GridPos[] = [];
+    for (let i = startIdx; i < path.length; i++) {
+      const step = path[i];
+      if (step.kind === 'highway') break;
+      positions.push(step.pos);
+    }
+    return positions;
+  }
+
+  /** Compute smooth lane path for a grid segment and assign to car */
+  private computeAndAssignSmoothPath(car: Car, gridPositions: GridPos[], pathStartIdx: number): void {
+    if (gridPositions.length >= 2) {
       let startTrim = 0;
-      let endTrim = path.length;
-      while (startTrim < path.length) {
-        const cell = this.grid.getCell(path[startTrim].gx, path[startTrim].gy);
+      let endTrim = gridPositions.length;
+      while (startTrim < gridPositions.length) {
+        const cell = this.grid.getCell(gridPositions[startTrim].gx, gridPositions[startTrim].gy);
         if (cell && cell.type !== CellType.Business) break;
         startTrim++;
       }
       while (endTrim > startTrim) {
-        const cell = this.grid.getCell(path[endTrim - 1].gx, path[endTrim - 1].gy);
+        const cell = this.grid.getCell(gridPositions[endTrim - 1].gx, gridPositions[endTrim - 1].gy);
         if (cell && cell.type !== CellType.Business) break;
         endTrim--;
       }
-      const smoothPath = path.slice(startTrim, endTrim);
+      const smoothPath = gridPositions.slice(startTrim, endTrim);
       if (smoothPath.length >= 2) {
         const smooth = computeSmoothLanePath(smoothPath);
         car.smoothPath = smooth.points;
         car.smoothCumDist = smooth.cumDist;
-        const padded = new Array(startTrim).fill(0);
+        const padded = new Array(pathStartIdx + startTrim).fill(0);
         car.smoothCellDist = padded.concat(smooth.cellDist);
       } else {
         car.smoothPath = [];
@@ -65,13 +103,18 @@ export class CarRouter {
     }
   }
 
+  /** Recompute smooth path for the grid segment starting after a highway exit */
+  recomputeSmoothPathFromIndex(car: Car, startIdx: number): void {
+    const gridPositions = this.extractLeadingGridPositions(car.path, startIdx);
+    this.computeAndAssignSmoothPath(car, gridPositions, startIdx);
+  }
+
   rerouteCar(car: Car, houses: House[]): void {
     if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) return;
 
     const currentTile = this.getCarCurrentTile(car);
     const home = houses.find(h => h.id === car.homeHouseId);
 
-    // 1. Try to repath to original destination
     if (car.destination) {
       const path = this.pathfinder.findPath(currentTile, car.destination);
       if (path) {
@@ -88,12 +131,10 @@ export class CarRouter {
       }
     }
 
-    // 2. If GoingToBusiness and can't reach business, clear target and try home
     if (car.state === CarState.GoingToBusiness) {
       car.targetBusinessId = null;
     }
 
-    // 3. Try path home (allow pending-deletion roads so car can still get home)
     if (home) {
       const homePath = this.pathfinder.findPath(currentTile, home.pos, true);
       if (homePath) {
@@ -112,11 +153,14 @@ export class CarRouter {
       }
     }
 
-    // 4. Nothing works — strand the car
     car.state = CarState.Stranded;
     car.path = [];
     car.pathIndex = 0;
     car.segmentProgress = 0;
+    car.onHighway = false;
+    car.highwayPolyline = null;
+    car.highwayCumDist = null;
+    car.highwayProgress = 0;
     car.smoothPath = [];
     car.smoothCumDist = [];
     car.smoothCellDist = [];

@@ -1,4 +1,5 @@
 import type { GameColor, GridPos, PixelPos, Direction } from '../types';
+import type { PathStep } from '../highways/types';
 import { generateId, gridToPixelCenter } from '../utils/math';
 
 export const CarState = {
@@ -23,9 +24,9 @@ export class Car {
   prevRenderAngle = 0;  // previous frame's angle for render interpolation
 
   // Path
-  path: GridPos[] = [];
+  path: PathStep[] = [];
   pathIndex = 0;
-  outboundPath: GridPos[] = []; // saved outbound path for Unloading/WaitingToExit reservation
+  outboundPath: PathStep[] = []; // saved outbound path for Unloading/WaitingToExit reservation
   segmentProgress = 0; // 0..1 between current and next tile
   intersectionWaitTime = 0;
 
@@ -33,6 +34,12 @@ export class Car {
   smoothPath: { x: number; y: number }[] = [];
   smoothCumDist: number[] = [];
   smoothCellDist: number[] = [];
+
+  // Highway state
+  onHighway = false;
+  highwayPolyline: PixelPos[] | null = null;
+  highwayCumDist: number[] | null = null;
+  highwayProgress = 0; // arc-length distance traveled on current highway
 
   // Parking
   assignedSlotIndex: number | null = null;

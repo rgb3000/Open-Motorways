@@ -59,6 +59,11 @@ export const ROAD_COST = 10;
 export const DELIVERY_REWARD = 50;
 export const ROAD_REFUND = 10;
 
+// Highways
+export const HIGHWAY_COST = 200;
+export const HIGHWAY_REFUND = 150;
+export const HIGHWAY_SPEED_MULTIPLIER = 2.0;
+
 // Colors - map GameColor enum to hex
 export const COLOR_MAP: Record<GameColor, string> = {
   [GameColor.Red]: '#E74C3C',
@@ -106,6 +111,9 @@ export const BG_COLOR = '#E8D8B4';
 export const GRID_LINE_COLOR = '#D4C4A0';
 // Roads
 export const ROAD_HALF_WIDTH = TILE_SIZE * 0.2;
+export const HIGHWAY_HALF_WIDTH = TILE_SIZE * 0.28;
+export const HIGHWAY_SURFACE_Y = 0.5;
+export const HIGHWAY_COLOR_HEX = 0x8899AA;
 export const ROAD_COLOR = '#B8B8B8';
 export const ROAD_OUTLINE_COLOR = '#C0C0C0';
 export const ROAD_LANE_DIVIDER_COLOR = '#DDDDDD';
@@ -160,6 +168,9 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
   OBSTACLE_EDGE_MARGIN,
   OBSTACLE_CENTER_EXCLUSION,
   HOUSE_SUPPLY_PER_MINUTE,
+  HIGHWAY_COST,
+  HIGHWAY_REFUND,
+  HIGHWAY_SPEED_MULTIPLIER,
 };
 
 export function buildConfig(overrides?: Partial<GameConstants>): GameConstants {

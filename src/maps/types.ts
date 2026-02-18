@@ -75,6 +75,11 @@ export interface GameConstants {
 
   // Demand-aware spawning
   HOUSE_SUPPLY_PER_MINUTE: number;
+
+  // Highways
+  HIGHWAY_COST: number;
+  HIGHWAY_REFUND: number;
+  HIGHWAY_SPEED_MULTIPLIER: number;
 }
 
 export interface MapConfig {

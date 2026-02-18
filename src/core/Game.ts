@@ -17,7 +17,10 @@ import { SoundEffectSystem } from '../systems/SoundEffectSystem';
 import { ObstacleSystem } from '../systems/ObstacleSystem';
 import { Pathfinder } from '../pathfinding/Pathfinder';
 import { PendingDeletionSystem } from '../systems/PendingDeletionSystem';
+import { HighwaySystem } from '../systems/HighwaySystem';
+import { HighwayDrawer } from '../input/HighwayDrawer';
 import { CarState } from '../entities/Car';
+import { stepGridPos } from '../systems/car/CarRouter';
 import { SPAWN_DEBUG, DEMAND_DEBUG, buildConfig } from '../constants';
 import type { MapConfig } from '../maps/types';
 import type { GameConstants } from '../maps/types';
@@ -46,6 +49,8 @@ export class Game {
   private carSystem: CarSystem;
   private pendingDeletionSystem: PendingDeletionSystem;
   private obstacleSystem: ObstacleSystem;
+  private highwaySystem: HighwaySystem;
+  private highwayDrawer: HighwayDrawer;
   private pathfinder: Pathfinder;
   private musicSystem: MusicSystem = new MusicSystem();
   private soundEffects: SoundEffectSystem = new SoundEffectSystem();
@@ -89,11 +94,12 @@ export class Game {
     this.obstacleSystem = new ObstacleSystem(this.grid, mapConfig?.obstacles, this.cfg);
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
-    this.pathfinder = new Pathfinder(this.grid);
+    this.highwaySystem = new HighwaySystem();
+    this.pathfinder = new Pathfinder(this.grid, this.highwaySystem);
     this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
     this.demandSystem = new DemandSystem(this.cfg);
     this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem, this.cfg);
-    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem, this.highwaySystem);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
@@ -105,6 +111,7 @@ export class Game {
     this.undoSystem = new UndoSystem(this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
     this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
+    this.highwayDrawer = new HighwayDrawer(this.input, this.highwaySystem, this.grid, this.createMoneyInterface(), () => this.activeTool);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -129,6 +136,7 @@ export class Game {
       }
       if (e.key === 'r' || e.key === 'R') this.setActiveTool(Tool.Road);
       if (e.key === 'e' || e.key === 'E') this.setActiveTool(Tool.Eraser);
+      if (e.key === 'h' || e.key === 'H') this.setActiveTool(Tool.Highway);
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
         this.spaceDown = true;
@@ -277,16 +285,18 @@ export class Game {
     this.obstacleSystem = new ObstacleSystem(this.grid, this.mapConfig?.obstacles, this.cfg);
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
-    this.pathfinder = new Pathfinder(this.grid);
+    this.highwaySystem = new HighwaySystem();
+    this.pathfinder = new Pathfinder(this.grid, this.highwaySystem);
     this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
     this.demandSystem = new DemandSystem(this.cfg);
     this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem, this.cfg);
     this.demandWarnPrevSin = 0;
-    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem, this.highwaySystem);
     this.money = this.cfg.STARTING_MONEY;
     this.undoSystem = new UndoSystem(this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
     this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
+    this.highwayDrawer = new HighwayDrawer(this.input, this.highwaySystem, this.grid, this.createMoneyInterface(), () => this.activeTool);
     this.setActiveTool(Tool.Road);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
@@ -351,7 +361,7 @@ export class Game {
   setActiveTool(tool: Tool): void {
     if (this.activeTool === tool) return;
     this.activeTool = tool;
-    this.canvas.style.cursor = tool === Tool.Eraser ? 'crosshair' : 'default';
+    this.canvas.style.cursor = tool === Tool.Eraser ? 'crosshair' : tool === Tool.Highway ? 'crosshair' : 'default';
     this.toolChangeCallback?.(tool);
   }
 
@@ -360,6 +370,9 @@ export class Game {
   }
 
   private handleTryErase(gx: number, gy: number): boolean {
+    // Also try erasing highways at this cell
+    this.highwayDrawer.tryEraseAtCell(gx, gy);
+
     const cell = this.grid.getCell(gx, gy);
     if (!cell || cell.type !== CellType.Road) return false;
 
@@ -370,25 +383,25 @@ export class Game {
     const dependentCarIds: string[] = [];
     for (const car of cars) {
       if (car.state === CarState.GoingToBusiness && car.path.length > 0) {
-        // Cells already passed are reserved for return trip
         for (let i = 0; i < car.pathIndex; i++) {
-          if (car.path[i].gx === gx && car.path[i].gy === gy) {
+          const p = stepGridPos(car.path[i]);
+          if (p.gx === gx && p.gy === gy) {
             dependentCarIds.push(car.id);
             break;
           }
         }
       } else if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) {
-        // Entire outbound path is reserved
-        for (const p of car.outboundPath) {
+        for (const step of car.outboundPath) {
+          const p = stepGridPos(step);
           if (p.gx === gx && p.gy === gy) {
             dependentCarIds.push(car.id);
             break;
           }
         }
       } else if (car.state === CarState.GoingHome && car.path.length > 0) {
-        // Cells still ahead are reserved
         for (let i = car.pathIndex; i < car.path.length; i++) {
-          if (car.path[i].gx === gx && car.path[i].gy === gy) {
+          const p = stepGridPos(car.path[i]);
+          if (p.gx === gx && p.gy === gy) {
             dependentCarIds.push(car.id);
             break;
           }
@@ -404,7 +417,6 @@ export class Game {
       return false;
     }
 
-    // GoingHome cars need this road — defer deletion
     this.pendingDeletionSystem.markPending(gx, gy, dependentCarIds);
     return true;
   }
@@ -451,14 +463,21 @@ export class Game {
   private update(dt: number): void {
     if (this.state === GameState.WaitingToStart) return;
 
-    // Road editing — always runs (even when paused)
+    // Road/highway editing — always runs (even when paused)
     this.roadDrawer.update();
+    this.highwayDrawer.update();
 
-    if (this.roadSystem.isDirty) {
+    if (this.roadSystem.isDirty || this.highwaySystem.isDirty) {
       this.pathfinder.clearCache();
       this.carSystem.onRoadsChanged(this.spawnSystem.getHouses());
-      this.roadSystem.clearDirty();
-      this.renderer.markGroundDirty();
+      if (this.roadSystem.isDirty) {
+        this.roadSystem.clearDirty();
+        this.renderer.markGroundDirty();
+      }
+      if (this.highwaySystem.isDirty) {
+        this.highwaySystem.clearDirty();
+        this.renderer.markHighwayDirty();
+      }
     }
 
     // Game simulation — only when playing
@@ -503,6 +522,10 @@ export class Game {
       SPAWN_DEBUG ? this.spawnSystem.getSpawnBounds() : null,
       this.input.state.canvasX,
       this.input.state.canvasY,
+      this.state === GameState.Paused,
+      this.highwaySystem,
+      this.activeTool,
+      this.highwayDrawer.getPlacementState(),
     );
     let demandStats: DemandStat[] | null = null;
     if (DEMAND_DEBUG) {

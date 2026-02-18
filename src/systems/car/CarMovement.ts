@@ -10,24 +10,31 @@ import type { CarTrafficManager } from './CarTrafficManager';
 import { occupancyKey, isIntersection } from './CarTrafficManager';
 import type { IntersectionEntry } from './CarTrafficManager';
 import type { CarRouter } from './CarRouter';
+import { stepGridPos } from './CarRouter';
 import type { PendingDeletionSystem } from '../PendingDeletionSystem';
+import type { HighwaySystem } from '../HighwaySystem';
+import { CAR_SPEED, HIGHWAY_SPEED_MULTIPLIER, TILE_SIZE } from '../../constants';
 
 export class CarMovement {
   private grid: Grid;
   private trafficManager: CarTrafficManager;
   private router: CarRouter;
   private pendingDeletionSystem: PendingDeletionSystem;
+  private highwaySystem: HighwaySystem | null;
 
-  constructor(grid: Grid, trafficManager: CarTrafficManager, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem) {
+  constructor(grid: Grid, trafficManager: CarTrafficManager, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem, highwaySystem?: HighwaySystem) {
     this.grid = grid;
     this.trafficManager = trafficManager;
     this.router = router;
     this.pendingDeletionSystem = pendingDeletionSystem;
+    this.highwaySystem = highwaySystem ?? null;
   }
 
   interpolateCarPosition(car: Car): void {
-    const curTile = car.path[car.pathIndex];
-    const nxtTile = car.path[Math.min(car.pathIndex + 1, car.path.length - 1)];
+    const curStep = car.path[car.pathIndex];
+    const nxtStep = car.path[Math.min(car.pathIndex + 1, car.path.length - 1)];
+    const curTile = stepGridPos(curStep);
+    const nxtTile = stepGridPos(nxtStep);
     const curDir = getDirection(curTile, nxtTile);
     car.direction = curDir;
 
@@ -55,14 +62,38 @@ export class CarMovement {
     car.prevPixelPos.y = car.pixelPos.y;
     car.prevRenderAngle = car.renderAngle;
 
+    // Highway traversal mode
+    if (car.onHighway && car.highwayPolyline && car.highwayCumDist) {
+      this.updateHighwayMovement(car, dt, houses);
+      return;
+    }
+
     if (car.path.length < 2) {
       this.router.rerouteCar(car, houses);
       return;
     }
 
-    const currentTile = car.path[car.pathIndex];
+    // Check if next step is a highway — transition into highway mode
+    if (car.pathIndex < car.path.length - 1) {
+      const nextStep = car.path[car.pathIndex + 1];
+      if (nextStep.kind === 'highway' && car.segmentProgress >= 0.95) {
+        this.enterHighway(car, nextStep.highwayId);
+        return;
+      }
+    }
+
+    const currentStep = car.path[car.pathIndex];
     const nextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
-    const nextTile = car.path[nextIdx];
+    const nextStep = car.path[nextIdx];
+
+    // For highway steps that we somehow didn't enter yet, skip grid logic
+    if (currentStep.kind === 'highway') {
+      this.enterHighway(car, currentStep.highwayId);
+      return;
+    }
+
+    const currentTile = currentStep.pos;
+    const nextTile = stepGridPos(nextStep);
     const dir = getDirection(currentTile, nextTile);
     car.direction = dir;
     const lane = directionToLane(dir);
@@ -75,6 +106,7 @@ export class CarMovement {
     }
 
     const isNextIntersection = car.pathIndex + 1 < car.path.length
+      && nextStep.kind === 'grid'
       && isIntersection(this.grid, nextTile.gx, nextTile.gy);
     const { effectiveSpeed, segmentLength } = this.trafficManager.computeEffectiveSpeed(currentTile, nextTile, dir);
     const tileDistance = (effectiveSpeed * dt) / segmentLength;
@@ -98,10 +130,18 @@ export class CarMovement {
     // Advance through path segments
     while (car.segmentProgress >= 1 && car.pathIndex < car.path.length - 1) {
       car.segmentProgress -= 1;
-      const leftTile = car.path[car.pathIndex];
+      const leftStep = car.path[car.pathIndex];
       car.pathIndex++;
+
+      // Check if we're now at a highway step
+      if (car.pathIndex < car.path.length && car.path[car.pathIndex].kind === 'highway') {
+        this.enterHighway(car, (car.path[car.pathIndex] as { highwayId: string }).highwayId);
+        return;
+      }
+
       // Notify pending deletion system when a GoingHome car leaves a pending cell
-      if (car.state === CarState.GoingHome) {
+      if (car.state === CarState.GoingHome && leftStep.kind === 'grid') {
+        const leftTile = leftStep.pos;
         const leftCell = this.grid.getCell(leftTile.gx, leftTile.gy);
         if (leftCell?.pendingDeletion) {
           this.pendingDeletionSystem.notifyCarPassed(car.id, leftTile.gx, leftTile.gy);
@@ -111,23 +151,25 @@ export class CarMovement {
 
     // Check if next tile on path is still traversable
     if (car.pathIndex < car.path.length - 1) {
-      const aheadTile = car.path[car.pathIndex + 1];
-      const cell = this.grid.getCell(aheadTile.gx, aheadTile.gy);
-      const isFinalTile = car.pathIndex + 1 === car.path.length - 1;
-      const isTraversable = cell && (
-        cell.type === CellType.Road ||
-        cell.type === CellType.Connector ||
-        (isFinalTile && (cell.type === CellType.House || cell.type === CellType.ParkingLot))
-      ) && (!cell.pendingDeletion || car.state === CarState.GoingHome);
+      const aheadStep = car.path[car.pathIndex + 1];
+      if (aheadStep.kind === 'grid') {
+        const aheadTile = aheadStep.pos;
+        const cell = this.grid.getCell(aheadTile.gx, aheadTile.gy);
+        const isFinalTile = car.pathIndex + 1 === car.path.length - 1;
+        const isTraversable = cell && (
+          cell.type === CellType.Road ||
+          cell.type === CellType.Connector ||
+          (isFinalTile && (cell.type === CellType.House || cell.type === CellType.ParkingLot))
+        ) && (!cell.pendingDeletion || car.state === CarState.GoingHome);
 
-      if (!isTraversable) {
-        this.router.rerouteCar(car, houses);
-        return;
+        if (!isTraversable) {
+          this.router.rerouteCar(car, houses);
+          return;
+        }
       }
     }
 
     if (car.pathIndex >= car.path.length - 1) {
-      // Arrived at destination
       car.segmentProgress = 0;
       if (car.smoothPath.length > 0) {
         const lastPt = car.smoothPath[car.smoothPath.length - 1];
@@ -141,13 +183,77 @@ export class CarMovement {
     }
 
     // Register car in new occupancy position
-    const newCurrentTile = car.path[car.pathIndex];
+    const newCurrentStep = car.path[car.pathIndex];
+    if (newCurrentStep.kind !== 'grid') return; // on highway now, skip occupancy
+    const newCurrentTile = newCurrentStep.pos;
     const newNextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
-    const newNextTile = car.path[newNextIdx];
+    const newNextStep = car.path[newNextIdx];
+    const newNextTile = stepGridPos(newNextStep);
     const newDir = car.pathIndex < car.path.length - 1 ? getDirection(newCurrentTile, newNextTile) : dir;
     const newLane = directionToLane(newDir);
     const newOccupiedTile = car.segmentProgress < 0.5 ? newCurrentTile : newNextTile;
     const newKey = occupancyKey(newOccupiedTile.gx, newOccupiedTile.gy, newLane);
     occupied.set(newKey, car.id);
+  }
+
+  private enterHighway(car: Car, highwayId: string): void {
+    if (!this.highwaySystem) return;
+    const hw = this.highwaySystem.getById(highwayId);
+    if (!hw) return;
+
+    car.onHighway = true;
+    car.highwayProgress = 0;
+    car.segmentProgress = 0;
+
+    // Determine direction: are we going from→to or to→from?
+    const currentPos = this.router.getCarCurrentTile(car);
+    if (currentPos.gx === hw.toPos.gx && currentPos.gy === hw.toPos.gy) {
+      // Reverse the polyline
+      car.highwayPolyline = [...hw.polyline].reverse();
+      const totalDist = hw.cumDist[hw.cumDist.length - 1];
+      car.highwayCumDist = hw.cumDist.map(d => totalDist - d).reverse();
+    } else {
+      car.highwayPolyline = hw.polyline;
+      car.highwayCumDist = hw.cumDist;
+    }
+  }
+
+  private updateHighwayMovement(car: Car, dt: number, _houses: House[]): void {
+    if (!car.highwayPolyline || !car.highwayCumDist) return;
+
+    const totalDist = car.highwayCumDist[car.highwayCumDist.length - 1];
+    const speed = CAR_SPEED * HIGHWAY_SPEED_MULTIPLIER * TILE_SIZE;
+    car.highwayProgress += speed * dt;
+
+    if (car.highwayProgress >= totalDist) {
+      // Exit highway
+      car.onHighway = false;
+      car.highwayPolyline = null;
+      car.highwayCumDist = null;
+      car.highwayProgress = 0;
+
+      // Advance pathIndex past the highway step
+      car.pathIndex++;
+      car.segmentProgress = 0;
+
+      if (car.pathIndex >= car.path.length - 1) {
+        // Arrived at destination
+        return;
+      }
+
+      // Recompute smooth path for remaining grid segment
+      this.router.recomputeSmoothPathFromIndex(car, car.pathIndex);
+      if (car.smoothPath.length >= 2) {
+        car.pixelPos.x = car.smoothPath[0].x;
+        car.pixelPos.y = car.smoothPath[0].y;
+      }
+      return;
+    }
+
+    // Sample position along highway polyline
+    const result = sampleAtDistance(car.highwayPolyline, car.highwayCumDist, car.highwayProgress);
+    car.pixelPos.x = result.x;
+    car.pixelPos.y = result.y;
+    car.renderAngle = result.angle;
   }
 }

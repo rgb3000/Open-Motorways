@@ -4,6 +4,7 @@ import type { Business } from '../../entities/Business';
 import type { House } from '../../entities/House';
 import type { Pathfinder } from '../../pathfinding/Pathfinder';
 import type { CarRouter } from './CarRouter';
+import { stepGridPos } from './CarRouter';
 import type { PendingDeletionSystem } from '../PendingDeletionSystem';
 import { TILE_SIZE, UNLOAD_TIME } from '../../constants';
 import { gridToPixelCenter } from '../../utils/math';
@@ -36,7 +37,6 @@ export class CarParkingManager {
     car.unloadTimer += dt;
     if (car.unloadTimer < UNLOAD_TIME) return;
 
-    // Unload complete — score and transition to WaitingToExit (slot stays occupied)
     const biz = car.targetBusinessId ? bizMap.get(car.targetBusinessId) : undefined;
     if (biz && biz.demandPins > 0) {
       biz.demandPins--;
@@ -56,31 +56,27 @@ export class CarParkingManager {
     const biz = car.targetBusinessId ? bizMap.get(car.targetBusinessId) : undefined;
     if (!biz) { toRemove.push(car.id); return; }
 
-    // Check exit cooldown for this business
     const cooldown = exitCooldowns.get(biz.id) ?? 0;
     if (cooldown > 0) return;
 
-    // Check connector cell is free — no moving car occupies it
+    // Check connector cell is free
     const connectorFree = !cars.some(other => {
       if (other.id === car.id) return false;
       if (other.state === CarState.Idle || other.state === CarState.Stranded ||
           other.state === CarState.Unloading || other.state === CarState.WaitingToExit) return false;
       if (other.state === CarState.GoingToBusiness && other.targetBusinessId === biz.id) return false;
-      if (other.path.length < 2) return false;
-      const tile = other.segmentProgress < 0.5
-        ? other.path[other.pathIndex]
-        : other.path[Math.min(other.pathIndex + 1, other.path.length - 1)];
+      if (other.path.length < 2 || other.onHighway) return false;
+      const step = other.path[other.segmentProgress < 0.5 ? other.pathIndex : Math.min(other.pathIndex + 1, other.path.length - 1)];
+      const tile = stepGridPos(step);
       return tile.gx === biz.connectorPos.gx && tile.gy === biz.connectorPos.gy;
     });
     if (!connectorFree) return;
 
-    // Free the parking slot
     if (car.assignedSlotIndex !== null) {
       biz.freeSlot(car.assignedSlotIndex);
     }
     onSetCooldown(biz.id);
 
-    // Path home from connector (allow pending-deletion roads)
     const home = houses.find(h => h.id === car.homeHouseId);
     if (home) {
       const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
@@ -91,9 +87,12 @@ export class CarParkingManager {
         car.assignedSlotIndex = null;
         car.destination = home.pos;
         this.router.assignPath(car, homePath);
-        this.pendingDeletionSystem.notifyCarTransitionedHome(car.id, car.path);
+
+        // Extract grid positions for pending deletion notification
+        const gridPath = homePath.filter(s => s.kind === 'grid').map(s => (s as { pos: import('../../types').GridPos }).pos);
+        this.pendingDeletionSystem.notifyCarTransitionedHome(car.id, gridPath);
+
         if (car.smoothPath.length >= 2) {
-          // Prepend current parking slot position to smooth path
           const slotPos = { x: car.pixelPos.x, y: car.pixelPos.y };
           const firstPathPt = car.smoothPath[0];
           const dxSlot = firstPathPt.x - slotPos.x;
@@ -111,9 +110,13 @@ export class CarParkingManager {
 
           car.prevPixelPos.x = car.pixelPos.x;
           car.prevPixelPos.y = car.pixelPos.y;
-          const initDir = getDirection(homePath[0], homePath[1]);
-          car.renderAngle = directionAngle(initDir);
-          car.prevRenderAngle = car.renderAngle;
+          if (homePath.length >= 2) {
+            const p0 = stepGridPos(homePath[0]);
+            const p1 = stepGridPos(homePath[1]);
+            const initDir = getDirection(p0, p1);
+            car.renderAngle = directionAngle(initDir);
+            car.prevRenderAngle = car.renderAngle;
+          }
         } else {
           const center = gridToPixelCenter(biz.parkingLotPos);
           car.pixelPos.x = center.x;
@@ -168,7 +171,6 @@ export class CarParkingManager {
       car.prevPixelPos.x = car.pixelPos.x;
       car.prevPixelPos.y = car.pixelPos.y;
     } else {
-      // No free slot — path home immediately (allow pending-deletion roads)
       const home = houses.find(h => h.id === car.homeHouseId);
       if (home) {
         const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
@@ -180,9 +182,13 @@ export class CarParkingManager {
           if (car.smoothPath.length >= 2) {
             car.pixelPos.x = car.smoothPath[0].x;
             car.pixelPos.y = car.smoothPath[0].y;
-            const initDir = getDirection(homePath[0], homePath[1]);
-            car.renderAngle = directionAngle(initDir);
-            car.prevRenderAngle = car.renderAngle;
+            if (homePath.length >= 2) {
+              const p0 = stepGridPos(homePath[0]);
+              const p1 = stepGridPos(homePath[1]);
+              const initDir = getDirection(p0, p1);
+              car.renderAngle = directionAngle(initDir);
+              car.prevRenderAngle = car.renderAngle;
+            }
           } else {
             const center = gridToPixelCenter(biz.parkingLotPos);
             car.pixelPos.x = center.x;

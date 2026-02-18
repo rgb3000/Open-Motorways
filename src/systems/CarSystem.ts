@@ -11,6 +11,7 @@ import { CarParkingManager } from './car/CarParkingManager';
 import { CarDispatcher } from './car/CarDispatcher';
 import { CarMovement } from './car/CarMovement';
 import type { PendingDeletionSystem } from './PendingDeletionSystem';
+import type { HighwaySystem } from './HighwaySystem';
 
 export class CarSystem {
   private cars: Car[] = [];
@@ -33,7 +34,7 @@ export class CarSystem {
   private _toRemoveSet = new Set<string>();
   private _businessMap = new Map<string, Business>();
 
-  constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem) {
+  constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem, highwaySystem?: HighwaySystem) {
     this.pathfinder = pathfinder;
     this.pendingDeletionSystem = pendingDeletionSystem;
     this.grid = grid;
@@ -42,7 +43,7 @@ export class CarSystem {
     this.trafficManager = new CarTrafficManager(grid);
     this.dispatcher = new CarDispatcher(pathfinder, this.router);
     this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem);
-    this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem);
+    this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem, highwaySystem);
   }
 
   getCars(): Car[] {
@@ -54,7 +55,6 @@ export class CarSystem {
   }
 
   update(dt: number, houses: House[], businesses: Business[]): void {
-    // Dispatch new cars
     const newCars = this.dispatcher.dispatch(this.cars, houses, businesses);
     for (const car of newCars) {
       this.cars.push(car);
@@ -71,7 +71,6 @@ export class CarSystem {
       const currentTile = this.router.getCarCurrentTile(car);
       const home = houses.find(h => h.id === car.homeHouseId);
 
-      // Try to repath to original destination
       if (car.destination) {
         const path = this.pathfinder.findPath(currentTile, car.destination);
         if (path) {
@@ -91,7 +90,6 @@ export class CarSystem {
         }
       }
 
-      // Try to go home instead (allow pending-deletion roads)
       if (home) {
         const homePath = this.pathfinder.findPath(currentTile, home.pos, true);
         if (homePath) {
@@ -116,12 +114,14 @@ export class CarSystem {
     for (const car of this.cars) {
       if (car.path.length === 0) continue;
       if (car.state !== CarState.GoingToBusiness && car.state !== CarState.GoingHome) continue;
+      if (car.onHighway) continue;
 
       let crossesPending = false;
       for (let i = car.pathIndex; i < car.path.length; i++) {
-        const c = this.grid.getCell(car.path[i].gx, car.path[i].gy);
+        const step = car.path[i];
+        if (step.kind !== 'grid') continue;
+        const c = this.grid.getCell(step.pos.gx, step.pos.gy);
         if (c?.pendingDeletion) {
-          // GoingHome cars are allowed on pending-deletion roads
           if (car.state === CarState.GoingHome) { crossesPending = false; break; }
           crossesPending = true;
           break;
@@ -134,7 +134,6 @@ export class CarSystem {
   }
 
   private moveCars(dt: number, houses: House[], businesses: Business[]): void {
-    // Decrement exit cooldowns
     for (const [bizId, cd] of this.exitCooldowns) {
       const remaining = cd - dt;
       if (remaining <= 0) {
@@ -144,7 +143,6 @@ export class CarSystem {
       }
     }
 
-    // Build business lookup map once per frame
     const bizMap = this._businessMap;
     bizMap.clear();
     for (const biz of businesses) {

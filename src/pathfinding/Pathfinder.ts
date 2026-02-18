@@ -3,6 +3,9 @@ import { CellType, type GridPos } from '../types';
 import { gridPosEqual, gridPosKey, octileDist } from '../utils/math';
 import { PriorityQueue } from '../utils/PriorityQueue';
 import { opposite, isDiagonalDir, ALL_DIRECTIONS, DIRECTION_OFFSETS } from '../utils/direction';
+import type { HighwaySystem } from '../systems/HighwaySystem';
+import type { PathStep } from '../highways/types';
+import { TILE_SIZE, HIGHWAY_SPEED_MULTIPLIER } from '../constants';
 
 interface AStarNode {
   gx: number;
@@ -10,22 +13,25 @@ interface AStarNode {
   g: number;
   f: number;
   parentKey: string | null;
+  viaHighwayId: string | null;
 }
 
 export class Pathfinder {
-  private cache = new Map<string, GridPos[] | null>();
+  private cache = new Map<string, PathStep[] | null>();
   private grid: Grid;
+  private highwaySystem: HighwaySystem | null;
 
-  constructor(grid: Grid) {
+  constructor(grid: Grid, highwaySystem?: HighwaySystem) {
     this.grid = grid;
+    this.highwaySystem = highwaySystem ?? null;
   }
 
   clearCache(): void {
     this.cache.clear();
   }
 
-  findPath(from: GridPos, to: GridPos, allowPendingDeletion = false): GridPos[] | null {
-    if (gridPosEqual(from, to)) return [from];
+  findPath(from: GridPos, to: GridPos, allowPendingDeletion = false): PathStep[] | null {
+    if (gridPosEqual(from, to)) return [{ kind: 'grid', pos: from }];
 
     const cacheKey = `${gridPosKey(from)}->${gridPosKey(to)}${allowPendingDeletion ? ':pd' : ''}`;
     if (this.cache.has(cacheKey)) {
@@ -37,7 +43,7 @@ export class Pathfinder {
     return result;
   }
 
-  private astar(from: GridPos, to: GridPos, allowPendingDeletion = false): GridPos[] | null {
+  private astar(from: GridPos, to: GridPos, allowPendingDeletion = false): PathStep[] | null {
     const open = new PriorityQueue<AStarNode>((a, b) => a.f - b.f);
     const closed = new Map<string, AStarNode>();
 
@@ -47,6 +53,7 @@ export class Pathfinder {
       g: 0,
       f: octileDist(from, to),
       parentKey: null,
+      viaHighwayId: null,
     };
     open.push(startNode);
 
@@ -63,19 +70,17 @@ export class Pathfinder {
 
       const currentCell = this.grid.getCell(current.gx, current.gy);
 
+      // Normal neighbor expansion
       for (const dir of ALL_DIRECTIONS) {
         const off = DIRECTION_OFFSETS[dir];
         const diag = isDiagonalDir(dir);
 
-        // Check road connections for exit from current cell
         if (currentCell && (currentCell.type === CellType.Road || currentCell.type === CellType.Connector)) {
           if (!(currentCell.roadConnections & dir)) continue;
         }
-        // Houses can only exit in their connector direction
         if (currentCell && currentCell.type === CellType.House) {
           if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
         }
-        // ParkingLots can only exit toward their connector
         if (currentCell && currentCell.type === CellType.ParkingLot) {
           if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
         }
@@ -87,12 +92,10 @@ export class Pathfinder {
         if (!cell) continue;
         if (cell.pendingDeletion && !allowPendingDeletion) continue;
 
-        // Can traverse: roads always, house/parkingLot only as destination, business is impassable
         const isDestination = nx === to.gx && ny === to.gy;
         if (cell.type === CellType.Empty) continue;
-        if (cell.type === CellType.Business) continue; // building cell is impassable
+        if (cell.type === CellType.Business) continue;
         if ((cell.type === CellType.House || cell.type === CellType.ParkingLot) && !isDestination) continue;
-        // Houses can only be entered from the connector direction
         if (cell.type === CellType.House && cell.connectorDir !== null) {
           if (dir !== opposite(cell.connectorDir)) continue;
         }
@@ -110,24 +113,78 @@ export class Pathfinder {
           g,
           f,
           parentKey: currentKey,
+          viaHighwayId: null,
         });
+      }
+
+      // Highway virtual edge expansion
+      if (this.highwaySystem) {
+        const highways = this.highwaySystem.getHighwaysAtCell(current.gx, current.gy);
+        for (const hw of highways) {
+          // Determine the other end of the highway
+          let targetPos: GridPos;
+          if (hw.fromPos.gx === current.gx && hw.fromPos.gy === current.gy) {
+            targetPos = hw.toPos;
+          } else {
+            targetPos = hw.fromPos;
+          }
+
+          const tKey = `${targetPos.gx},${targetPos.gy}`;
+          if (closed.has(tKey)) continue;
+
+          // Check target cell is traversable
+          const targetCell = this.grid.getCell(targetPos.gx, targetPos.gy);
+          if (!targetCell) continue;
+          if (targetCell.type !== CellType.Road && targetCell.type !== CellType.Connector) continue;
+          if (targetCell.pendingDeletion && !allowPendingDeletion) continue;
+
+          // Cost = arcLength in tiles, reduced by speed multiplier
+          const costInTiles = (hw.arcLength / TILE_SIZE) / HIGHWAY_SPEED_MULTIPLIER;
+          const g = current.g + costInTiles;
+          const h = octileDist(targetPos, to);
+          const f = g + h;
+
+          open.push({
+            gx: targetPos.gx,
+            gy: targetPos.gy,
+            g,
+            f,
+            parentKey: currentKey,
+            viaHighwayId: hw.id,
+          });
+        }
       }
     }
 
     return null;
   }
 
-  private reconstructPath(endNode: AStarNode, closed: Map<string, AStarNode>): GridPos[] {
-    const path: GridPos[] = [];
+  private reconstructPath(endNode: AStarNode, closed: Map<string, AStarNode>): PathStep[] {
+    const steps: PathStep[] = [];
     let current: AStarNode | undefined = endNode;
 
     while (current) {
-      path.push({ gx: current.gx, gy: current.gy });
+      if (current.viaHighwayId && current.parentKey) {
+        const parent = closed.get(current.parentKey);
+        if (parent) {
+          steps.push({
+            kind: 'highway',
+            highwayId: current.viaHighwayId,
+            from: { gx: parent.gx, gy: parent.gy },
+            to: { gx: current.gx, gy: current.gy },
+          });
+        } else {
+          steps.push({ kind: 'grid', pos: { gx: current.gx, gy: current.gy } });
+        }
+      } else {
+        steps.push({ kind: 'grid', pos: { gx: current.gx, gy: current.gy } });
+      }
+
       if (current.parentKey === null) break;
       current = closed.get(current.parentKey);
     }
 
-    path.reverse();
-    return path;
+    steps.reverse();
+    return steps;
   }
 }
