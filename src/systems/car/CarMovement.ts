@@ -287,8 +287,19 @@ export class CarMovement {
     car.pixelPos.y = result.y + perpY;
     car.renderAngle = result.angle;
 
-    // Compute elevation: sinusoidal arch from road level to peak
+    // Compute elevation: ramp up over one grid cell, hold at peak, ramp down over one grid cell
     const t = car.highwayProgress / totalDist;
-    car.elevationY = GROUND_Y_POSITION + (HIGHWAY_PEAK_Y - GROUND_Y_POSITION) * Math.sin(Math.PI * t);
+    const ramp = TILE_SIZE / totalDist;
+    let profile: number;
+    if (t < ramp) {
+      const s = t / ramp;
+      profile = s * s * (3 - 2 * s);
+    } else if (t > 1 - ramp) {
+      const s = (1 - t) / ramp;
+      profile = s * s * (3 - 2 * s);
+    } else {
+      profile = 1;
+    }
+    car.elevationY = GROUND_Y_POSITION + (HIGHWAY_PEAK_Y - GROUND_Y_POSITION) * profile;
   }
 }

@@ -63,7 +63,7 @@ export const ROAD_REFUND = 10;
 export const HIGHWAY_COST = 200;
 export const HIGHWAY_REFUND = 150;
 export const HIGHWAY_SPEED_MULTIPLIER = 2.0;
-export const HIGHWAY_PEAK_Y = 25;
+export const HIGHWAY_PEAK_Y = 35;
 
 // Colors - map GameColor enum to hex
 export const COLOR_MAP: Record<GameColor, string> = {

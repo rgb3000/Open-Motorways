@@ -66,7 +66,7 @@ export class HighwayLayer {
           const fromZ = (hw.fromPos.gy + 0.5) * TILE_SIZE;
           const toX = (hw.toPos.gx + 0.5) * TILE_SIZE;
           const toZ = (hw.toPos.gy + 0.5) * TILE_SIZE;
-          const endpointY = this.computeElevation(0); // road level at endpoints
+          const endpointY = GROUND_Y_POSITION; // road level at endpoints
 
           this.addGuideLine(group, fromX, fromZ, endpointY, hw.cp1.x, hw.cp1.y, CONTROL_POINT_Y);
           this.addGuideLine(group, toX, toZ, endpointY, hw.cp2.x, hw.cp2.y, CONTROL_POINT_Y);
@@ -78,8 +78,20 @@ export class HighwayLayer {
     scene.add(group);
   }
 
-  private computeElevation(t: number): number {
-    return GROUND_Y_POSITION + (HIGHWAY_PEAK_Y - GROUND_Y_POSITION) * Math.sin(Math.PI * t);
+  private computeElevation(t: number, totalDist: number): number {
+    // Ramp up over one grid cell, hold at peak, ramp down over one grid cell
+    const ramp = TILE_SIZE / totalDist;
+    let profile: number;
+    if (t < ramp) {
+      const s = t / ramp;
+      profile = s * s * (3 - 2 * s); // smoothstep
+    } else if (t > 1 - ramp) {
+      const s = (1 - t) / ramp;
+      profile = s * s * (3 - 2 * s); // smoothstep
+    } else {
+      profile = 1;
+    }
+    return GROUND_Y_POSITION + (HIGHWAY_PEAK_Y - GROUND_Y_POSITION) * profile;
   }
 
   private buildHighwayMesh(group: THREE.Group, hw: Highway): void {
@@ -92,9 +104,10 @@ export class HighwayLayer {
     const lefts: THREE.Vector3[] = [];
     const rights: THREE.Vector3[] = [];
 
+    const totalDist = hw.cumDist[hw.cumDist.length - 1];
     for (let i = 0; i < n; i++) {
       const t = n > 1 ? i / (n - 1) : 0;
-      const elevation = this.computeElevation(t);
+      const elevation = this.computeElevation(t, totalDist);
 
       // Tangent direction
       let tx: number, tz: number;
