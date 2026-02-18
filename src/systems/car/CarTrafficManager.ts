@@ -1,13 +1,13 @@
 import type { Car } from '../../entities/Car';
 import { CarState } from '../../entities/Car';
 import type { Grid } from '../../core/Grid';
-import { CAR_SPEED, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT } from '../../constants';
+import { CAR_SPEED, INTERSECTION_SPEED_MULTIPLIER, INTERSECTION_DEADLOCK_TIMEOUT, SAME_LANE_DEADLOCK_TIMEOUT } from '../../constants';
 import { CellType, Direction, LaneId } from '../../types';
 import type { GridPos } from '../../types';
 import {
   getDirection, directionToLane,
   isPerpendicularAxis, YIELD_TO_DIRECTION,
-  connectionCount, isDiagonalDir,
+  cardinalConnectionCount, isDiagonalDir,
 } from '../../utils/direction';
 import { stepGridPos } from './CarRouter';
 
@@ -23,7 +23,7 @@ export function isIntersection(grid: Grid, gx: number, gy: number): boolean {
   const cell = grid.getCell(gx, gy);
   if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
   if (cell.type === CellType.Connector) return false;
-  return connectionCount(cell.roadConnections) >= 3;
+  return cardinalConnectionCount(cell.roadConnections) >= 3;
 }
 
 export interface IntersectionEntry {
@@ -146,8 +146,15 @@ export class CarTrafficManager {
       const key = occupancyKey(nextTile.gx, nextTile.gy, lane);
       const blocker = occupied.get(key);
       if (blocker && blocker !== car.id) {
-        newProgress = Math.min(newProgress, 0.45);
+        car.sameLaneWaitTime += dt;
+        if (car.sameLaneWaitTime < SAME_LANE_DEADLOCK_TIMEOUT) {
+          newProgress = Math.min(newProgress, 0.45);
+        }
+      } else {
+        car.sameLaneWaitTime = 0;
       }
+    } else if (car.segmentProgress >= 0.5) {
+      car.sameLaneWaitTime = 0;
     }
 
     // Intersection yield check
@@ -191,7 +198,10 @@ export class CarTrafficManager {
   ): { effectiveSpeed: number; segmentLength: number } {
     const isCurrentInt = isIntersection(this.grid, currentTile.gx, currentTile.gy);
     const isNextInt = isIntersection(this.grid, nextTile.gx, nextTile.gy);
-    const effectiveSpeed = (isCurrentInt || isNextInt)
+    const currentCell = this.grid.getCell(currentTile.gx, currentTile.gy);
+    const nextCell = this.grid.getCell(nextTile.gx, nextTile.gy);
+    const isConnector = (currentCell?.type === CellType.Connector) || (nextCell?.type === CellType.Connector);
+    const effectiveSpeed = (isCurrentInt || isNextInt || isConnector)
       ? CAR_SPEED * INTERSECTION_SPEED_MULTIPLIER : CAR_SPEED;
     const segmentLength = isDiagonalDir(dir) ? Math.SQRT2 : 1;
     return { effectiveSpeed, segmentLength };

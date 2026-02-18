@@ -55,6 +55,13 @@ export function connectionCount(mask: number): number {
   return (v & 0x0F) + ((v >> 4) & 0x0F);
 }
 
+export function cardinalConnectionCount(mask: number): number {
+  const cardinal = mask & 0x0F; // Up|Down|Left|Right
+  let v = cardinal;
+  v = (v & 0x05) + ((v >> 1) & 0x05);
+  return (v & 0x03) + ((v >> 2) & 0x03);
+}
+
 export function forEachDirection(mask: number, callback: (dir: Direction) => void): void {
   let bits = mask;
   while (bits !== 0) {
