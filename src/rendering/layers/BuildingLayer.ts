@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
-import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG } from '../../constants';
+import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET } from '../../constants';
 import { Direction } from '../../types';
+import { DIRECTION_OFFSETS } from '../../utils/direction';
 
 function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
   const shape = new THREE.Shape();
@@ -22,6 +23,7 @@ function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
 export class BuildingLayer {
   private houseMeshes = new Map<string, THREE.Group>();
   private houseConnectorDirs = new Map<string, Direction>();
+  private parkedCarMeshes = new Map<string, THREE.Group[]>();
   private businessMeshes = new Map<string, THREE.Group>();
   private demandPinRefs = new Map<string, THREE.Mesh[]>();
   private debugSprites = new Map<string, THREE.Sprite>();
@@ -41,6 +43,12 @@ export class BuildingLayer {
   private bizSlotGeom: THREE.BoxGeometry;
   private bizPinGeom: THREE.CircleGeometry;
   private bizPinOutlineGeom: THREE.RingGeometry;
+
+  // Parked car prototype geometries (simplified pickup truck)
+  private parkedCabGeom: THREE.ExtrudeGeometry;
+  private parkedBedGeom: THREE.ExtrudeGeometry;
+  private parkedBedSideGeom: THREE.BoxGeometry;
+  private parkedBedRearGeom: THREE.BoxGeometry;
 
   // Shared plate noise texture
   private plateNoiseTexture = BuildingLayer.createPlateNoiseTexture();
@@ -154,6 +162,20 @@ export class BuildingLayer {
     this.bizPinGeom = new THREE.CircleGeometry(2.5, 12);
     this.bizPinOutlineGeom = new THREE.RingGeometry(2.5, 3.2, 12);
 
+    // Parked car geometries (simplified pickup truck matching CarLayer style)
+    const parkedCabLen = CAR_LENGTH * 0.38;
+    const parkedCabShape = roundedRectShape(parkedCabLen, CAR_WIDTH, 1);
+    this.parkedCabGeom = new THREE.ExtrudeGeometry(parkedCabShape, { depth: 1.8, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 2, curveSegments: 3 });
+    this.parkedCabGeom.rotateX(-Math.PI / 2);
+
+    const parkedBedLen = CAR_LENGTH * 0.52;
+    const parkedBedShape = roundedRectShape(parkedBedLen, CAR_WIDTH, 0.8);
+    this.parkedBedGeom = new THREE.ExtrudeGeometry(parkedBedShape, { depth: 1.2, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 1, curveSegments: 3 });
+    this.parkedBedGeom.rotateX(-Math.PI / 2);
+
+    this.parkedBedSideGeom = new THREE.BoxGeometry(parkedBedLen * 0.9, 2.0, 0.6);
+    this.parkedBedRearGeom = new THREE.BoxGeometry(0.6, 2.0, CAR_WIDTH * 0.75);
+
     this.initSharedResources();
   }
 
@@ -166,6 +188,7 @@ export class BuildingLayer {
         this.disposeGroup(group);
         this.houseMeshes.delete(id);
         this.houseConnectorDirs.delete(id);
+        this.parkedCarMeshes.delete(id);
       }
     }
 
@@ -190,7 +213,16 @@ export class BuildingLayer {
     // Add or update meshes for houses
     for (const house of houses) {
       const prevDir = this.houseConnectorDirs.get(house.id);
-      if (this.houseMeshes.has(house.id) && prevDir === house.connectorDir) continue;
+      if (this.houseMeshes.has(house.id) && prevDir === house.connectorDir) {
+        // Just update parked car visibility
+        const parkedCars = this.parkedCarMeshes.get(house.id);
+        if (parkedCars) {
+          for (let i = 0; i < parkedCars.length; i++) {
+            parkedCars[i].visible = i < house.availableCars;
+          }
+        }
+        continue;
+      }
 
       // Remove old mesh if connector direction changed
       if (this.houseMeshes.has(house.id)) {
@@ -199,10 +231,16 @@ export class BuildingLayer {
         this.disposeGroup(oldGroup);
       }
 
-      const group = this.createHouseMesh(house);
+      const { group, parkedCars } = this.createHouseMesh(house);
       scene.add(group);
       this.houseMeshes.set(house.id, group);
       this.houseConnectorDirs.set(house.id, house.connectorDir);
+      this.parkedCarMeshes.set(house.id, parkedCars);
+
+      // Set initial visibility
+      for (let i = 0; i < parkedCars.length; i++) {
+        parkedCars[i].visible = i < house.availableCars;
+      }
     }
 
     // Add meshes for new businesses
@@ -289,7 +327,7 @@ export class BuildingLayer {
     }
   }
 
-  private createHouseMesh(house: House): THREE.Group {
+  private createHouseMesh(house: House): { group: THREE.Group; parkedCars: THREE.Group[] } {
     const group = new THREE.Group();
     const hexColor = COLOR_MAP[house.color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
@@ -313,12 +351,69 @@ export class BuildingLayer {
     plate.receiveShadow = true;
     group.add(plate);
 
+    // Parked car indicators (simplified pickup trucks sticking out toward connector)
+    const parkedCars: THREE.Group[] = [];
+    const off = DIRECTION_OFFSETS[house.connectorDir];
+    // Direction vector in 3D: x = off.gx, z = off.gy
+    const dirX = off.gx;
+    const dirZ = off.gy;
+    // Perpendicular vector (rotate 90 degrees clockwise in xz plane)
+    const perpX = -dirZ;
+    const perpZ = dirX;
+    // Rotation angle: car mesh is built along local X axis
+    const angle = Math.atan2(dirZ, dirX);
+
+    const cabOffsetX = CAR_LENGTH * 0.18;
+    const bedOffsetX = -CAR_LENGTH * 0.20;
+    const sideY = 1.2;
+    const sideZ = CAR_WIDTH * 0.42;
+
+    for (let i = 0; i < CARS_PER_HOUSE; i++) {
+      const carGroup = new THREE.Group();
+
+      // Cab
+      const cab = new THREE.Mesh(this.parkedCabGeom, mat);
+      cab.position.x = cabOffsetX;
+      carGroup.add(cab);
+
+      // Bed floor
+      const bed = new THREE.Mesh(this.parkedBedGeom, mat);
+      bed.position.x = bedOffsetX;
+      carGroup.add(bed);
+
+      // Bed side walls
+      const leftWall = new THREE.Mesh(this.parkedBedSideGeom, mat);
+      leftWall.position.set(bedOffsetX, sideY, sideZ);
+      carGroup.add(leftWall);
+      const rightWall = new THREE.Mesh(this.parkedBedSideGeom, mat);
+      rightWall.position.set(bedOffsetX, sideY, -sideZ);
+      carGroup.add(rightWall);
+
+      // Bed rear wall
+      const rearWall = new THREE.Mesh(this.parkedBedRearGeom, mat);
+      rearWall.position.set(bedOffsetX - CAR_LENGTH * 0.24, sideY, 0);
+      carGroup.add(rearWall);
+
+      // Position: offset along connector direction, staggered laterally
+      const lateralOffset = (i === 0 ? -1 : 1) * LANE_OFFSET;
+      const alongOffset = TILE_SIZE * 0.3; // push car center toward connector
+      carGroup.position.set(
+        dirX * alongOffset + perpX * lateralOffset,
+        0.8, // ground Y
+        dirZ * alongOffset + perpZ * lateralOffset,
+      );
+      carGroup.rotation.y = -angle;
+
+      group.add(carGroup);
+      parkedCars.push(carGroup);
+    }
+
     // Position in world
     const px = house.pos.gx * TILE_SIZE + TILE_SIZE / 2;
     const pz = house.pos.gy * TILE_SIZE + TILE_SIZE / 2;
     group.position.set(px, 0, pz);
 
-    return group;
+    return { group, parkedCars };
   }
 
   private createBusinessMesh(biz: Business): { group: THREE.Group; pins: THREE.Mesh[] } {
@@ -427,6 +522,10 @@ export class BuildingLayer {
     this.sharedResources.add(this.bizPinGeom);
     this.sharedResources.add(this.bizPinOutlineGeom);
     this.sharedResources.add(this.pinOutlineMat);
+    this.sharedResources.add(this.parkedCabGeom);
+    this.sharedResources.add(this.parkedBedGeom);
+    this.sharedResources.add(this.parkedBedSideGeom);
+    this.sharedResources.add(this.parkedBedRearGeom);
   }
 
   private disposeGroup(group: THREE.Group): void {
@@ -455,6 +554,7 @@ export class BuildingLayer {
     }
     this.debugSprites.clear();
     this.houseMeshes.clear();
+    this.parkedCarMeshes.clear();
     this.businessMeshes.clear();
     this.demandPinRefs.clear();
 
@@ -478,5 +578,9 @@ export class BuildingLayer {
     this.slotMat.dispose();
     this.pinMat.dispose();
     this.chimneyMat.dispose();
+    this.parkedCabGeom.dispose();
+    this.parkedBedGeom.dispose();
+    this.parkedBedSideGeom.dispose();
+    this.parkedBedRearGeom.dispose();
   }
 }
