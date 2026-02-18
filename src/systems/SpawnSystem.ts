@@ -11,12 +11,10 @@ import {
   HOUSE_CLUSTER_RADIUS,
   INITIAL_SPAWN_DELAY,
   SPAWN_AREA_INTERVALS,
-  MIN_BUSINESS_DISTANCE,
   MIN_SPAWN_INTERVAL,
   SPAWN_INTERVAL,
   SPAWN_INTERVAL_DECAY,
 } from '../constants';
-import { manhattanDist } from '../utils/math';
 import type { GameConstants } from '../maps/types';
 
 interface EmptyLShape {
@@ -40,7 +38,6 @@ export class SpawnSystem {
   onSpawn: (() => void) | null = null;
   private colorUnlockInterval: number;
   private houseClusterRadius: number;
-  private minBusinessDistance: number;
   private minSpawnInterval: number;
   private spawnIntervalDecay: number;
   private houseSupplyPerMinute: number;
@@ -60,7 +57,6 @@ export class SpawnSystem {
     this.currentSpawnInterval = config?.SPAWN_INTERVAL ?? SPAWN_INTERVAL;
     this.colorUnlockInterval = config?.COLOR_UNLOCK_INTERVAL ?? COLOR_UNLOCK_INTERVAL;
     this.houseClusterRadius = config?.HOUSE_CLUSTER_RADIUS ?? HOUSE_CLUSTER_RADIUS;
-    this.minBusinessDistance = config?.MIN_BUSINESS_DISTANCE ?? MIN_BUSINESS_DISTANCE;
     this.minSpawnInterval = config?.MIN_SPAWN_INTERVAL ?? MIN_SPAWN_INTERVAL;
     this.spawnIntervalDecay = config?.SPAWN_INTERVAL_DECAY ?? SPAWN_INTERVAL_DECAY;
     this.houseSupplyPerMinute = config?.HOUSE_SUPPLY_PER_MINUTE ?? HOUSE_SUPPLY_PER_MINUTE;
@@ -177,18 +173,7 @@ export class SpawnSystem {
   }
 
   private trySpawnBusinessForColor(color: GameColor): void {
-    const sameColorHouses = this.houses.filter(h => h.color === color);
-
-    let spot: EmptyLShape | null = null;
-
-    if (sameColorHouses.length > 0) {
-      spot = this.findEmptyLShapeFarFrom(sameColorHouses.map(h => h.pos), this.minBusinessDistance);
-    }
-
-    if (!spot) {
-      spot = this.findRandomEmptyLShape();
-    }
-
+    const spot = this.findRandomEmptyLShape();
     if (spot) {
       this.spawnBusiness(spot.pos, color, spot.orientation, spot.connectorSide);
     }
@@ -311,15 +296,6 @@ export class SpawnSystem {
     }
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
-  }
-
-  private findEmptyLShapeFarFrom(positions: GridPos[], minDist: number): EmptyLShape | null {
-    const candidates = this.getAllEmptyLShapes().filter(spot => this.isInBounds(spot.pos.gx, spot.pos.gy));
-    const far = candidates.filter(spot => {
-      return positions.every(p => manhattanDist(spot.pos, p) >= minDist);
-    });
-    if (far.length === 0) return null;
-    return far[Math.floor(Math.random() * far.length)];
   }
 
   private findRandomEmptyLShape(): EmptyLShape | null {
