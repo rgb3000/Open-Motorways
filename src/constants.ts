@@ -112,7 +112,7 @@ export const BG_COLOR = '#E8D8B4';
 export const GRID_LINE_COLOR = '#D4C4A0';
 // Roads
 export const ROAD_HALF_WIDTH = TILE_SIZE * 0.2;
-export const HIGHWAY_HALF_WIDTH = TILE_SIZE * 0.28;
+export const HIGHWAY_HALF_WIDTH = ROAD_HALF_WIDTH;
 export const HIGHWAY_SURFACE_Y = 0.5;
 export const HIGHWAY_COLOR_HEX = 0x8899AA;
 export const ROAD_COLOR = '#B8B8B8';

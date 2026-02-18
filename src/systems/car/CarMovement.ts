@@ -13,7 +13,7 @@ import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
 import type { PendingDeletionSystem } from '../PendingDeletionSystem';
 import type { HighwaySystem } from '../HighwaySystem';
-import { CAR_SPEED, HIGHWAY_SPEED_MULTIPLIER, TILE_SIZE, HIGHWAY_PEAK_Y, GROUND_Y_POSITION } from '../../constants';
+import { CAR_SPEED, HIGHWAY_SPEED_MULTIPLIER, TILE_SIZE, HIGHWAY_PEAK_Y, GROUND_Y_POSITION, LANE_OFFSET } from '../../constants';
 
 export class CarMovement {
   private grid: Grid;
@@ -234,6 +234,11 @@ export class CarMovement {
     if (car.highwayProgress >= totalDist) {
       // Sample the exact final position on the highway polyline
       const finalResult = sampleAtDistance(car.highwayPolyline, car.highwayCumDist, totalDist);
+      // Apply lane offset (perpendicular to travel direction, right side)
+      const finalPerpX = -Math.sin(finalResult.angle) * LANE_OFFSET;
+      const finalPerpY =  Math.cos(finalResult.angle) * LANE_OFFSET;
+      finalResult.x += finalPerpX;
+      finalResult.y += finalPerpY;
 
       // Exit highway
       car.onHighway = false;
@@ -275,8 +280,11 @@ export class CarMovement {
 
     // Sample position along highway polyline
     const result = sampleAtDistance(car.highwayPolyline, car.highwayCumDist, car.highwayProgress);
-    car.pixelPos.x = result.x;
-    car.pixelPos.y = result.y;
+    // Apply lane offset (perpendicular to travel direction, right side)
+    const perpX = -Math.sin(result.angle) * LANE_OFFSET;
+    const perpY =  Math.cos(result.angle) * LANE_OFFSET;
+    car.pixelPos.x = result.x + perpX;
+    car.pixelPos.y = result.y + perpY;
     car.renderAngle = result.angle;
 
     // Compute elevation: sinusoidal arch from road level to peak
