@@ -167,6 +167,8 @@ export class Pathfinder {
       if (current.viaHighwayId && current.parentKey) {
         const parent = closed.get(current.parentKey);
         if (parent) {
+          // Push grid step for highway destination (will appear AFTER highway step when reversed)
+          steps.push({ kind: 'grid', pos: { gx: current.gx, gy: current.gy } });
           steps.push({
             kind: 'highway',
             highwayId: current.viaHighwayId,

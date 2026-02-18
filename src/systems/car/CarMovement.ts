@@ -73,10 +73,12 @@ export class CarMovement {
       return;
     }
 
-    // Check if next step is a highway — transition into highway mode
+    // Check if next step is a highway — transition into highway mode immediately
     if (car.pathIndex < car.path.length - 1) {
       const nextStep = car.path[car.pathIndex + 1];
-      if (nextStep.kind === 'highway' && car.segmentProgress >= 0.95) {
+      if (nextStep.kind === 'highway') {
+        car.pathIndex++;        // advance TO the highway step
+        car.segmentProgress = 0;
         this.enterHighway(car, nextStep.highwayId);
         return;
       }
@@ -206,9 +208,10 @@ export class CarMovement {
     car.segmentProgress = 0;
     car.elevationY = GROUND_Y_POSITION; // starts at road level
 
-    // Determine direction: are we going from→to or to→from?
-    const currentPos = this.router.getCarCurrentTile(car);
-    if (currentPos.gx === hw.toPos.gx && currentPos.gy === hw.toPos.gy) {
+    // Determine direction using the path step's from/to (more reliable than pixel position)
+    const hwStep = car.path[car.pathIndex];
+    const enteringFrom = hwStep.kind === 'highway' ? hwStep.from : null;
+    if (enteringFrom && enteringFrom.gx === hw.toPos.gx && enteringFrom.gy === hw.toPos.gy) {
       // Reverse the polyline
       car.highwayPolyline = [...hw.polyline].reverse();
       const totalDist = hw.cumDist[hw.cumDist.length - 1];
@@ -223,10 +226,15 @@ export class CarMovement {
     if (!car.highwayPolyline || !car.highwayCumDist) return;
 
     const totalDist = car.highwayCumDist[car.highwayCumDist.length - 1];
-    const speed = CAR_SPEED * HIGHWAY_SPEED_MULTIPLIER * TILE_SIZE;
+    const progressRatio = car.highwayProgress / totalDist;
+    const easedMultiplier = 1 + (HIGHWAY_SPEED_MULTIPLIER - 1) * Math.sin(Math.PI * progressRatio);
+    const speed = CAR_SPEED * easedMultiplier * TILE_SIZE;
     car.highwayProgress += speed * dt;
 
     if (car.highwayProgress >= totalDist) {
+      // Sample the exact final position on the highway polyline
+      const finalResult = sampleAtDistance(car.highwayPolyline, car.highwayCumDist, totalDist);
+
       // Exit highway
       car.onHighway = false;
       car.highwayPolyline = null;
@@ -246,8 +254,21 @@ export class CarMovement {
       // Recompute smooth path for remaining grid segment
       this.router.recomputeSmoothPathFromIndex(car, car.pathIndex);
       if (car.smoothPath.length >= 2) {
-        car.pixelPos.x = car.smoothPath[0].x;
-        car.pixelPos.y = car.smoothPath[0].y;
+        // Replace smoothPath[0] with highway endpoint to avoid lateral jump
+        car.smoothPath[0] = { x: finalResult.x, y: finalResult.y };
+        // Recompute cumulative distances from the new start
+        const dx = car.smoothPath[1].x - car.smoothPath[0].x;
+        const dy = car.smoothPath[1].y - car.smoothPath[0].y;
+        const newDist01 = Math.sqrt(dx * dx + dy * dy);
+        const delta = newDist01 - car.smoothCumDist[1];
+        for (let i = 1; i < car.smoothCumDist.length; i++) {
+          car.smoothCumDist[i] += delta;
+        }
+        for (let i = car.pathIndex + 1; i < car.smoothCellDist.length; i++) {
+          car.smoothCellDist[i] += delta;
+        }
+        car.pixelPos.x = finalResult.x;
+        car.pixelPos.y = finalResult.y;
       }
       return;
     }
