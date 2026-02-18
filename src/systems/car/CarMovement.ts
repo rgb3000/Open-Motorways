@@ -61,6 +61,7 @@ export class CarMovement {
     car.prevPixelPos.x = car.pixelPos.x;
     car.prevPixelPos.y = car.pixelPos.y;
     car.prevRenderAngle = car.renderAngle;
+    car.prevElevationY = car.elevationY;
 
     // Highway traversal mode
     if (car.onHighway && car.highwayPolyline && car.highwayCumDist) {

@@ -38,6 +38,7 @@ export class Car {
   // Highway state
   onHighway = false;
   elevationY = 0;
+  prevElevationY = 0;
   highwayPolyline: PixelPos[] | null = null;
   highwayCumDist: number[] | null = null;
   highwayProgress = 0; // arc-length distance traveled on current highway

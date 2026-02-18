@@ -106,7 +106,8 @@ export class HighwayLayer {
 
     const totalDist = hw.cumDist[hw.cumDist.length - 1];
     for (let i = 0; i < n; i++) {
-      const t = n > 1 ? i / (n - 1) : 0;
+      // Use arc-length ratio so elevation matches car distance-based traversal
+      const t = totalDist > 0 ? hw.cumDist[i] / totalDist : 0;
       const elevation = this.computeElevation(t, totalDist);
 
       // Tangent direction
