@@ -170,7 +170,7 @@ export class HighwayDrawer {
   private isValidEndpoint(gx: number, gy: number): boolean {
     const cell = this.grid.getCell(gx, gy);
     if (!cell) return false;
-    return cell.type === CellType.Road || cell.type === CellType.Connector;
+    return cell.type === CellType.Empty || cell.type === CellType.Road || cell.type === CellType.Connector;
   }
 
   private hitTestControlPoint(
