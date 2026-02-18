@@ -14,6 +14,10 @@ import { DebugLayer } from './layers/DebugLayer';
 import { ObstacleLayer } from './layers/ObstacleLayer';
 import { RoadDebugLayer } from './layers/RoadDebugLayer';
 import { CarRouteDebugLayer } from './layers/CarRouteDebugLayer';
+import { HighwayLayer } from './layers/HighwayLayer';
+import type { HighwaySystem } from '../systems/HighwaySystem';
+import type { HighwayPlacementState } from '../input/HighwayDrawer';
+import { Tool } from '../types';
 
 const GROUND_SUBDIV = 3; // subdivisions per grid cell for smooth lake bevel
 const MIN_ZOOM = 0.5;
@@ -35,6 +39,7 @@ export class Renderer {
   private obstacleLayer: ObstacleLayer;
   private roadDebugLayer: RoadDebugLayer;
   private carRouteDebugLayer: CarRouteDebugLayer;
+  private highwayLayer: HighwayLayer;
   private grid: Grid;
   private lakeCells: GridPos[] = [];
   private indicatorMesh: THREE.Mesh | null = null;
@@ -45,6 +50,7 @@ export class Renderer {
   private groundMesh!: THREE.Mesh;
   private waterSurface: THREE.Mesh | null = null;
   private groundDirty = false;
+  private highwayDirty = false;
   private roadRebuildScheduled = false;
   private dpr: number;
 
@@ -111,6 +117,7 @@ export class Renderer {
     this.obstacleLayer = new ObstacleLayer();
     this.roadDebugLayer = new RoadDebugLayer();
     this.carRouteDebugLayer = new CarRouteDebugLayer();
+    this.highwayLayer = new HighwayLayer();
     this.grid = grid;
 
     // Render initial ground state (terrain only, roads are 3D)
@@ -338,6 +345,10 @@ export class Renderer {
     this.groundDirty = true;
   }
 
+  markHighwayDirty(): void {
+    this.highwayDirty = true;
+  }
+
   render(
     alpha: number,
     houses: House[],
@@ -346,6 +357,10 @@ export class Renderer {
     spawnBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null,
     mouseWorldX = 0,
     mouseWorldY = 0,
+    isPaused = false,
+    highwaySystem: HighwaySystem | null = null,
+    activeTool: Tool = Tool.Road,
+    highwayPlacementState: HighwayPlacementState | null = null,
   ): void {
     // Smooth zoom/pan animation
     this.updateCamera();
@@ -367,12 +382,19 @@ export class Renderer {
       this.groundDirty = false;
     }
 
+    // Update highway layer when dirty or placement state changes
+    if (highwaySystem && (this.highwayDirty || activeTool === Tool.Highway)) {
+      this.highwayLayer.update(this.scene, highwaySystem, activeTool, highwayPlacementState);
+      this.highwayDirty = false;
+    }
+
     // Update 3D meshes
     this.buildingLayer.update(this.scene, houses, businesses);
     this.carLayer.update(this.scene, cars, alpha);
     this.debugLayer.update(this.scene, spawnBounds);
     if (ROAD_DEBUG) this.roadDebugLayer.update(this.scene, this.grid, cars);
-    if (CAR_ROUTE_DEBUG) this.carRouteDebugLayer.update(this.scene, cars, houses, businesses, mouseWorldX, mouseWorldY);
+    if (CAR_ROUTE_DEBUG && isPaused) this.carRouteDebugLayer.update(this.scene, cars, houses, businesses, mouseWorldX, mouseWorldY);
+    else if (CAR_ROUTE_DEBUG && !isPaused) this.carRouteDebugLayer.clear(this.scene);
     // Render
     this.webglRenderer.render(this.scene, this.camera);
   }
@@ -384,6 +406,7 @@ export class Renderer {
     this.debugLayer.dispose(this.scene);
     this.roadDebugLayer.dispose(this.scene);
     this.carRouteDebugLayer.dispose(this.scene);
+    this.highwayLayer.dispose(this.scene);
     this.obstacleLayer.disposeAll(this.scene);
     if (this.indicatorMesh) {
       this.scene.remove(this.indicatorMesh);

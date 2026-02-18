@@ -9,6 +9,7 @@ import {
   isPerpendicularAxis, YIELD_TO_DIRECTION,
   connectionCount, isDiagonalDir,
 } from '../../utils/direction';
+import { stepGridPos } from './CarRouter';
 
 export function occupancyKey(gx: number, gy: number, lane: LaneId): string {
   return `${gx},${gy},${lane}`;
@@ -48,10 +49,14 @@ export class CarTrafficManager {
     occupied.clear();
     for (const car of cars) {
       if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.state === CarState.WaitingToExit || car.path.length < 2) continue;
+      if (car.onHighway) continue; // skip cars on highways
 
-      const currentTile = car.path[car.pathIndex];
+      const currentStep = car.path[car.pathIndex];
+      if (currentStep.kind !== 'grid') continue;
+
+      const currentTile = currentStep.pos;
       const nextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
-      const nextTile = car.path[nextIdx];
+      const nextTile = stepGridPos(car.path[nextIdx]);
       const dir = getDirection(currentTile, nextTile);
       const lane = directionToLane(dir);
 
@@ -63,7 +68,6 @@ export class CarTrafficManager {
 
   buildIntersectionMap(cars: Car[]): Map<string, IntersectionEntry[]> {
     const intersectionMap = this._intersectionMap;
-    // Return used arrays to pool before clearing
     for (const list of intersectionMap.values()) {
       list.length = 0;
       this._intersectionEntryPool.push(list);
@@ -72,13 +76,17 @@ export class CarTrafficManager {
 
     for (const car of cars) {
       if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.state === CarState.WaitingToExit || car.path.length < 2) continue;
+      if (car.onHighway) continue;
 
-      const curTile = car.path[car.pathIndex];
+      const curStep = car.path[car.pathIndex];
+      if (curStep.kind !== 'grid') continue;
+      const curTile = curStep.pos;
       const nextIdx = Math.min(car.pathIndex + 1, car.path.length - 1);
-      const nxtTile = car.path[nextIdx];
+      const nxtStep = car.path[nextIdx];
+      const nxtTile = stepGridPos(nxtStep);
 
       if (car.segmentProgress >= 0.5 && car.pathIndex + 1 < car.path.length) {
-        if (isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
+        if (nxtStep.kind === 'grid' && isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
           const dir = getDirection(curTile, nxtTile);
           const key = tileKey(nxtTile.gx, nxtTile.gy);
           let list = intersectionMap.get(key);
@@ -88,7 +96,7 @@ export class CarTrafficManager {
       } else if (car.segmentProgress < 0.5) {
         if (isIntersection(this.grid, curTile.gx, curTile.gy)) {
           const dir = car.pathIndex > 0
-            ? getDirection(car.path[car.pathIndex - 1], curTile)
+            ? getDirection(stepGridPos(car.path[car.pathIndex - 1]), curTile)
             : getDirection(curTile, nxtTile);
           const key = tileKey(curTile.gx, curTile.gy);
           let list = intersectionMap.get(key);
@@ -96,7 +104,7 @@ export class CarTrafficManager {
           list.push({ carId: car.id, entryDirection: dir, inIntersection: true });
         }
 
-        if (car.pathIndex + 1 < car.path.length && isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
+        if (car.pathIndex + 1 < car.path.length && nxtStep.kind === 'grid' && isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
           const dir = getDirection(curTile, nxtTile);
           const key = tileKey(nxtTile.gx, nxtTile.gy);
           let list = intersectionMap.get(key);
@@ -119,14 +127,17 @@ export class CarTrafficManager {
   ): number {
     // Check collision when crossing into next tile
     if (newProgress >= 1 && car.pathIndex < car.path.length - 2) {
-      const afterNextTile = car.path[car.pathIndex + 2];
-      const nextDir = getDirection(nextTile, afterNextTile);
-      const nextLane = directionToLane(nextDir);
-      const nextKey = occupancyKey(nextTile.gx, nextTile.gy, nextLane);
-      const blocker = occupied.get(nextKey);
+      const afterNextStep = car.path[car.pathIndex + 2];
+      if (afterNextStep.kind === 'grid') {
+        const afterNextTile = afterNextStep.pos;
+        const nextDir = getDirection(nextTile, afterNextTile);
+        const nextLane = directionToLane(nextDir);
+        const nextKey = occupancyKey(nextTile.gx, nextTile.gy, nextLane);
+        const blocker = occupied.get(nextKey);
 
-      if (blocker && blocker !== car.id) {
-        newProgress = Math.min(newProgress, 0.95);
+        if (blocker && blocker !== car.id) {
+          newProgress = Math.min(newProgress, 0.95);
+        }
       }
     }
 
@@ -139,7 +150,7 @@ export class CarTrafficManager {
       }
     }
 
-    // Intersection yield check (yield-to-right / rechts-vor-links)
+    // Intersection yield check
     if (isNextIntersection && car.segmentProgress < 0.5) {
       const myDir = dir;
       const intKey = tileKey(nextTile.gx, nextTile.gy);
@@ -149,14 +160,10 @@ export class CarTrafficManager {
       if (entries) {
         for (const other of entries) {
           if (other.carId === car.id) continue;
-
-          // Rule 1: perpendicular car already IN intersection → wait
           if (other.inIntersection && isPerpendicularAxis(myDir, other.entryDirection)) {
             mustYield = true;
             break;
           }
-
-          // Rule 2: car approaching/in from my yield-to direction → yield
           if (other.entryDirection === YIELD_TO_DIRECTION[myDir]) {
             mustYield = true;
             break;
@@ -169,7 +176,6 @@ export class CarTrafficManager {
         if (car.intersectionWaitTime < INTERSECTION_DEADLOCK_TIMEOUT) {
           newProgress = Math.min(newProgress, 0.45);
         }
-        // else: timeout expired → let car through (deadlock breaker)
       } else {
         car.intersectionWaitTime = 0;
       }

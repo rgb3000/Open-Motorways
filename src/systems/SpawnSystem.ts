@@ -99,7 +99,7 @@ export class SpawnSystem {
     // For initial business, find an L-shape spot near desired location
     const bx = Math.floor(this.grid.cols * 0.55) + Math.floor(Math.random() * 5 - 2);
     const by = Math.floor(this.grid.rows * 0.55) + Math.floor(Math.random() * 3 - 1);
-    const spot = this.findEmptyLShapeNear({ gx: bx, gy: by }, 5);
+    const spot = this.findEmptyLShapeNear({ gx: bx, gy: by }, 5, COLOR_UNLOCK_ORDER[0]);
     if (spot) {
       this.spawnBusiness(spot.pos, COLOR_UNLOCK_ORDER[0], spot.orientation, spot.connectorSide);
     }
@@ -173,7 +173,7 @@ export class SpawnSystem {
   }
 
   private trySpawnBusinessForColor(color: GameColor): void {
-    const spot = this.findRandomEmptyLShape();
+    const spot = this.findRandomEmptyLShape(color);
     if (spot) {
       this.spawnBusiness(spot.pos, color, spot.orientation, spot.connectorSide);
     }
@@ -284,7 +284,7 @@ export class SpawnSystem {
     return gx >= b.minX && gx <= b.maxX && gy >= b.minY && gy <= b.maxY;
   }
 
-  private findEmptyLShapeNear(center: GridPos, radius: number): EmptyLShape | null {
+  private findEmptyLShapeNear(center: GridPos, radius: number, color?: GameColor): EmptyLShape | null {
     const candidates: EmptyLShape[] = [];
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
@@ -294,12 +294,19 @@ export class SpawnSystem {
         this.tryLShapeCandidates(gx, gy, candidates);
       }
     }
-    if (candidates.length === 0) return null;
-    return candidates[Math.floor(Math.random() * candidates.length)];
+    let filtered = candidates;
+    if (color !== undefined) {
+      filtered = candidates.filter(spot => this.isFarFromSameColorHouses(spot.pos, color, 2));
+    }
+    if (filtered.length === 0) return null;
+    return filtered[Math.floor(Math.random() * filtered.length)];
   }
 
-  private findRandomEmptyLShape(): EmptyLShape | null {
-    const candidates = this.getAllEmptyLShapes().filter(spot => this.isInBounds(spot.pos.gx, spot.pos.gy));
+  private findRandomEmptyLShape(color?: GameColor): EmptyLShape | null {
+    let candidates = this.getAllEmptyLShapes().filter(spot => this.isInBounds(spot.pos.gx, spot.pos.gy));
+    if (color !== undefined) {
+      candidates = candidates.filter(spot => this.isFarFromSameColorHouses(spot.pos, color, 2));
+    }
     if (candidates.length === 0) return null;
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
@@ -353,6 +360,16 @@ export class SpawnSystem {
   private isCellEmpty(gx: number, gy: number): boolean {
     const cell = this.grid.getCell(gx, gy);
     return cell !== null && cell.type === CellType.Empty;
+  }
+
+  private isFarFromSameColorHouses(pos: GridPos, color: GameColor, minDist: number): boolean {
+    for (const house of this.houses) {
+      if (house.color !== color) continue;
+      const dx = Math.abs(pos.gx - house.pos.gx);
+      const dy = Math.abs(pos.gy - house.pos.gy);
+      if (Math.max(dx, dy) < minDist) return false;
+    }
+    return true;
   }
 
   private hasAdjacentEmpty(gx: number, gy: number): boolean {

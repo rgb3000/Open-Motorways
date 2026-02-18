@@ -65,6 +65,7 @@ export type GameState = (typeof GameState)[keyof typeof GameState];
 export const Tool = {
   Road: 0,
   Eraser: 1,
+  Highway: 2,
 } as const;
 export type Tool = (typeof Tool)[keyof typeof Tool];
 

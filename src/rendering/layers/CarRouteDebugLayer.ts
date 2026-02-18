@@ -4,6 +4,7 @@ import { CarState } from '../../entities/Car';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import { COLOR_MAP, TILE_SIZE } from '../../constants';
+import { stepGridPos } from '../../systems/car/CarRouter';
 
 const LINE_Y = 1;
 const HOVER_RADIUS = TILE_SIZE * 0.35;
@@ -146,8 +147,9 @@ export class CarRouteDebugLayer {
     if (idx > 0) {
       const traveledPts: THREE.Vector3[] = [];
       for (let i = 0; i <= idx; i++) {
+        const p = stepGridPos(path[i]);
         traveledPts.push(new THREE.Vector3(
-          (path[i].gx + 0.5) * TILE_SIZE, LINE_Y, (path[i].gy + 0.5) * TILE_SIZE,
+          (p.gx + 0.5) * TILE_SIZE, LINE_Y, (p.gy + 0.5) * TILE_SIZE,
         ));
       }
       const traveledGeom = new THREE.BufferGeometry().setFromPoints(traveledPts);
@@ -168,8 +170,9 @@ export class CarRouteDebugLayer {
       const remainPts: THREE.Vector3[] = [];
       remainPts.push(new THREE.Vector3(car.pixelPos.x, LINE_Y, car.pixelPos.y));
       for (let i = idx + 1; i < path.length; i++) {
+        const p = stepGridPos(path[i]);
         remainPts.push(new THREE.Vector3(
-          (path[i].gx + 0.5) * TILE_SIZE, LINE_Y, (path[i].gy + 0.5) * TILE_SIZE,
+          (p.gx + 0.5) * TILE_SIZE, LINE_Y, (p.gy + 0.5) * TILE_SIZE,
         ));
       }
       const remainGeom = new THREE.BufferGeometry().setFromPoints(remainPts);
@@ -194,9 +197,14 @@ export class CarRouteDebugLayer {
     group.add(mesh);
   }
 
+  clear(scene: THREE.Scene): void {
+    this.clearFromScene(scene);
+    this.hoveredCarId = null;
+    this.cachedPathIndex = -1;
+  }
+
   private clearFromScene(scene: THREE.Scene): void {
     if (this.group) {
-      // Dispose all child geometries and materials
       this.group.traverse((obj) => {
         if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
           obj.geometry.dispose();

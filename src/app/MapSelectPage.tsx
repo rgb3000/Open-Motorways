@@ -7,17 +7,20 @@ export function MapSelectPage() {
   const debugMaps = allMaps.filter((m) => m.debug);
 
   return (
-    <>
-      <DemoBackground />
-      <div className="h-screen overflow-y-auto flex flex-col items-center justify-center p-8 relative z-10">
-        <h1 className="text-4xl font-bold font-mono text-white mb-2 drop-shadow-lg">Open Motorways</h1>
-        <p className="text-white/80 font-mono mb-8 drop-shadow">Choose a map to play</p>
+    <div className="min-h-screen bg-[#efefef]">
+      <div className="relative h-[75vh] overflow-hidden">
+        <DemoBackground />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <h1 className="text-7xl font-bold font-mono text-black drop-shadow-lg">Open Motorways</h1>
+        </div>
+      </div>
+      <div className="flex flex-col items-center px-8 py-12">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-3xl w-full">
           {regularMaps.map((map) => (
             <Link
               key={map.id}
               to={`/play/${map.id}`}
-              className="block bg-white/70 backdrop-blur-md rounded-2xl shadow-lg p-6 hover:shadow-xl hover:-translate-y-1 transition-all no-underline border border-white/30"
+              className="block bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl hover:-translate-y-1 transition-all no-underline border border-gray-200"
             >
               <h2 className="text-xl font-bold font-mono text-[#333] mb-2">{map.name}</h2>
               <p className="text-sm font-mono text-[#666] leading-relaxed">{map.description}</p>
@@ -26,14 +29,14 @@ export function MapSelectPage() {
         </div>
         {debugMaps.length > 0 && (
           <>
-            <h2 className="text-2xl font-bold font-mono text-white mt-12 mb-1 drop-shadow-lg">Debug Maps</h2>
-            <p className="text-white/70 font-mono text-sm mb-6 drop-shadow">For testing and development</p>
+            <h2 className="text-2xl font-bold font-mono text-[#333] mt-12 mb-1">Debug Maps</h2>
+            <p className="text-[#666] font-mono text-sm mb-6">For testing and development</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-3xl w-full">
               {debugMaps.map((map) => (
                 <Link
                   key={map.id}
                   to={`/play/${map.id}`}
-                  className="block bg-white/50 backdrop-blur-md rounded-2xl border-2 border-dashed border-white/40 p-6 hover:shadow-lg hover:-translate-y-1 transition-all no-underline"
+                  className="block bg-white rounded-2xl border-2 border-dashed border-gray-300 p-6 hover:shadow-lg hover:-translate-y-1 transition-all no-underline"
                 >
                   <h2 className="text-xl font-bold font-mono text-[#333] mb-2">{map.name}</h2>
                   <p className="text-sm font-mono text-[#666] leading-relaxed">{map.description}</p>
@@ -44,11 +47,11 @@ export function MapSelectPage() {
         )}
         <Link
           to="/designer"
-          className="mt-8 inline-block bg-white/70 backdrop-blur-md rounded-2xl shadow-lg px-6 py-3 hover:shadow-xl hover:-translate-y-1 transition-all no-underline border border-white/30"
+          className="mt-8 inline-block bg-white rounded-2xl shadow-lg px-6 py-3 hover:shadow-xl hover:-translate-y-1 transition-all no-underline border border-gray-200"
         >
           <span className="text-lg font-bold font-mono text-[#333]">Map Designer</span>
         </Link>
       </div>
-    </>
+    </div>
   );
 }

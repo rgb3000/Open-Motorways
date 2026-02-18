@@ -113,7 +113,25 @@ export class CarLayer {
       // Interpolate position
       const x = lerp(car.prevPixelPos.x, car.pixelPos.x, alpha);
       const y = lerp(car.prevPixelPos.y, car.pixelPos.y, alpha);
-      group.position.set(x, GROUND_Y_POSITION, y);
+      const prevElev = car.prevElevationY > 0 ? car.prevElevationY : GROUND_Y_POSITION;
+      const curElev = car.elevationY > 0 ? car.elevationY : GROUND_Y_POSITION;
+      const yPos = lerp(prevElev, curElev, alpha);
+      group.position.set(x, yPos, y);
+
+      // Compute pitch for highway slope
+      if (car.onHighway) {
+        const dx = car.pixelPos.x - car.prevPixelPos.x;
+        const dy = car.pixelPos.y - car.prevPixelPos.y;
+        const horizDist = Math.sqrt(dx * dx + dy * dy);
+        const elevDiff = curElev - prevElev;
+        if (horizDist > 0.01) {
+          group.rotation.z = Math.atan2(elevDiff, horizDist);
+        } else {
+          group.rotation.z = 0;
+        }
+      } else {
+        group.rotation.z = 0;
+      }
 
       // Interpolate rotation
       const angle = lerpAngle(car.prevRenderAngle, car.renderAngle, alpha);

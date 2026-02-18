@@ -4,6 +4,7 @@ import type { Car } from '../../entities/Car';
 import { CarState } from '../../entities/Car';
 import { CellType } from '../../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
+import { stepGridPos } from '../../systems/car/CarRouter';
 
 const OUTLINE_Y = 0.6;
 
@@ -21,20 +22,18 @@ export class RoadDebugLayer {
 
     for (const car of cars) {
       if (car.state === CarState.GoingToBusiness) {
-        // Cells already passed — reserved for return trip
         for (let i = 0; i < car.pathIndex; i++) {
-          const p = car.path[i];
+          const p = stepGridPos(car.path[i]);
           reserved.add(`${p.gx},${p.gy}`);
         }
       } else if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) {
-        // Entire outbound path is reserved for return trip
-        for (const p of car.outboundPath) {
+        for (const step of car.outboundPath) {
+          const p = stepGridPos(step);
           reserved.add(`${p.gx},${p.gy}`);
         }
       } else if (car.state === CarState.GoingHome) {
-        // Cells still ahead — reserved until car passes
         for (let i = car.pathIndex; i < car.path.length; i++) {
-          const p = car.path[i];
+          const p = stepGridPos(car.path[i]);
           reserved.add(`${p.gx},${p.gy}`);
         }
       }
@@ -63,7 +62,6 @@ export class RoadDebugLayer {
   private clearFromScene(scene: THREE.Scene): void {
     if (this.group) {
       scene.remove(this.group);
-      // No per-child geometry disposal needed — we share edgesGeom
       this.group = null;
     }
   }
