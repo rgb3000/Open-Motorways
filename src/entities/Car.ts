@@ -29,6 +29,11 @@ export class Car {
   outboundPath: PathStep[] = []; // saved outbound path for Unloading/WaitingToExit reservation
   segmentProgress = 0; // 0..1 between current and next tile
   intersectionWaitTime = 0;
+  sameLaneWaitTime = 0;
+  parkingWaitTime = 0;
+  stuckTimer = 0;
+  lastAdvancedPathIndex = 0;
+  wasBlocked = false;
 
   // Smooth lane path (precomputed from road geometry)
   smoothPath: { x: number; y: number }[] = [];

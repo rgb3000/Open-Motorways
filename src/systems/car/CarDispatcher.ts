@@ -5,7 +5,8 @@ import type { Pathfinder } from '../../pathfinding/Pathfinder';
 import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
 import { manhattanDist } from '../../utils/math';
-import { getDirection, directionAngle } from '../../utils/direction';
+import { getDirection, directionAngle, directionToLane } from '../../utils/direction';
+import { occupancyKey } from './CarTrafficManager';
 
 export class CarDispatcher {
   private pathfinder: Pathfinder;
@@ -17,7 +18,7 @@ export class CarDispatcher {
     this.router = router;
   }
 
-  dispatch(cars: Car[], houses: House[], businesses: Business[]): Car[] {
+  dispatch(cars: Car[], houses: House[], businesses: Business[], occupied: Map<string, string>): Car[] {
     const demandBusinesses = businesses.filter(b => b.demandPins > 0)
       .sort((a, b) => b.demandPins - a.demandPins);
     if (demandBusinesses.length === 0) return [];
@@ -46,7 +47,15 @@ export class CarDispatcher {
         if (dispatched >= neededCars) break;
 
         const path = this.pathfinder.findPath(house.pos, biz.parkingLotPos);
-        if (!path) continue;
+        if (!path || path.length < 2) continue;
+
+        // Check if the spawn tile is already occupied
+        const p0 = stepGridPos(path[0]);
+        const p1 = stepGridPos(path[1]);
+        const spawnDir = getDirection(p0, p1);
+        const spawnLane = directionToLane(spawnDir);
+        const spawnKey = occupancyKey(p0.gx, p0.gy, spawnLane);
+        if (occupied.has(spawnKey)) continue;
 
         const car = new Car(house.id, house.color, house.pos);
         car.state = CarState.GoingToBusiness;
@@ -70,6 +79,7 @@ export class CarDispatcher {
 
         house.availableCars--;
         newCars.push(car);
+        occupied.set(spawnKey, car.id);
         carsEnRoute.set(biz.id, (carsEnRoute.get(biz.id) ?? 0) + 1);
         dispatched++;
       }

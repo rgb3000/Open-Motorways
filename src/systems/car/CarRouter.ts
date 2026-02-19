@@ -47,6 +47,10 @@ export class CarRouter {
     car.highwayPolyline = null;
     car.highwayCumDist = null;
     car.highwayProgress = 0;
+    car.sameLaneWaitTime = 0;
+    car.parkingWaitTime = 0;
+    car.stuckTimer = 0;
+    car.lastAdvancedPathIndex = 0;
 
     if (path.length >= 2) {
       const gridPositions = this.extractLeadingGridPositions(path, 0);

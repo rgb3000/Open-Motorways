@@ -23,8 +23,11 @@ export const CAR_SPEED = 1; // tiles per second
 export const LANE_OFFSET = TILE_SIZE * 0.12;    // px from tile center to lane center
 export const CAR_WIDTH = TILE_SIZE * 0.15;       // px (narrow dimension, perpendicular to travel)
 export const CAR_LENGTH = TILE_SIZE * 0.32;      // px (long dimension, along travel direction)
-export const INTERSECTION_SPEED_MULTIPLIER = 0.5;
+export const INTERSECTION_SPEED_MULTIPLIER = 0.7;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
+export const SAME_LANE_DEADLOCK_TIMEOUT = 3.0; // seconds
+export const PARKING_WAIT_TIMEOUT = 4.0; // seconds
+export const UNIVERSAL_STUCK_TIMEOUT = 8.0; // seconds
 export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier approximation
 
 // Parking

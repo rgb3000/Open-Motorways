@@ -55,12 +55,14 @@ export class CarSystem {
   }
 
   update(dt: number, houses: House[], businesses: Business[]): void {
-    const newCars = this.dispatcher.dispatch(this.cars, houses, businesses);
+    // Build occupancy map before dispatch so spawning checks for existing traffic
+    const occupied = this.trafficManager.buildOccupancyMap(this.cars);
+    const newCars = this.dispatcher.dispatch(this.cars, houses, businesses, occupied);
     for (const car of newCars) {
       this.cars.push(car);
     }
 
-    this.moveCars(dt, houses, businesses);
+    this.moveCars(dt, houses, businesses, occupied);
   }
 
   onRoadsChanged(houses: House[]): void {
@@ -133,7 +135,7 @@ export class CarSystem {
     }
   }
 
-  private moveCars(dt: number, houses: House[], businesses: Business[]): void {
+  private moveCars(dt: number, houses: House[], businesses: Business[], occupied: Map<string, string>): void {
     for (const [bizId, cd] of this.exitCooldowns) {
       const remaining = cd - dt;
       if (remaining <= 0) {
@@ -148,8 +150,6 @@ export class CarSystem {
     for (const biz of businesses) {
       bizMap.set(biz.id, biz);
     }
-
-    const occupied = this.trafficManager.buildOccupancyMap(this.cars);
     const intersectionMap = this.trafficManager.buildIntersectionMap(this.cars);
     const toRemove = this._toRemove;
     toRemove.length = 0;

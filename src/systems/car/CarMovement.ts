@@ -13,7 +13,7 @@ import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
 import type { PendingDeletionSystem } from '../PendingDeletionSystem';
 import type { HighwaySystem } from '../HighwaySystem';
-import { CAR_SPEED, HIGHWAY_SPEED_MULTIPLIER, TILE_SIZE, HIGHWAY_PEAK_Y, GROUND_Y_POSITION, LANE_OFFSET } from '../../constants';
+import { CAR_SPEED, HIGHWAY_SPEED_MULTIPLIER, TILE_SIZE, HIGHWAY_PEAK_Y, GROUND_Y_POSITION, LANE_OFFSET, PARKING_WAIT_TIMEOUT, UNIVERSAL_STUCK_TIMEOUT } from '../../constants';
 
 export class CarMovement {
   private grid: Grid;
@@ -113,7 +113,8 @@ export class CarMovement {
       && isIntersection(this.grid, nextTile.gx, nextTile.gy);
     const { effectiveSpeed, segmentLength } = this.trafficManager.computeEffectiveSpeed(currentTile, nextTile, dir);
     const tileDistance = (effectiveSpeed * dt) / segmentLength;
-    let newProgress = car.segmentProgress + tileDistance;
+    const rawProgress = car.segmentProgress + tileDistance;
+    let newProgress = rawProgress;
 
     newProgress = this.trafficManager.applyCollisionAndYield(
       car, dt, newProgress, nextTile,
@@ -124,11 +125,17 @@ export class CarMovement {
     if (car.state === CarState.GoingToBusiness && car.pathIndex === car.path.length - 2) {
       const biz = car.targetBusinessId ? bizMap.get(car.targetBusinessId) : undefined;
       if (biz && car.segmentProgress < 0.5 && newProgress >= 0.5 && biz.getFreeParkingSlot() === null) {
-        newProgress = Math.min(newProgress, 0.45);
+        car.parkingWaitTime += dt;
+        if (car.parkingWaitTime < PARKING_WAIT_TIMEOUT) {
+          newProgress = Math.min(newProgress, 0.45);
+        }
+      } else {
+        car.parkingWaitTime = 0;
       }
     }
 
     car.segmentProgress = newProgress;
+    car.wasBlocked = newProgress < rawProgress - 0.001;
 
     // Advance through path segments
     while (car.segmentProgress >= 1 && car.pathIndex < car.path.length - 1) {
@@ -150,6 +157,19 @@ export class CarMovement {
           this.pendingDeletionSystem.notifyCarPassed(car.id, leftTile.gx, leftTile.gy);
         }
       }
+    }
+
+    // Universal stuck safety net
+    if (car.pathIndex !== car.lastAdvancedPathIndex) {
+      car.lastAdvancedPathIndex = car.pathIndex;
+      car.stuckTimer = 0;
+    } else {
+      car.stuckTimer += dt;
+    }
+    if (car.stuckTimer >= UNIVERSAL_STUCK_TIMEOUT) {
+      car.stuckTimer = 0;
+      this.router.rerouteCar(car, houses);
+      return;
     }
 
     // Check if next tile on path is still traversable
@@ -183,6 +203,11 @@ export class CarMovement {
       if (car.path.length === 0) return;
     } else {
       this.interpolateCarPosition(car);
+      if (car.wasBlocked) {
+        car.prevPixelPos.x = car.pixelPos.x;
+        car.prevPixelPos.y = car.pixelPos.y;
+        car.prevRenderAngle = car.renderAngle;
+      }
     }
 
     // Register car in new occupancy position
