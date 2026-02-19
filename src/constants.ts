@@ -105,10 +105,21 @@ export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. thi
 
 // Debug
 export const SPAWN_DEBUG = true;
-export const DEMAND_DEBUG = true;
+export const DEMAND_DEBUG = false;
 export const ROAD_DEBUG = false;
 export const ROAD_GRAPH_DEBUG = false;
 export const CAR_ROUTE_DEBUG = true;
+
+// Business layout dimensions (fractions of TILE_SIZE unless noted)
+export const BIZ_PLATE_CROSS = 0.7;       // ground plate width (cross-axis)
+export const BIZ_PLATE_INSET = 2;          // px inset from full 2-tile span
+export const BIZ_BUILDING_CROSS = 0.7;     // building width (cross-axis)
+export const BIZ_BUILDING_ALONG = 0.45;    // building depth (along-axis)
+export const BIZ_BUILDING_SHIFT = 0.15;    // shift building away from parking (fraction of TILE_SIZE)
+export const BIZ_PIN_SPACING = 8;          // px between pin centers
+export const BIZ_PIN_CENTER_T = 0.45;      // 0=building, 1=lot — where pin grid center sits
+export const BIZ_SLOT_CROSS = 0.15;        // individual slot width (cross-axis)
+export const BIZ_SLOT_ALONG = 0.35;        // individual slot depth (along-axis)
 
 // Rendering colors
 export const BG_COLOR = '#E8D8B4';

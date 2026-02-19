@@ -9,6 +9,7 @@ import type { PendingDeletionSystem } from '../PendingDeletionSystem';
 import { TILE_SIZE, UNLOAD_TIME, CAR_SPEED } from '../../constants';
 import { gridToPixelCenter } from '../../utils/math';
 import { getDirection, directionAngle } from '../../utils/direction';
+import { getParkingSlotLayout } from '../../utils/businessLayout';
 
 const PARKING_MOVE_SPEED = CAR_SPEED * TILE_SIZE * 0.5;
 
@@ -43,13 +44,21 @@ function sampleAtDistance(
   return path[path.length - 1];
 }
 
-// Sub-positions within a parking lot cell for visual placement
-export const PARKING_SLOT_OFFSETS = [
-  { x: -TILE_SIZE * 0.25, y: -TILE_SIZE * 0.25 },
-  { x: TILE_SIZE * 0.25, y: -TILE_SIZE * 0.25 },
-  { x: -TILE_SIZE * 0.25, y: TILE_SIZE * 0.25 },
-  { x: TILE_SIZE * 0.25, y: TILE_SIZE * 0.25 },
-];
+// Compute parking slot offsets relative to lot cell center using layout system
+export function getParkingSlotOffsets(biz: Business): { x: number; y: number }[] {
+  const slots = getParkingSlotLayout({
+    buildingPos: biz.pos,
+    parkingLotPos: biz.parkingLotPos,
+    orientation: biz.orientation,
+    connectorSide: biz.connectorSide,
+  });
+  const lotCenterX = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
+  const lotCenterZ = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
+  return slots.map(slot => ({
+    x: slot.centerX - lotCenterX,
+    y: slot.centerZ - lotCenterZ,
+  }));
+}
 
 export class CarParkingManager {
   private pathfinder: Pathfinder;
@@ -168,7 +177,7 @@ export class CarParkingManager {
 
       // Build mini-path: current position → lot center → slot position
       const lotCenter = gridToPixelCenter(biz.parkingLotPos);
-      const slotOffset = PARKING_SLOT_OFFSETS[slotIndex];
+      const slotOffset = getParkingSlotOffsets(biz)[slotIndex];
       const slotPos = { x: lotCenter.x + slotOffset.x, y: lotCenter.y + slotOffset.y };
       const currentPos = { x: car.pixelPos.x, y: car.pixelPos.y };
 

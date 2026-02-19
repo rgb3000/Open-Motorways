@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
-import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET } from '../../constants';
+import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, BIZ_BUILDING_CROSS, BIZ_BUILDING_ALONG, BIZ_SLOT_CROSS, BIZ_SLOT_ALONG } from '../../constants';
 import { Direction } from '../../types';
 import { DIRECTION_OFFSETS } from '../../utils/direction';
+import { getBusinessLayout } from '../../utils/businessLayout';
 
 function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
   const shape = new THREE.Shape();
@@ -34,14 +35,17 @@ export class BuildingLayer {
   private houseBodyGeom: THREE.ExtrudeGeometry;
   private houseRoofGeom: THREE.ConeGeometry;
   private housePlateGeom: THREE.ExtrudeGeometry;
-  private bizBodyGeom: THREE.ExtrudeGeometry;
+  private bizBodyGeomH: THREE.ExtrudeGeometry;
+  private bizBodyGeomV: THREE.ExtrudeGeometry;
   private bizTowerGeom: THREE.BoxGeometry;
   private bizChimneyGeom: THREE.ExtrudeGeometry;
   private bizPlateGeomH: THREE.ExtrudeGeometry;
   private bizPlateGeomV: THREE.ExtrudeGeometry;
-  private bizLotGeom: THREE.ExtrudeGeometry;
   private bizSlotGeom: THREE.BoxGeometry;
   private bizPinGeom: THREE.SphereGeometry;
+  private bizPinOutlineGeom: THREE.CircleGeometry;
+  private bizSlotOutlineGeom: THREE.BufferGeometry;
+  private bizSlotOutlineGeomH: THREE.BufferGeometry;
 
   // Parked car prototype geometries (simplified pickup truck)
   private parkedCabGeom: THREE.ExtrudeGeometry;
@@ -94,9 +98,10 @@ export class BuildingLayer {
 
   // Cached shared materials
   private plateMat = new THREE.MeshStandardMaterial({ color: '#FFFFFF', map: this.plateNoiseTexture });
-  private lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
   private chimneyMat = new THREE.MeshStandardMaterial({ color: '#666666' });
   private slotMat = new THREE.MeshStandardMaterial({ color: '#CCCCCC' });
+  private bizOutlineMat = new THREE.MeshBasicMaterial({ color: '#666666', side: THREE.DoubleSide });
+  private bizSlotLineMat = new THREE.LineBasicMaterial({ color: '#666666' });
 
   constructor() {
     const plateSize = TILE_SIZE * 0.7;
@@ -116,12 +121,18 @@ export class BuildingLayer {
     this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
-    // Business body
-    const buildingSize = TILE_SIZE * 0.6;
+    // Business body (rectangular: wider on cross-axis, shorter on along-axis)
+    const bizCross = TILE_SIZE * BIZ_BUILDING_CROSS;
+    const bizAlong = TILE_SIZE * BIZ_BUILDING_ALONG;
     const buildingHeight = 14;
-    const bizBodyShape = roundedRectShape(buildingSize, buildingSize, 2);
-    this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
-    this.bizBodyGeom.rotateX(-Math.PI / 2);
+    // Horizontal: along=X, cross=Z → shape(along, cross) → shape(w=along, h=cross)
+    const bizBodyShapeH = roundedRectShape(bizAlong, bizCross, 2);
+    this.bizBodyGeomH = new THREE.ExtrudeGeometry(bizBodyShapeH, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
+    this.bizBodyGeomH.rotateX(-Math.PI / 2);
+    // Vertical: along=Z, cross=X → shape(w=cross, h=along)
+    const bizBodyShapeV = roundedRectShape(bizCross, bizAlong, 2);
+    this.bizBodyGeomV = new THREE.ExtrudeGeometry(bizBodyShapeV, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
+    this.bizBodyGeomV.rotateX(-Math.PI / 2);
 
     // Business tower
     const towerSize = TILE_SIZE * 0.3;
@@ -144,19 +155,26 @@ export class BuildingLayer {
     this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.bizPlateGeomV.rotateX(-Math.PI / 2);
 
-    // Business lot
-    const lotSize = TILE_SIZE * 0.7;
-    const lotShape = roundedRectShape(lotSize, lotSize, 3);
-    this.bizLotGeom = new THREE.ExtrudeGeometry(lotShape, { depth: 0.15, bevelEnabled: false, curveSegments: 4 });
-    this.bizLotGeom.rotateX(-Math.PI / 2);
-
-    // Business slot markings
-    const slotW = lotSize * 0.4;
-    const slotD = lotSize * 0.4;
+    // Business slot markings (new 1x4 row layout)
+    const slotW = TILE_SIZE * BIZ_SLOT_CROSS;
+    const slotD = TILE_SIZE * BIZ_SLOT_ALONG;
     this.bizSlotGeom = new THREE.BoxGeometry(slotW, 0.05, slotD);
 
     // Demand pins (3D spheres)
-    this.bizPinGeom = new THREE.SphereGeometry(5, 16, 12);
+    this.bizPinGeom = new THREE.SphereGeometry(3.5, 16, 12);
+
+    // Pin outline (grey filled circles on ground plate)
+    this.bizPinOutlineGeom = new THREE.CircleGeometry(3, 16);
+    this.bizPinOutlineGeom.rotateX(-Math.PI / 2);
+
+    // Slot outline (border-only rectangles) — vertical variant (slotW x slotD)
+    const slotOutlineBoxGeom = new THREE.BoxGeometry(slotW, 0.01, slotD);
+    this.bizSlotOutlineGeom = new THREE.EdgesGeometry(slotOutlineBoxGeom);
+    slotOutlineBoxGeom.dispose();
+    // Horizontal variant (slotD x slotW) — swapped
+    const slotOutlineBoxGeomH = new THREE.BoxGeometry(slotD, 0.01, slotW);
+    this.bizSlotOutlineGeomH = new THREE.EdgesGeometry(slotOutlineBoxGeomH);
+    slotOutlineBoxGeomH.dispose();
 
     // Parked car geometries (simplified pickup truck matching CarLayer style)
     const parkedCabLen = CAR_LENGTH * 0.38;
@@ -413,72 +431,61 @@ export class BuildingLayer {
     const hexColor = COLOR_MAP[biz.color];
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
-    const buildingSize = TILE_SIZE * 0.75;
+    const layout = getBusinessLayout({
+      buildingPos: biz.pos,
+      parkingLotPos: biz.parkingLotPos,
+      orientation: biz.orientation,
+      connectorSide: biz.connectorSide,
+    });
+
     const buildingHeight = 14;
-    const baseBuildingPx = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
-    const baseBuildingPz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
+    const isHoriz = biz.orientation === 'horizontal';
 
-    // Shift building away from connector (toward opposite edge of its cell)
-    const lotPxRaw = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
-    const lotPzRaw = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
-    const awayDx = baseBuildingPx - lotPxRaw;
-    const awayDz = baseBuildingPz - lotPzRaw;
-    const awayLen = Math.sqrt(awayDx * awayDx + awayDz * awayDz) || 1;
-    const buildingShift = TILE_SIZE * 0.15;
-    const buildingPx = baseBuildingPx + (awayDx / awayLen) * buildingShift;
-    const buildingPz = baseBuildingPz + (awayDz / awayLen) * buildingShift;
-
-    // Body (cloned from prototype)
-    const body = new THREE.Mesh(this.bizBodyGeom.clone(), mat);
-    body.position.set(buildingPx, 0, buildingPz);
+    // Body (rectangular, orientation-aware)
+    const bodyProto = isHoriz ? this.bizBodyGeomH : this.bizBodyGeomV;
+    const body = new THREE.Mesh(bodyProto.clone(), mat);
+    body.position.set(layout.building.centerX, 0, layout.building.centerZ);
     body.castShadow = true;
     body.receiveShadow = true;
     group.add(body);
 
-    // Tower (cloned from prototype)
+    // Tower
     const tower = new THREE.Mesh(this.bizTowerGeom.clone(), mat);
-    tower.position.set(buildingPx, buildingHeight + 5 / 2, buildingPz);
+    tower.position.set(layout.building.centerX, buildingHeight + 5 / 2, layout.building.centerZ);
     tower.castShadow = true;
     tower.receiveShadow = true;
     group.add(tower);
 
     // Chimney
+    const chimneyOffX = layout.building.width * 0.35;
+    const chimneyOffZ = -layout.building.depth * 0.35;
     const chimney = new THREE.Mesh(this.bizChimneyGeom, mat);
-    chimney.position.set(buildingPx + buildingSize * 0.25, buildingHeight + 3, buildingPz - buildingSize * 0.25);
+    chimney.position.set(layout.building.centerX + chimneyOffX, buildingHeight + 3, layout.building.centerZ + chimneyOffZ);
     chimney.castShadow = true;
     group.add(chimney);
 
-    // Background plate (use pre-built horizontal or vertical variant)
-    const isHoriz = biz.orientation === 'horizontal';
+    // Background plate
     const plateProto = isHoriz ? this.bizPlateGeomH : this.bizPlateGeomV;
     const plate = new THREE.Mesh(plateProto.clone(), this.plateMat);
-    const lotCx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
-    const lotCz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
-    plate.position.set((buildingPx + lotCx) / 2, 0.05, (buildingPz + lotCz) / 2);
+    plate.position.set(layout.groundPlate.centerX, 0.05, layout.groundPlate.centerZ);
     plate.castShadow = true;
     plate.receiveShadow = true;
     group.add(plate);
 
-    // Parking lot (cloned from prototype)
-    const lotPx = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
-    const lotPz = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
-    const lotSize = TILE_SIZE * 0.7;
-    const lot = new THREE.Mesh(this.bizLotGeom.clone(), this.lotMat);
-    lot.position.set(lotPx, 0, lotPz);
-    lot.receiveShadow = true;
-    group.add(lot);
+    // Pin outlines (grey circles on ground plate surface)
+    const outlineY = 0.05 + 0.8 + 0.6 + 0.05; // plate base + depth + bevelThickness + offset
+    for (const pin of layout.pinSlots) {
+      const outline = new THREE.Mesh(this.bizPinOutlineGeom, this.bizOutlineMat);
+      outline.position.set(pin.x, outlineY, pin.z);
+      group.add(outline);
+    }
 
-    // Parking slot markings (shared geometry + material)
-    const offsets = [
-      { x: -lotSize * 0.22, z: -lotSize * 0.22 },
-      { x: lotSize * 0.22, z: -lotSize * 0.22 },
-      { x: -lotSize * 0.22, z: lotSize * 0.22 },
-      { x: lotSize * 0.22, z: lotSize * 0.22 },
-    ];
-    for (const off of offsets) {
-      const slot = new THREE.Mesh(this.bizSlotGeom, this.slotMat);
-      slot.position.set(lotPx + off.x, 0.15 + 0.03, lotPz + off.z);
-      group.add(slot);
+    // Parking slot outlines (grey border rectangles on ground plate surface)
+    const slotOutlineGeom = isHoriz ? this.bizSlotOutlineGeomH : this.bizSlotOutlineGeom;
+    for (const slot of layout.parkingSlots) {
+      const outline = new THREE.LineSegments(slotOutlineGeom, this.bizSlotLineMat);
+      outline.position.set(slot.centerX, outlineY, slot.centerZ);
+      group.add(outline);
     }
 
     // Per-business pin material (matches business color, shiny)
@@ -488,36 +495,13 @@ export class BuildingLayer {
     });
     group.userData.pinMat = pinMat;
 
-    // Demand pins — 3D spheres in a 2x4 grid between building and parking lot
-    // Shifted toward connector (70% toward lot from building)
-    const pinSpacing = 11;
-    const pinY = 5; // sphere center sits on ground + radius
-    const pinCenterT = 0.7; // 0=building, 1=lot
-    const pinAnchorX = buildingPx + (lotPx - buildingPx) * pinCenterT;
-    const pinAnchorZ = buildingPz + (lotPz - buildingPz) * pinCenterT;
+    // Demand pins — 3D spheres at pin slot positions
+    const pinY = 5;
     const pins: THREE.Mesh[] = [];
-
-    // Major axis: direction from building to parking lot
-    const majorDx = lotPx - buildingPx;
-    const majorDz = lotPz - buildingPz;
-    const majorLen = Math.sqrt(majorDx * majorDx + majorDz * majorDz) || 1;
-    const majX = majorDx / majorLen;
-    const majZ = majorDz / majorLen;
-    // Minor axis: perpendicular
-    const minX = -majZ;
-    const minZ = majX;
-
     for (let i = 0; i < MAX_DEMAND_PINS; i++) {
-      const col = i % 2;       // 0 or 1 (minor axis)
-      const row = (i / 2) | 0; // 0..3 (major axis)
-      const colOffset = (col - 0.5) * pinSpacing;
-      const rowOffset = (row - 1.5) * pinSpacing;
-      const px = pinAnchorX + majX * rowOffset + minX * colOffset;
-      const pz = pinAnchorZ + majZ * rowOffset + minZ * colOffset;
-
-      // Colored fill sphere
+      const pinPos = layout.pinSlots[i];
       const pin = new THREE.Mesh(this.bizPinGeom, pinMat);
-      pin.position.set(px, pinY, pz);
+      pin.position.set(pinPos.x, pinY, pinPos.z);
       pin.castShadow = true;
       pin.visible = false;
       group.add(pin);
@@ -531,12 +515,15 @@ export class BuildingLayer {
 
   private initSharedResources(): void {
     this.sharedResources.add(this.plateMat);
-    this.sharedResources.add(this.lotMat);
     this.sharedResources.add(this.slotMat);
     this.sharedResources.add(this.chimneyMat);
+    this.sharedResources.add(this.bizOutlineMat);
     this.sharedResources.add(this.bizChimneyGeom);
     this.sharedResources.add(this.bizSlotGeom);
     this.sharedResources.add(this.bizPinGeom);
+    this.sharedResources.add(this.bizPinOutlineGeom);
+    this.sharedResources.add(this.bizSlotOutlineGeom);
+    this.sharedResources.add(this.bizSlotOutlineGeomH);
     this.sharedResources.add(this.parkedCabGeom);
     this.sharedResources.add(this.parkedBedGeom);
     this.sharedResources.add(this.parkedBedSideGeom);
@@ -545,7 +532,7 @@ export class BuildingLayer {
 
   private disposeGroup(group: THREE.Group): void {
     group.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.LineSegments) {
         if (!this.sharedResources.has(obj.geometry)) obj.geometry.dispose();
         const mat = obj.material as THREE.Material;
         if (!this.sharedResources.has(mat)) mat.dispose();
@@ -581,19 +568,23 @@ export class BuildingLayer {
     this.houseBodyGeom.dispose();
     this.houseRoofGeom.dispose();
     this.housePlateGeom.dispose();
-    this.bizBodyGeom.dispose();
+    this.bizBodyGeomH.dispose();
+    this.bizBodyGeomV.dispose();
     this.bizTowerGeom.dispose();
     this.bizPlateGeomH.dispose();
     this.bizPlateGeomV.dispose();
-    this.bizLotGeom.dispose();
     this.bizChimneyGeom.dispose();
     this.bizSlotGeom.dispose();
     this.bizPinGeom.dispose();
+    this.bizPinOutlineGeom.dispose();
+    this.bizSlotOutlineGeom.dispose();
+    this.bizSlotOutlineGeomH.dispose();
     this.plateMat.dispose();
     this.plateNoiseTexture.dispose();
-    this.lotMat.dispose();
     this.slotMat.dispose();
     this.chimneyMat.dispose();
+    this.bizOutlineMat.dispose();
+    this.bizSlotLineMat.dispose();
     this.parkedCabGeom.dispose();
     this.parkedBedGeom.dispose();
     this.parkedBedSideGeom.dispose();
