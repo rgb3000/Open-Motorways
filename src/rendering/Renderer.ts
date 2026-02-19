@@ -78,10 +78,10 @@ export class Renderer {
     this.updateCameraPosition();
 
     // Lighting
-    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
     this.scene.add(ambient);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
     dirLight.position.set(
       CANVAS_WIDTH / 2 - 1500,
       600,
@@ -129,7 +129,7 @@ export class Renderer {
     this.groundTexture.minFilter = THREE.LinearFilter;
     this.groundTexture.magFilter = THREE.LinearFilter;
 
-    const groundMat = new THREE.MeshStandardMaterial({ map: this.groundTexture });
+    const groundMat = new THREE.MeshStandardMaterial({ map: this.groundTexture, roughness: 0.85 });
     const groundGeom = new THREE.PlaneGeometry(CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS * GROUND_SUBDIV, GRID_ROWS * GROUND_SUBDIV);
     groundGeom.rotateX(-Math.PI / 2);
     this.groundMesh = new THREE.Mesh(groundGeom, groundMat);

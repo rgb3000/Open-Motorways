@@ -89,6 +89,8 @@ export class Game {
     this.webglRenderer.setSize(window.innerWidth, window.innerHeight);
     this.webglRenderer.shadowMap.enabled = true;
     this.webglRenderer.shadowMap.type = THREE.PCFShadowMap;
+    this.webglRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.webglRenderer.toneMappingExposure = 1.2;
 
     this.grid = new Grid(this.cfg.GRID_COLS, this.cfg.GRID_ROWS);
     this.obstacleSystem = new ObstacleSystem(this.grid, mapConfig?.obstacles, this.cfg);
