@@ -6,17 +6,17 @@ import { CellType, Direction, LaneId } from '../../types';
 import type { GridPos } from '../../types';
 import {
   getDirection, directionToLane, opposite,
-  cardinalConnectionCount, isDiagonalDir, DIRECTION_OFFSETS,
+  isDiagonalDir, DIRECTION_OFFSETS,
 } from '../../utils/direction';
 import { stepGridPos } from './CarRouter';
 import { shouldYield, getTIntersectionRoads, isMinorRoadEntry } from './IntersectionConflicts';
 
-export function occupancyKey(gx: number, gy: number, lane: LaneId): string {
-  return `${gx},${gy},${lane}`;
+export function occupancyKey(gx: number, gy: number, lane: LaneId): number {
+  return gx | (gy << 8) | (lane << 16);
 }
 
-export function tileKey(gx: number, gy: number): string {
-  return `${gx},${gy}`;
+export function tileKey(gx: number, gy: number): number {
+  return gx | (gy << 8);
 }
 
 /** Compute speed multiplier (0..1) based on gap to leader car */
@@ -28,15 +28,12 @@ export function followingSpeedMultiplier(gap: number): number {
 
 export function isIntersection(grid: Grid, gx: number, gy: number): boolean {
   const cell = grid.getCell(gx, gy);
-  if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) return false;
-  if (cell.type === CellType.Connector) return false;
-  return cardinalConnectionCount(cell.roadConnections) >= 3;
+  return cell !== null && cell._isIntersection;
 }
 
 export function isTIntersection(grid: Grid, gx: number, gy: number): boolean {
   const cell = grid.getCell(gx, gy);
-  if (!cell || cell.type !== CellType.Road) return false;
-  return cardinalConnectionCount(cell.roadConnections) === 3;
+  return cell !== null && cell._isTIntersection;
 }
 
 export interface IntersectionEntry {
@@ -52,9 +49,17 @@ export class CarTrafficManager {
   private _frameTime = 0;
 
   // Reusable collections to avoid per-frame allocations
-  private _occupiedMap = new Map<string, string>();
-  private _intersectionMap = new Map<string, IntersectionEntry[]>();
+  private _occupiedMap = new Map<number, string>();
+  private _intersectionMap = new Map<number, IntersectionEntry[]>();
   private _intersectionEntryPool: IntersectionEntry[][] = [];
+  // Object pool for IntersectionEntry instances
+  private _entryObjPool: IntersectionEntry[] = [];
+  private _entryObjCount = 0;
+  // Reusable temp entry for computeIntersectionYield
+  private _tempEntry: IntersectionEntry = {
+    carId: '', entryDirection: 0 as Direction, exitDirection: 0 as Direction,
+    inIntersection: false, arrivalTime: 0,
+  };
 
   constructor(grid: Grid) {
     this.grid = grid;
@@ -64,7 +69,7 @@ export class CarTrafficManager {
     this._frameTime += dt;
   }
 
-  buildOccupancyMap(cars: Car[]): Map<string, string> {
+  buildOccupancyMap(cars: Car[]): Map<number, string> {
     const occupied = this._occupiedMap;
     occupied.clear();
     for (const car of cars) {
@@ -103,23 +108,43 @@ export class CarTrafficManager {
     return getDirection(intTile, stepGridPos(car.path[Math.min(intersectionPathIdx + 1, car.path.length - 1)]));
   }
 
+  private getPooledEntry(
+    carId: string, entryDir: Direction, exitDir: Direction,
+    inIntersection: boolean, arrivalTime: number,
+  ): IntersectionEntry {
+    if (this._entryObjCount < this._entryObjPool.length) {
+      const e = this._entryObjPool[this._entryObjCount++];
+      e.carId = carId;
+      e.entryDirection = entryDir;
+      e.exitDirection = exitDir;
+      e.inIntersection = inIntersection;
+      e.arrivalTime = arrivalTime;
+      return e;
+    }
+    const e = { carId, entryDirection: entryDir, exitDirection: exitDir, inIntersection, arrivalTime };
+    this._entryObjPool.push(e);
+    this._entryObjCount++;
+    return e;
+  }
+
   private addIntersectionEntry(
-    intersectionMap: Map<string, IntersectionEntry[]>,
-    key: string, carId: string, entryDir: Direction, exitDir: Direction,
+    intersectionMap: Map<number, IntersectionEntry[]>,
+    key: number, carId: string, entryDir: Direction, exitDir: Direction,
     inIntersection: boolean, arrivalTime: number,
   ): void {
     let list = intersectionMap.get(key);
     if (!list) { list = this._intersectionEntryPool.pop() ?? []; intersectionMap.set(key, list); }
-    list.push({ carId, entryDirection: entryDir, exitDirection: exitDir, inIntersection, arrivalTime });
+    list.push(this.getPooledEntry(carId, entryDir, exitDir, inIntersection, arrivalTime));
   }
 
-  buildIntersectionMap(cars: Car[]): Map<string, IntersectionEntry[]> {
+  buildIntersectionMap(cars: Car[]): Map<number, IntersectionEntry[]> {
     const intersectionMap = this._intersectionMap;
     for (const list of intersectionMap.values()) {
       list.length = 0;
       this._intersectionEntryPool.push(list);
     }
     intersectionMap.clear();
+    this._entryObjCount = 0;
 
     for (const car of cars) {
       if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.state === CarState.WaitingToExit || car.state === CarState.ParkingIn || car.state === CarState.ParkingOut || car.path.length < 2) continue;
@@ -132,9 +157,12 @@ export class CarTrafficManager {
       const nxtStep = car.path[nextIdx];
       const nxtTile = stepGridPos(nxtStep);
 
+      const nxtCell = nxtStep.kind === 'grid' ? this.grid.getCell(nxtTile.gx, nxtTile.gy) : null;
+      const nxtIsInt = nxtCell !== null && nxtCell._isIntersection;
+
       if (car.segmentProgress >= 0.5 && car.pathIndex + 1 < car.path.length) {
         // Car is past halfway — treat as being on next tile
-        if (nxtStep.kind === 'grid' && isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
+        if (nxtIsInt) {
           const entryDir = getDirection(curTile, nxtTile);
           const exitDir = this.getExitDirection(car, car.pathIndex + 1);
           this.addIntersectionEntry(intersectionMap, tileKey(nxtTile.gx, nxtTile.gy),
@@ -142,7 +170,8 @@ export class CarTrafficManager {
         }
       } else if (car.segmentProgress < 0.5) {
         // Car is on current tile
-        if (isIntersection(this.grid, curTile.gx, curTile.gy)) {
+        const curCell = this.grid.getCell(curTile.gx, curTile.gy);
+        if (curCell !== null && curCell._isIntersection) {
           const entryDir = car.pathIndex > 0
             ? getDirection(stepGridPos(car.path[car.pathIndex - 1]), curTile)
             : getDirection(curTile, nxtTile);
@@ -152,7 +181,7 @@ export class CarTrafficManager {
         }
 
         // Car is approaching next tile
-        if (car.pathIndex + 1 < car.path.length && nxtStep.kind === 'grid' && isIntersection(this.grid, nxtTile.gx, nxtTile.gy)) {
+        if (car.pathIndex + 1 < car.path.length && nxtIsInt) {
           const entryDir = getDirection(curTile, nxtTile);
           const exitDir = this.getExitDirection(car, car.pathIndex + 1);
           this.addIntersectionEntry(intersectionMap, tileKey(nxtTile.gx, nxtTile.gy),
@@ -173,7 +202,7 @@ export class CarTrafficManager {
     nextTile: GridPos,
     dir: Direction,
     isNextIntersection: boolean,
-    intersectionMap: Map<string, IntersectionEntry[]>,
+    intersectionMap: Map<number, IntersectionEntry[]>,
   ): number {
     if (!isNextIntersection || car.segmentProgress >= 0.5) {
       car.intersectionWaitTime = 0;
@@ -191,11 +220,15 @@ export class CarTrafficManager {
       for (const e of entries) {
         if (e.carId === car.id) { myExitDir = e.exitDirection; break; }
       }
-      const isT = isTIntersection(this.grid, nextTile.gx, nextTile.gy);
-      const myEntry: IntersectionEntry = {
-        carId: car.id, entryDirection: entryDir, exitDirection: myExitDir,
-        inIntersection: false, arrivalTime: car.arrivalTime,
-      };
+      const nextCell = this.grid.getCell(nextTile.gx, nextTile.gy);
+      const isT = nextCell !== null && nextCell._isTIntersection;
+      // Reuse temp entry instead of allocating
+      const myEntry = this._tempEntry;
+      myEntry.carId = car.id;
+      myEntry.entryDirection = entryDir;
+      myEntry.exitDirection = myExitDir;
+      myEntry.inIntersection = false;
+      myEntry.arrivalTime = car.arrivalTime;
 
       for (const other of entries) {
         if (other.carId === car.id) continue;
@@ -272,12 +305,12 @@ export class CarTrafficManager {
   computeEffectiveSpeed(
     currentTile: GridPos, nextTile: GridPos, dir: Direction,
   ): { effectiveSpeed: number; segmentLength: number } {
-    const isCurrentInt = isIntersection(this.grid, currentTile.gx, currentTile.gy);
-    const isNextInt = isIntersection(this.grid, nextTile.gx, nextTile.gy);
     const currentCell = this.grid.getCell(currentTile.gx, currentTile.gy);
     const nextCell = this.grid.getCell(nextTile.gx, nextTile.gy);
+    const isInt = (currentCell !== null && currentCell._isIntersection)
+      || (nextCell !== null && nextCell._isIntersection);
     const isConnector = (currentCell?.type === CellType.Connector) || (nextCell?.type === CellType.Connector);
-    const effectiveSpeed = (isCurrentInt || isNextInt || isConnector)
+    const effectiveSpeed = (isInt || isConnector)
       ? CAR_SPEED * INTERSECTION_SPEED_MULTIPLIER : CAR_SPEED;
     const segmentLength = isDiagonalDir(dir) ? Math.SQRT2 : 1;
     return { effectiveSpeed, segmentLength };

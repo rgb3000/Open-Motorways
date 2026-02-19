@@ -1,6 +1,6 @@
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../constants';
 import { type Cell, CellType, Direction, type GridPos, type PixelPos } from '../types';
-import { ALL_DIRECTIONS, CARDINAL_DIRECTIONS, DIRECTION_OFFSETS } from '../utils/direction';
+import { ALL_DIRECTIONS, CARDINAL_DIRECTIONS, DIRECTION_OFFSETS, cardinalConnectionCount } from '../utils/direction';
 
 export class Grid {
   readonly cols: number;
@@ -12,7 +12,7 @@ export class Grid {
     this.rows = rows;
     this.cells = new Array(this.cols * this.rows);
     for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: 0, color: null, connectorDir: null, pendingDeletion: false };
+      this.cells[i] = { type: CellType.Empty, entityId: null, roadConnections: 0, color: null, connectorDir: null, pendingDeletion: false, _isIntersection: false, _isTIntersection: false };
     }
   }
 
@@ -88,5 +88,20 @@ export class Grid {
 
   getDirectionOffset(dir: Direction): GridPos {
     return DIRECTION_OFFSETS[dir];
+  }
+
+  /** Recompute cached _isIntersection and _isTIntersection flags for all road cells */
+  recomputeIntersectionFlags(): void {
+    for (let i = 0; i < this.cells.length; i++) {
+      const cell = this.cells[i];
+      if (cell.type === CellType.Road) {
+        const count = cardinalConnectionCount(cell.roadConnections);
+        cell._isIntersection = count >= 3;
+        cell._isTIntersection = count === 3;
+      } else {
+        cell._isIntersection = false;
+        cell._isTIntersection = false;
+      }
+    }
   }
 }

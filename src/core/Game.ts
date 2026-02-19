@@ -475,6 +475,7 @@ export class Game {
       this.carSystem.onRoadsChanged(this.spawnSystem.getHouses());
       if (this.roadSystem.isDirty) {
         this.roadSystem.clearDirty();
+        this.grid.recomputeIntersectionFlags();
         this.renderer.markGroundDirty();
       }
       if (this.highwaySystem.isDirty) {

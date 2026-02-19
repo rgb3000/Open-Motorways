@@ -139,7 +139,7 @@ export class CarSystem {
     }
   }
 
-  private moveCars(dt: number, houses: House[], businesses: Business[], occupied: Map<string, string>): void {
+  private moveCars(dt: number, houses: House[], businesses: Business[], occupied: Map<number, string>): void {
     this.trafficManager.advanceFrameTime(dt);
 
     for (const [bizId, cd] of this.exitCooldowns) {

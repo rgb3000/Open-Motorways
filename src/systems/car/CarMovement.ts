@@ -7,7 +7,7 @@ import { CellType } from '../../types';
 import { getDirection, directionToLane } from '../../utils/direction';
 import { sampleAtDistance } from '../../utils/roadGeometry';
 import type { CarTrafficManager } from './CarTrafficManager';
-import { occupancyKey, isIntersection, followingSpeedMultiplier } from './CarTrafficManager';
+import { occupancyKey, followingSpeedMultiplier } from './CarTrafficManager';
 import type { IntersectionEntry } from './CarTrafficManager';
 import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
@@ -53,8 +53,8 @@ export class CarMovement {
   updateSingleCar(
     car: Car, dt: number,
     houses: House[], bizMap: Map<string, Business>,
-    occupied: Map<string, string>,
-    intersectionMap: Map<string, IntersectionEntry[]>,
+    occupied: Map<number, string>,
+    intersectionMap: Map<number, IntersectionEntry[]>,
     toRemove: string[],
     onArrival: (car: Car, houses: House[], bizMap: Map<string, Business>, toRemove: string[]) => void,
   ): void {
@@ -108,9 +108,9 @@ export class CarMovement {
       occupied.delete(oldKey);
     }
 
-    const isNextIntersection = car.pathIndex + 1 < car.path.length
-      && nextStep.kind === 'grid'
-      && isIntersection(this.grid, nextTile.gx, nextTile.gy);
+    const nextCell = car.pathIndex + 1 < car.path.length && nextStep.kind === 'grid'
+      ? this.grid.getCell(nextTile.gx, nextTile.gy) : null;
+    const isNextIntersection = nextCell !== null && nextCell._isIntersection;
     const { effectiveSpeed, segmentLength } = this.trafficManager.computeEffectiveSpeed(currentTile, nextTile, dir);
     // Apply arc-length following + intersection yield as speed multipliers
     const followingMult = followingSpeedMultiplier(car.leaderGap);

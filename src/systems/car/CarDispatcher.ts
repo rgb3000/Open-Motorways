@@ -18,7 +18,7 @@ export class CarDispatcher {
     this.router = router;
   }
 
-  dispatch(cars: Car[], houses: House[], businesses: Business[], occupied: Map<string, string>): Car[] {
+  dispatch(cars: Car[], houses: House[], businesses: Business[], occupied: Map<number, string>): Car[] {
     const demandBusinesses = businesses.filter(b => b.demandPins > 0)
       .sort((a, b) => b.demandPins - a.demandPins);
     if (demandBusinesses.length === 0) return [];

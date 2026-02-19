@@ -1,8 +1,8 @@
 import type { Car } from '../../entities/Car';
 import { CarState } from '../../entities/Car';
-import type { LaneId } from '../../types';
 import { getDirection, directionToLane } from '../../utils/direction';
 import { stepGridPos } from './CarRouter';
+import { occupancyKey } from './CarTrafficManager';
 
 const LEADER_SCAN_TILES = 3;
 
@@ -13,13 +13,26 @@ interface BucketEntry {
   py: number;
 }
 
-function bucketKey(gx: number, gy: number, lane: LaneId): string {
-  return `${gx},${gy},${lane}`;
-}
-
 export class CarLeaderIndex {
-  private buckets = new Map<string, BucketEntry[]>();
+  private buckets = new Map<number, BucketEntry[]>();
   private entryPool: BucketEntry[][] = [];
+  private _entryObjPool: BucketEntry[] = [];
+  private _entryObjCount = 0;
+
+  private getEntry(carId: string, arcDist: number, px: number, py: number): BucketEntry {
+    if (this._entryObjCount < this._entryObjPool.length) {
+      const e = this._entryObjPool[this._entryObjCount++];
+      e.carId = carId;
+      e.arcDist = arcDist;
+      e.px = px;
+      e.py = py;
+      return e;
+    }
+    const e = { carId, arcDist, px, py };
+    this._entryObjPool.push(e);
+    this._entryObjCount++;
+    return e;
+  }
 
   rebuild(cars: Car[]): void {
     // Recycle arrays
@@ -28,6 +41,7 @@ export class CarLeaderIndex {
       this.entryPool.push(list);
     }
     this.buckets.clear();
+    this._entryObjCount = 0;
 
     for (const car of cars) {
       if (car.state === CarState.Idle || car.state === CarState.Stranded ||
@@ -46,18 +60,13 @@ export class CarLeaderIndex {
 
       // Register car in the tile it currently occupies (based on segmentProgress)
       const tile = car.segmentProgress < 0.5 ? curTile : nxtTile;
-      const key = bucketKey(tile.gx, tile.gy, lane);
+      const key = occupancyKey(tile.gx, tile.gy, lane);
       let list = this.buckets.get(key);
       if (!list) {
         list = this.entryPool.pop() ?? [];
         this.buckets.set(key, list);
       }
-      list.push({
-        carId: car.id,
-        arcDist: car.arcDistance,
-        px: car.pixelPos.x,
-        py: car.pixelPos.y,
-      });
+      list.push(this.getEntry(car.id, car.arcDistance, car.pixelPos.x, car.pixelPos.y));
     }
 
     // Sort each bucket by arcDist ascending
@@ -66,6 +75,27 @@ export class CarLeaderIndex {
         list.sort((a, b) => a.arcDist - b.arcDist);
       }
     }
+  }
+
+  private scanBucket(key: number, car: Car, carPx: number, carPy: number, offset: number, bestGapSq: number): { id: string | null; gapSq: number } {
+    const bucket = this.buckets.get(key);
+    if (!bucket) return { id: null, gapSq: bestGapSq };
+
+    let bestId: string | null = null;
+    for (const entry of bucket) {
+      if (entry.carId === car.id) continue;
+      if (offset === 0 && entry.arcDist <= car.arcDistance) continue;
+
+      const dx = entry.px - carPx;
+      const dy = entry.py - carPy;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < bestGapSq) {
+        bestId = entry.carId;
+        bestGapSq = distSq;
+      }
+    }
+    return { id: bestId, gapSq: bestGapSq };
   }
 
   findLeader(car: Car): void {
@@ -80,6 +110,8 @@ export class CarLeaderIndex {
 
     const carPx = car.pixelPos.x;
     const carPy = car.pixelPos.y;
+    let bestGapSq = Infinity;
+    let bestId: string | null = null;
 
     // Scan forward along the car's path tiles looking for the nearest car ahead on the same lane
     for (let offset = 0; offset < LEADER_SCAN_TILES; offset++) {
@@ -96,36 +128,30 @@ export class CarLeaderIndex {
       const dir = getDirection(tile, nxtTile);
       const lane = directionToLane(dir);
 
-      // Check both the current tile and next tile for this segment
-      const tilesToCheck = offset === 0 && car.segmentProgress >= 0.5
-        ? [nxtTile]
-        : offset === 0
-          ? [tile, nxtTile]
-          : [tile];
-
-      for (const t of tilesToCheck) {
-        const key = bucketKey(t.gx, t.gy, lane);
-        const bucket = this.buckets.get(key);
-        if (!bucket) continue;
-
-        for (const entry of bucket) {
-          if (entry.carId === car.id) continue;
-          // Only consider cars ahead (greater arcDist or on a further tile)
-          if (offset === 0 && entry.arcDist <= car.arcDistance) continue;
-
-          const dx = entry.px - carPx;
-          const dy = entry.py - carPy;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < car.leaderGap) {
-            car.leaderId = entry.carId;
-            car.leaderGap = dist;
-          }
-        }
+      // Check tiles without allocating an array
+      if (offset === 0 && car.segmentProgress >= 0.5) {
+        // Only next tile
+        const r = this.scanBucket(occupancyKey(nxtTile.gx, nxtTile.gy, lane), car, carPx, carPy, offset, bestGapSq);
+        if (r.id) { bestId = r.id; bestGapSq = r.gapSq; }
+      } else if (offset === 0) {
+        // Current tile and next tile
+        let r = this.scanBucket(occupancyKey(tile.gx, tile.gy, lane), car, carPx, carPy, offset, bestGapSq);
+        if (r.id) { bestId = r.id; bestGapSq = r.gapSq; }
+        r = this.scanBucket(occupancyKey(nxtTile.gx, nxtTile.gy, lane), car, carPx, carPy, offset, bestGapSq);
+        if (r.id) { bestId = r.id; bestGapSq = r.gapSq; }
+      } else {
+        // Only current tile
+        const r = this.scanBucket(occupancyKey(tile.gx, tile.gy, lane), car, carPx, carPy, offset, bestGapSq);
+        if (r.id) { bestId = r.id; bestGapSq = r.gapSq; }
       }
 
       // If we found a leader on this tile segment, no need to scan further
-      if (car.leaderId !== null) return;
+      if (bestId !== null) break;
+    }
+
+    if (bestId !== null) {
+      car.leaderId = bestId;
+      car.leaderGap = Math.sqrt(bestGapSq);
     }
   }
 }
