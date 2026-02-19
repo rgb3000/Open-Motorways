@@ -3,7 +3,7 @@ import type { Grid } from '../../core/Grid';
 import type { Car } from '../../entities/Car';
 import type { Business } from '../../entities/Business';
 import { CarState } from '../../entities/Car';
-import { CellType } from '../../types';
+import { CellType, Direction } from '../../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
 import { stepGridPos } from '../../systems/car/CarRouter';
 import { laneOffset, opposite } from '../../utils/direction';
@@ -86,19 +86,31 @@ export class RoadDebugLayer {
       const exitX = connCX + exitOff.x;
       const exitZ = connCZ + exitOff.y;
 
+      const isVertical = connToParkDir === Direction.Up || connToParkDir === Direction.Down;
+
       for (const slot of layout.parkingSlots) {
-        // Entry line: entry lane → slot center (cyan)
-        const entryGeom = new THREE.BufferGeometry().setFromPoints([
+        // Entry curve: entry lane → slot center (cyan) with L-shaped control point
+        const entryControl = isVertical
+          ? new THREE.Vector3(entryX, DEBUG_Y, slot.centerZ)
+          : new THREE.Vector3(slot.centerX, DEBUG_Y, entryZ);
+        const entryCurve = new THREE.QuadraticBezierCurve3(
           new THREE.Vector3(entryX, DEBUG_Y, entryZ),
+          entryControl,
           new THREE.Vector3(slot.centerX, DEBUG_Y, slot.centerZ),
-        ]);
+        );
+        const entryGeom = new THREE.BufferGeometry().setFromPoints(entryCurve.getPoints(16));
         group.add(new THREE.Line(entryGeom, this.cyanMat));
 
-        // Exit line: slot center → exit lane (magenta)
-        const exitGeom = new THREE.BufferGeometry().setFromPoints([
+        // Exit curve: slot center → exit lane (magenta) with L-shaped control point
+        const exitControl = isVertical
+          ? new THREE.Vector3(exitX, DEBUG_Y, slot.centerZ)
+          : new THREE.Vector3(slot.centerX, DEBUG_Y, exitZ);
+        const exitCurve = new THREE.QuadraticBezierCurve3(
           new THREE.Vector3(slot.centerX, DEBUG_Y, slot.centerZ),
+          exitControl,
           new THREE.Vector3(exitX, DEBUG_Y, exitZ),
-        ]);
+        );
+        const exitGeom = new THREE.BufferGeometry().setFromPoints(exitCurve.getPoints(16));
         group.add(new THREE.Line(exitGeom, this.magentaMat));
 
         // Dot at slot center (yellow)
