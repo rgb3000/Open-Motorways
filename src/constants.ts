@@ -106,8 +106,8 @@ export const HOUSE_SUPPLY_PER_MINUTE = 2.0; // pins/min one house can clear. thi
 // Debug
 export const SPAWN_DEBUG = true;
 export const DEMAND_DEBUG = false;
-export const ROAD_DEBUG = false;
-export const ROAD_GRAPH_DEBUG = false;
+export const ROAD_DEBUG = true;
+export const ROAD_GRAPH_DEBUG = true;
 export const CAR_ROUTE_DEBUG = true;
 
 // Business layout dimensions (fractions of TILE_SIZE unless noted)

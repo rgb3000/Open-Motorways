@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import type { Grid } from '../../core/Grid';
 import type { Car } from '../../entities/Car';
+import type { Business } from '../../entities/Business';
 import { CarState } from '../../entities/Car';
 import { CellType } from '../../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
 import { stepGridPos } from '../../systems/car/CarRouter';
+import { laneOffset, opposite } from '../../utils/direction';
+import { getBusinessLayout } from '../../utils/businessLayout';
 
 const OUTLINE_Y = 0.6;
+const DEBUG_Y = 2;
 
 export class RoadDebugLayer {
   private group: THREE.Group | null = null;
@@ -14,7 +18,13 @@ export class RoadDebugLayer {
   private redMat = new THREE.LineBasicMaterial({ color: 0xff0000 });
   private edgesGeom = new THREE.EdgesGeometry(new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE));
 
-  update(scene: THREE.Scene, grid: Grid, cars: Car[]): void {
+  // Parking debug materials
+  private cyanMat = new THREE.LineBasicMaterial({ color: 0x00ffff });
+  private magentaMat = new THREE.LineBasicMaterial({ color: 0xff00ff });
+  private yellowMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  private dotGeom = new THREE.SphereGeometry(1.5, 8, 6);
+
+  update(scene: THREE.Scene, grid: Grid, cars: Car[], businesses: Business[]): void {
     this.clearFromScene(scene);
 
     // Build reserved cell set from car paths
@@ -56,6 +66,48 @@ export class RoadDebugLayer {
       }
     }
 
+    // Parking debug: entry/exit lines and slot dots per business
+    for (const biz of businesses) {
+      const layout = getBusinessLayout({
+        buildingPos: biz.pos,
+        parkingLotPos: biz.parkingLotPos,
+        orientation: biz.orientation,
+        connectorSide: biz.connectorSide,
+      });
+
+      const connCX = biz.connectorPos.gx * TILE_SIZE + half;
+      const connCZ = biz.connectorPos.gy * TILE_SIZE + half;
+      const connToParkDir = biz.getConnectorToParkingDir();
+
+      const entryOff = laneOffset(connToParkDir);
+      const exitOff = laneOffset(opposite(connToParkDir));
+      const entryX = connCX + entryOff.x;
+      const entryZ = connCZ + entryOff.y;
+      const exitX = connCX + exitOff.x;
+      const exitZ = connCZ + exitOff.y;
+
+      for (const slot of layout.parkingSlots) {
+        // Entry line: entry lane → slot center (cyan)
+        const entryGeom = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(entryX, DEBUG_Y, entryZ),
+          new THREE.Vector3(slot.centerX, DEBUG_Y, slot.centerZ),
+        ]);
+        group.add(new THREE.Line(entryGeom, this.cyanMat));
+
+        // Exit line: slot center → exit lane (magenta)
+        const exitGeom = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(slot.centerX, DEBUG_Y, slot.centerZ),
+          new THREE.Vector3(exitX, DEBUG_Y, exitZ),
+        ]);
+        group.add(new THREE.Line(exitGeom, this.magentaMat));
+
+        // Dot at slot center (yellow)
+        const dot = new THREE.Mesh(this.dotGeom, this.yellowMat);
+        dot.position.set(slot.centerX, DEBUG_Y, slot.centerZ);
+        group.add(dot);
+      }
+    }
+
     this.group = group;
     scene.add(group);
   }
@@ -72,5 +124,9 @@ export class RoadDebugLayer {
     this.greenMat.dispose();
     this.redMat.dispose();
     this.edgesGeom.dispose();
+    this.cyanMat.dispose();
+    this.magentaMat.dispose();
+    this.yellowMat.dispose();
+    this.dotGeom.dispose();
   }
 }

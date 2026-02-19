@@ -392,7 +392,7 @@ export class Renderer {
     this.buildingLayer.update(this.scene, houses, businesses);
     this.carLayer.update(this.scene, cars, alpha);
     this.debugLayer.update(this.scene, spawnBounds);
-    if (ROAD_DEBUG) this.roadDebugLayer.update(this.scene, this.grid, cars);
+    if (ROAD_DEBUG) this.roadDebugLayer.update(this.scene, this.grid, cars, businesses);
     if (CAR_ROUTE_DEBUG && isPaused) this.carRouteDebugLayer.update(this.scene, cars, houses, businesses, mouseWorldX, mouseWorldY);
     else if (CAR_ROUTE_DEBUG && !isPaused) this.carRouteDebugLayer.clear(this.scene);
     // Render
