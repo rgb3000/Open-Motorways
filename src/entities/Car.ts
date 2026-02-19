@@ -9,6 +9,8 @@ export const CarState = {
   Stranded: 3,
   Unloading: 4,
   WaitingToExit: 5,
+  ParkingIn: 6,
+  ParkingOut: 7,
 } as const;
 export type CarState = (typeof CarState)[keyof typeof CarState];
 
@@ -51,6 +53,10 @@ export class Car {
   // Parking
   assignedSlotIndex: number | null = null;
   unloadTimer = 0;
+  parkingPath: { x: number; y: number }[] = [];
+  parkingCumDist: number[] = [];
+  parkingProgress = 0;
+  pendingHomePath: PathStep[] | null = null;
 
   // Rendering interpolation
   pixelPos: PixelPos;

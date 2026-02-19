@@ -48,7 +48,7 @@ export class CarTrafficManager {
     const occupied = this._occupiedMap;
     occupied.clear();
     for (const car of cars) {
-      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.state === CarState.WaitingToExit || car.path.length < 2) continue;
+      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.state === CarState.WaitingToExit || car.state === CarState.ParkingIn || car.state === CarState.ParkingOut || car.path.length < 2) continue;
       if (car.onHighway) continue; // skip cars on highways
 
       const currentStep = car.path[car.pathIndex];
@@ -75,7 +75,7 @@ export class CarTrafficManager {
     intersectionMap.clear();
 
     for (const car of cars) {
-      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.state === CarState.WaitingToExit || car.path.length < 2) continue;
+      if (car.state === CarState.Idle || car.state === CarState.Stranded || car.state === CarState.Unloading || car.state === CarState.WaitingToExit || car.state === CarState.ParkingIn || car.state === CarState.ParkingOut || car.path.length < 2) continue;
       if (car.onHighway) continue;
 
       const curStep = car.path[car.pathIndex];

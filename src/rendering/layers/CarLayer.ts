@@ -37,8 +37,8 @@ export class CarLayer {
   private bedSideGeometry: THREE.BoxGeometry;
   private bedRearGeometry: THREE.BoxGeometry;
   private bumperGeometry: THREE.BoxGeometry;
-  private loadGeometry: THREE.ExtrudeGeometry;
-  private loadMaterial: THREE.MeshStandardMaterial;
+  private loadGeometry: THREE.SphereGeometry;
+  private loadMaterialCache = new Map<GameColor, THREE.MeshStandardMaterial>();
   private bumperMaterial: THREE.MeshStandardMaterial;
   private tireGeometry: THREE.CylinderGeometry;
   private tireMaterial: THREE.MeshStandardMaterial;
@@ -71,11 +71,8 @@ export class CarLayer {
     this.bumperGeometry = new THREE.BoxGeometry(0.4, 0.8, CAR_WIDTH + 0.4);
     this.bumperMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
 
-    // Load cargo in the bed
-    const loadShape = roundedRectShape(bedLen * 0.55, CAR_WIDTH * 0.55, 0.5);
-    this.loadGeometry = new THREE.ExtrudeGeometry(loadShape, { depth: 2.2, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 1, curveSegments: 3 });
-    this.loadGeometry.rotateX(-Math.PI / 2);
-    this.loadMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    // Load cargo — shiny sphere matching car color (like demand pins)
+    this.loadGeometry = new THREE.SphereGeometry(5, 16, 12);
 
     // Tires
     const tireRadius = 1.2;
@@ -90,6 +87,19 @@ export class CarLayer {
     if (!mat) {
       mat = new THREE.MeshStandardMaterial({ color: COLOR_MAP[color] });
       this.materialCache.set(color, mat);
+    }
+    return mat;
+  }
+
+  private getLoadMaterial(color: GameColor): THREE.MeshStandardMaterial {
+    let mat = this.loadMaterialCache.get(color);
+    if (!mat) {
+      const hexColor = COLOR_MAP[color];
+      mat = new THREE.MeshStandardMaterial({
+        color: hexColor, metalness: 0.6, roughness: 0.25,
+        emissive: hexColor, emissiveIntensity: 0.15,
+      });
+      this.loadMaterialCache.set(color, mat);
     }
     return mat;
   }
@@ -152,10 +162,10 @@ export class CarLayer {
         rearBumper.position.set(bedOffsetX - CAR_LENGTH * 0.26 - 0.2, 0.3, 0);
         group.add(rearBumper);
 
-        // Load (cargo in the bed, child index 7)
-        const load = new THREE.Mesh(this.loadGeometry, this.loadMaterial);
+        // Load (pin sphere in the bed, child index 8)
+        const load = new THREE.Mesh(this.loadGeometry, this.getLoadMaterial(car.color));
         load.castShadow = true;
-        load.position.set(bedOffsetX, 1.5, 0);
+        load.position.set(bedOffsetX, 6, 0);
         load.visible = false;
         group.add(load);
 
@@ -181,7 +191,7 @@ export class CarLayer {
 
       // Toggle load visibility based on car state (load is child index 8)
       const load = group.children[8];
-      load.visible = car.state === CarState.GoingHome;
+      load.visible = car.state === CarState.GoingHome || car.state === CarState.ParkingOut;
 
       // Interpolate position
       const x = lerp(car.prevPixelPos.x, car.pixelPos.x, alpha);
@@ -233,7 +243,10 @@ export class CarLayer {
     this.bumperGeometry.dispose();
     this.bumperMaterial.dispose();
     this.loadGeometry.dispose();
-    this.loadMaterial.dispose();
+    for (const [, mat] of this.loadMaterialCache) {
+      mat.dispose();
+    }
+    this.loadMaterialCache.clear();
     this.tireGeometry.dispose();
     this.tireMaterial.dispose();
     for (const [, mat] of this.materialCache) {

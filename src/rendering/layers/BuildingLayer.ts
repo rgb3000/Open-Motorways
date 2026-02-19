@@ -41,8 +41,7 @@ export class BuildingLayer {
   private bizPlateGeomV: THREE.ExtrudeGeometry;
   private bizLotGeom: THREE.ExtrudeGeometry;
   private bizSlotGeom: THREE.BoxGeometry;
-  private bizPinGeom: THREE.CircleGeometry;
-  private bizPinOutlineGeom: THREE.RingGeometry;
+  private bizPinGeom: THREE.SphereGeometry;
 
   // Parked car prototype geometries (simplified pickup truck)
   private parkedCabGeom: THREE.ExtrudeGeometry;
@@ -98,8 +97,6 @@ export class BuildingLayer {
   private lotMat = new THREE.MeshStandardMaterial({ color: '#888888' });
   private chimneyMat = new THREE.MeshStandardMaterial({ color: '#666666' });
   private slotMat = new THREE.MeshStandardMaterial({ color: '#CCCCCC' });
-  private pinMat = new THREE.MeshBasicMaterial({ color: 0xE74C3C });
-  private pinOutlineMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
 
   constructor() {
     const plateSize = TILE_SIZE * 0.7;
@@ -158,9 +155,8 @@ export class BuildingLayer {
     const slotD = lotSize * 0.4;
     this.bizSlotGeom = new THREE.BoxGeometry(slotW, 0.05, slotD);
 
-    // Demand pins (flat circles with outline)
-    this.bizPinGeom = new THREE.CircleGeometry(2.5, 12);
-    this.bizPinOutlineGeom = new THREE.RingGeometry(2.5, 3.2, 12);
+    // Demand pins (3D spheres)
+    this.bizPinGeom = new THREE.SphereGeometry(5, 16, 12);
 
     // Parked car geometries (simplified pickup truck matching CarLayer style)
     const parkedCabLen = CAR_LENGTH * 0.38;
@@ -259,14 +255,10 @@ export class BuildingLayer {
       for (let i = 0; i < MAX_DEMAND_PINS; i++) {
         const visible = i < biz.demandPins;
         pins[i].visible = visible;
-        const outline = (pins[i] as any)._outline as THREE.Mesh | undefined;
-        if (outline) outline.visible = visible;
         if (visible && shouldPulse) {
-          pins[i].scale.set(pulseScale, pulseScale, 1);
-          if (outline) outline.scale.set(pulseScale, pulseScale, 1);
+          pins[i].scale.set(pulseScale, pulseScale, pulseScale);
         } else if (visible) {
           pins[i].scale.set(1, 1, 1);
-          if (outline) outline.scale.set(1, 1, 1);
         }
       }
     }
@@ -423,8 +415,18 @@ export class BuildingLayer {
 
     const buildingSize = TILE_SIZE * 0.75;
     const buildingHeight = 14;
-    const buildingPx = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
-    const buildingPz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
+    const baseBuildingPx = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
+    const baseBuildingPz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
+
+    // Shift building away from connector (toward opposite edge of its cell)
+    const lotPxRaw = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
+    const lotPzRaw = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
+    const awayDx = baseBuildingPx - lotPxRaw;
+    const awayDz = baseBuildingPz - lotPzRaw;
+    const awayLen = Math.sqrt(awayDx * awayDx + awayDz * awayDz) || 1;
+    const buildingShift = TILE_SIZE * 0.15;
+    const buildingPx = baseBuildingPx + (awayDx / awayLen) * buildingShift;
+    const buildingPz = baseBuildingPz + (awayDz / awayLen) * buildingShift;
 
     // Body (cloned from prototype)
     const body = new THREE.Mesh(this.bizBodyGeom.clone(), mat);
@@ -479,29 +481,45 @@ export class BuildingLayer {
       group.add(slot);
     }
 
-    // Demand pins — flat circles in a row on top of the building
-    const pinSpacing = 8;
-    const totalWidth = (MAX_DEMAND_PINS - 1) * pinSpacing;
-    const pinY = buildingHeight + 5 + 1.6; // above tower
+    // Per-business pin material (matches business color, shiny)
+    const pinMat = new THREE.MeshStandardMaterial({
+      color: hexColor, metalness: 0.6, roughness: 0.25,
+      emissive: hexColor, emissiveIntensity: 0.15,
+    });
+    group.userData.pinMat = pinMat;
+
+    // Demand pins — 3D spheres in a 2x4 grid between building and parking lot
+    // Shifted toward connector (70% toward lot from building)
+    const pinSpacing = 11;
+    const pinY = 5; // sphere center sits on ground + radius
+    const pinCenterT = 0.7; // 0=building, 1=lot
+    const pinAnchorX = buildingPx + (lotPx - buildingPx) * pinCenterT;
+    const pinAnchorZ = buildingPz + (lotPz - buildingPz) * pinCenterT;
     const pins: THREE.Mesh[] = [];
+
+    // Major axis: direction from building to parking lot
+    const majorDx = lotPx - buildingPx;
+    const majorDz = lotPz - buildingPz;
+    const majorLen = Math.sqrt(majorDx * majorDx + majorDz * majorDz) || 1;
+    const majX = majorDx / majorLen;
+    const majZ = majorDz / majorLen;
+    // Minor axis: perpendicular
+    const minX = -majZ;
+    const minZ = majX;
+
     for (let i = 0; i < MAX_DEMAND_PINS; i++) {
-      const px = buildingPx - totalWidth / 2 + i * pinSpacing;
-      const pz = buildingPz;
+      const col = i % 2;       // 0 or 1 (minor axis)
+      const row = (i / 2) | 0; // 0..3 (major axis)
+      const colOffset = (col - 0.5) * pinSpacing;
+      const rowOffset = (row - 1.5) * pinSpacing;
+      const px = pinAnchorX + majX * rowOffset + minX * colOffset;
+      const pz = pinAnchorZ + majZ * rowOffset + minZ * colOffset;
 
-      // White outline ring
-      const outline = new THREE.Mesh(this.bizPinOutlineGeom, this.pinOutlineMat);
-      outline.rotation.x = -Math.PI / 2;
-      outline.position.set(px, pinY + 0.01, pz);
-      outline.visible = false;
-      group.add(outline);
-
-      // Red fill circle
-      const pin = new THREE.Mesh(this.bizPinGeom, this.pinMat);
-      pin.rotation.x = -Math.PI / 2;
-      pin.position.set(px, pinY + 0.02, pz);
+      // Colored fill sphere
+      const pin = new THREE.Mesh(this.bizPinGeom, pinMat);
+      pin.position.set(px, pinY, pz);
+      pin.castShadow = true;
       pin.visible = false;
-      // Store reference to outline so we can toggle both
-      (pin as any)._outline = outline;
       group.add(pin);
       pins.push(pin);
     }
@@ -515,13 +533,10 @@ export class BuildingLayer {
     this.sharedResources.add(this.plateMat);
     this.sharedResources.add(this.lotMat);
     this.sharedResources.add(this.slotMat);
-    this.sharedResources.add(this.pinMat);
     this.sharedResources.add(this.chimneyMat);
     this.sharedResources.add(this.bizChimneyGeom);
     this.sharedResources.add(this.bizSlotGeom);
     this.sharedResources.add(this.bizPinGeom);
-    this.sharedResources.add(this.bizPinOutlineGeom);
-    this.sharedResources.add(this.pinOutlineMat);
     this.sharedResources.add(this.parkedCabGeom);
     this.sharedResources.add(this.parkedBedGeom);
     this.sharedResources.add(this.parkedBedSideGeom);
@@ -536,6 +551,10 @@ export class BuildingLayer {
         if (!this.sharedResources.has(mat)) mat.dispose();
       }
     });
+    // Dispose per-business pin material if present
+    if (group.userData.pinMat) {
+      (group.userData.pinMat as THREE.Material).dispose();
+    }
   }
 
   dispose(scene: THREE.Scene): void {
@@ -570,13 +589,10 @@ export class BuildingLayer {
     this.bizChimneyGeom.dispose();
     this.bizSlotGeom.dispose();
     this.bizPinGeom.dispose();
-    this.bizPinOutlineGeom.dispose();
-    this.pinOutlineMat.dispose();
     this.plateMat.dispose();
     this.plateNoiseTexture.dispose();
     this.lotMat.dispose();
     this.slotMat.dispose();
-    this.pinMat.dispose();
     this.chimneyMat.dispose();
     this.parkedCabGeom.dispose();
     this.parkedBedGeom.dispose();

@@ -67,7 +67,8 @@ export class CarSystem {
 
   onRoadsChanged(houses: House[]): void {
     for (const car of this.cars) {
-      if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) continue;
+      if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
+          car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) continue;
       if (car.state !== CarState.Stranded) continue;
 
       const currentTile = this.router.getCarCurrentTile(car);
@@ -169,6 +170,14 @@ export class CarSystem {
           this.exitCooldowns,
           (bizId) => { this.exitCooldowns.set(bizId, PARKING_EXIT_DELAY); },
         );
+        continue;
+      }
+      if (car.state === CarState.ParkingIn) {
+        this.parkingManager.updateParkingInCar(car, dt);
+        continue;
+      }
+      if (car.state === CarState.ParkingOut) {
+        this.parkingManager.updateParkingOutCar(car, dt, houses, bizMap, toRemove);
         continue;
       }
       this.movement.updateSingleCar(

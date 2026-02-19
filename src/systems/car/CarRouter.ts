@@ -114,7 +114,8 @@ export class CarRouter {
   }
 
   rerouteCar(car: Car, houses: House[]): void {
-    if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) return;
+    if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
+        car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) return;
 
     const currentTile = this.getCarCurrentTile(car);
     const home = houses.find(h => h.id === car.homeHouseId);

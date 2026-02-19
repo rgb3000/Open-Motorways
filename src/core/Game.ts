@@ -392,7 +392,8 @@ export class Game {
             break;
           }
         }
-      } else if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit) {
+      } else if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
+                 car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) {
         for (const step of car.outboundPath) {
           const p = stepGridPos(step);
           if (p.gx === gx && p.gy === gy) {
