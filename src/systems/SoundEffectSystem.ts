@@ -110,12 +110,17 @@ export class SoundEffectSystem {
     this.spawnSynth.triggerAttack('C1', t);
   }
 
+  private lastWarnTime = 0;
+
   playDemandWarning(): void {
     if (!this.initialized) return;
     const now = Tone.now();
+    // Ensure each trigger is strictly after the previous one (mono synth requirement)
+    const t = Math.max(now, this.lastWarnTime + 0.05);
+    this.lastWarnTime = t + 0.07;
     // Two quick chirps with rising pitch, like a bird
-    this.warnSynth.triggerAttackRelease('A5', 0.04, now);
-    this.warnSynth.triggerAttackRelease('D6', 0.04, now + 0.07);
+    this.warnSynth.triggerAttackRelease('A5', 0.04, t);
+    this.warnSynth.triggerAttackRelease('D6', 0.04, t + 0.07);
   }
 
   dispose(): void {

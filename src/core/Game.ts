@@ -500,7 +500,7 @@ export class Game {
     if (hasWarning) {
       const sinVal = Math.sin(Date.now() * 0.006);
       if (sinVal >= 0 && this.demandWarnPrevSin < 0) {
-        this.soundEffects.playDemandWarning();
+        try { this.soundEffects.playDemandWarning(); } catch { /* audio timing glitch — non-fatal */ }
       }
       this.demandWarnPrevSin = sinVal;
     } else {
