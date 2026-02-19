@@ -25,7 +25,18 @@ export const CAR_WIDTH = TILE_SIZE * 0.15;       // px (narrow dimension, perpen
 export const CAR_LENGTH = TILE_SIZE * 0.32;      // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.7;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
-export const SAME_LANE_DEADLOCK_TIMEOUT = 3.0; // seconds
+export const SAME_LANE_DEADLOCK_TIMEOUT = 5.0; // seconds (safety net only, arc-length following handles normal cases)
+
+// Arc-length following distance
+export const CAR_MIN_GAP = TILE_SIZE * 0.4;          // ~20px minimum bumper gap
+export const CAR_COMFORT_GAP = TILE_SIZE * 1.5;      // ~75px full-speed gap
+
+// Intersection approach deceleration
+export const INTERSECTION_STOP_DIST = TILE_SIZE * 0.3;   // stop distance before conflict point (px)
+export const INTERSECTION_DECEL_DIST = TILE_SIZE * 2.0;  // start decelerating distance (px)
+
+// T-intersection gap acceptance
+export const T_INTERSECTION_GAP_TIME = 2.0;  // seconds of clear gap needed on major road
 export const PARKING_WAIT_TIMEOUT = 4.0; // seconds
 export const UNIVERSAL_STUCK_TIMEOUT = 8.0; // seconds
 export const BEZIER_KAPPA = 0.5522847498; // 4*(√2-1)/3, quarter-circle Bezier approximation

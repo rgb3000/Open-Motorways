@@ -51,6 +51,10 @@ export class CarRouter {
     car.parkingWaitTime = 0;
     car.stuckTimer = 0;
     car.lastAdvancedPathIndex = 0;
+    car.arcDistance = 0;
+    car.currentSpeed = 0;
+    car.leaderId = null;
+    car.leaderGap = Infinity;
 
     if (path.length >= 2) {
       const gridPositions = this.extractLeadingGridPositions(path, 0);
@@ -169,6 +173,10 @@ export class CarRouter {
     car.smoothPath = [];
     car.smoothCumDist = [];
     car.smoothCellDist = [];
+    car.arcDistance = 0;
+    car.currentSpeed = 0;
+    car.leaderId = null;
+    car.leaderGap = Infinity;
     const center = gridToPixelCenter(currentTile);
     car.pixelPos.x = center.x;
     car.pixelPos.y = center.y;

@@ -7,7 +7,7 @@ import { CellType } from '../../types';
 import { getDirection, directionToLane } from '../../utils/direction';
 import { sampleAtDistance } from '../../utils/roadGeometry';
 import type { CarTrafficManager } from './CarTrafficManager';
-import { occupancyKey, isIntersection } from './CarTrafficManager';
+import { occupancyKey, isIntersection, followingSpeedMultiplier } from './CarTrafficManager';
 import type { IntersectionEntry } from './CarTrafficManager';
 import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
@@ -112,14 +112,16 @@ export class CarMovement {
       && nextStep.kind === 'grid'
       && isIntersection(this.grid, nextTile.gx, nextTile.gy);
     const { effectiveSpeed, segmentLength } = this.trafficManager.computeEffectiveSpeed(currentTile, nextTile, dir);
-    const tileDistance = (effectiveSpeed * dt) / segmentLength;
+    // Apply arc-length following + intersection yield as speed multipliers
+    const followingMult = followingSpeedMultiplier(car.leaderGap);
+    const intersectionMult = this.trafficManager.computeIntersectionYield(
+      car, dt, nextTile, dir, isNextIntersection, intersectionMap,
+    );
+    const desiredSpeed = effectiveSpeed * Math.min(followingMult, intersectionMult);
+    car.currentSpeed = desiredSpeed * TILE_SIZE; // store in px/sec for reference
+    const tileDistance = (desiredSpeed * dt) / segmentLength;
     const rawProgress = car.segmentProgress + tileDistance;
     let newProgress = rawProgress;
-
-    newProgress = this.trafficManager.applyCollisionAndYield(
-      car, dt, newProgress, nextTile,
-      dir, lane, isNextIntersection, occupied, intersectionMap,
-    );
 
     // Block car on connector tile if parking lot is full
     if (car.state === CarState.GoingToBusiness && car.pathIndex === car.path.length - 2) {
@@ -135,7 +137,8 @@ export class CarMovement {
     }
 
     car.segmentProgress = newProgress;
-    car.wasBlocked = newProgress < rawProgress - 0.001;
+    const speedMult = Math.min(followingMult, intersectionMult);
+    car.wasBlocked = speedMult < 0.1 || newProgress < rawProgress - 0.001;
 
     // Advance through path segments
     while (car.segmentProgress >= 1 && car.pathIndex < car.path.length - 1) {
@@ -208,6 +211,13 @@ export class CarMovement {
         car.prevPixelPos.y = car.pixelPos.y;
         car.prevRenderAngle = car.renderAngle;
       }
+    }
+
+    // Update arc-length distance along smooth path
+    if (car.smoothCellDist.length > car.pathIndex + 1) {
+      const segStart = car.smoothCellDist[car.pathIndex];
+      const segEnd = car.smoothCellDist[car.pathIndex + 1];
+      car.arcDistance = segStart + car.segmentProgress * (segEnd - segStart);
     }
 
     // Register car in new occupancy position

@@ -10,6 +10,7 @@ import { CarTrafficManager } from './car/CarTrafficManager';
 import { CarParkingManager } from './car/CarParkingManager';
 import { CarDispatcher } from './car/CarDispatcher';
 import { CarMovement } from './car/CarMovement';
+import { CarLeaderIndex } from './car/CarLeaderIndex';
 import type { PendingDeletionSystem } from './PendingDeletionSystem';
 import type { HighwaySystem } from './HighwaySystem';
 
@@ -26,6 +27,7 @@ export class CarSystem {
   private parkingManager: CarParkingManager;
   private dispatcher: CarDispatcher;
   private movement: CarMovement;
+  private leaderIndex: CarLeaderIndex;
   private pendingDeletionSystem: PendingDeletionSystem;
   private grid: Grid;
 
@@ -44,6 +46,7 @@ export class CarSystem {
     this.dispatcher = new CarDispatcher(pathfinder, this.router);
     this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem);
     this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem, highwaySystem);
+    this.leaderIndex = new CarLeaderIndex();
   }
 
   getCars(): Car[] {
@@ -137,6 +140,8 @@ export class CarSystem {
   }
 
   private moveCars(dt: number, houses: House[], businesses: Business[], occupied: Map<string, string>): void {
+    this.trafficManager.advanceFrameTime(dt);
+
     for (const [bizId, cd] of this.exitCooldowns) {
       const remaining = cd - dt;
       if (remaining <= 0) {
@@ -152,6 +157,13 @@ export class CarSystem {
       bizMap.set(biz.id, biz);
     }
     const intersectionMap = this.trafficManager.buildIntersectionMap(this.cars);
+
+    // Build leader index and find leader for each car
+    this.leaderIndex.rebuild(this.cars);
+    for (const car of this.cars) {
+      this.leaderIndex.findLeader(car);
+    }
+
     const toRemove = this._toRemove;
     toRemove.length = 0;
 
