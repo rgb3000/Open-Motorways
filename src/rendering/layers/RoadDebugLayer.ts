@@ -6,7 +6,7 @@ import { CarState } from '../../entities/Car';
 import { CellType, Direction } from '../../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../../constants';
 import { stepGridPos } from '../../systems/car/CarRouter';
-import { laneOffset, opposite } from '../../utils/direction';
+import { laneOffset, opposite, DIRECTION_OFFSETS } from '../../utils/direction';
 import { getBusinessLayout } from '../../utils/businessLayout';
 
 const OUTLINE_Y = 0.6;
@@ -79,12 +79,17 @@ export class RoadDebugLayer {
       const connCZ = biz.connectorPos.gy * TILE_SIZE + half;
       const connToParkDir = biz.getConnectorToParkingDir();
 
+      // Start curves at the cell edge (boundary between connector and parking lot)
+      const dirOff = DIRECTION_OFFSETS[connToParkDir];
+      const edgeX = connCX + dirOff.gx * half;
+      const edgeZ = connCZ + dirOff.gy * half;
+
       const entryOff = laneOffset(connToParkDir);
       const exitOff = laneOffset(opposite(connToParkDir));
-      const entryX = connCX + entryOff.x;
-      const entryZ = connCZ + entryOff.y;
-      const exitX = connCX + exitOff.x;
-      const exitZ = connCZ + exitOff.y;
+      const entryX = edgeX + entryOff.x;
+      const entryZ = edgeZ + entryOff.y;
+      const exitX = edgeX + exitOff.x;
+      const exitZ = edgeZ + exitOff.y;
 
       const isVertical = connToParkDir === Direction.Up || connToParkDir === Direction.Down;
 

@@ -44,6 +44,24 @@ function sampleAtDistance(
   return path[path.length - 1];
 }
 
+function sampleQuadraticBezier(
+  p0: { x: number; y: number },
+  cp: { x: number; y: number },
+  p1: { x: number; y: number },
+  segments: number,
+): { x: number; y: number }[] {
+  const points: { x: number; y: number }[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const u = 1 - t;
+    points.push({
+      x: u * u * p0.x + 2 * u * t * cp.x + t * t * p1.x,
+      y: u * u * p0.y + 2 * u * t * cp.y + t * t * p1.y,
+    });
+  }
+  return points;
+}
+
 // Compute parking slot offsets relative to lot cell center using layout system
 export function getParkingSlotOffsets(biz: Business): { x: number; y: number }[] {
   const slots = getParkingSlotLayout({
@@ -127,12 +145,16 @@ export class CarParkingManager {
         // Store home path for after ParkingOut completes
         car.pendingHomePath = homePath;
 
-        // Build exit mini-path: slot → lot center → connector center
+        // Build smooth Bezier exit path: slot → connector center
+        // Control point is the L-corner: shares one axis with slot, other with connector
         const slotPos = { x: car.pixelPos.x, y: car.pixelPos.y };
-        const lotCenter = gridToPixelCenter(biz.parkingLotPos);
         const connectorCenter = gridToPixelCenter(biz.connectorPos);
+        const isVerticalEntry = biz.connectorPos.gx === biz.parkingLotPos.gx;
+        const cp = isVerticalEntry
+          ? { x: connectorCenter.x, y: slotPos.y }
+          : { x: slotPos.x, y: connectorCenter.y };
 
-        car.parkingPath = [slotPos, { x: lotCenter.x, y: lotCenter.y }, { x: connectorCenter.x, y: connectorCenter.y }];
+        car.parkingPath = sampleQuadraticBezier(slotPos, cp, connectorCenter, 16);
         car.parkingCumDist = computeCumDist(car.parkingPath);
         car.parkingProgress = 0;
         car.state = CarState.ParkingOut;
@@ -175,13 +197,18 @@ export class CarParkingManager {
       car.pathIndex = 0;
       car.segmentProgress = 0;
 
-      // Build mini-path: current position → lot center → slot position
+      // Build smooth Bezier path: current position → slot position
+      // Control point is the L-corner: shares one axis with start, other with end
       const lotCenter = gridToPixelCenter(biz.parkingLotPos);
       const slotOffset = getParkingSlotOffsets(biz)[slotIndex];
       const slotPos = { x: lotCenter.x + slotOffset.x, y: lotCenter.y + slotOffset.y };
       const currentPos = { x: car.pixelPos.x, y: car.pixelPos.y };
+      const isVerticalEntry = biz.connectorPos.gx === biz.parkingLotPos.gx;
+      const cp = isVerticalEntry
+        ? { x: currentPos.x, y: slotPos.y }
+        : { x: slotPos.x, y: currentPos.y };
 
-      car.parkingPath = [currentPos, { x: lotCenter.x, y: lotCenter.y }, slotPos];
+      car.parkingPath = sampleQuadraticBezier(currentPos, cp, slotPos, 16);
       car.parkingCumDist = computeCumDist(car.parkingPath);
       car.parkingProgress = 0;
       car.state = CarState.ParkingIn;
