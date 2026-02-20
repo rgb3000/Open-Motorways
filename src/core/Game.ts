@@ -57,7 +57,8 @@ export class Game {
   private state: GameState = GameState.Playing;
   private elapsedTime = 0;
   private money: number;
-  private stateCallback: ((state: GameState, score: number, time: number, money: number, demandStats: DemandStat[] | null) => void) | null = null;
+  private timeScale: number = 1;
+  private stateCallback: ((state: GameState, score: number, time: number, money: number, demandStats: DemandStat[] | null, gameDay: number, timeScale: number) => void) | null = null;
   private spaceDown = false;
   private isPanning = false;
   private lastPanX = 0;
@@ -139,6 +140,7 @@ export class Game {
       if (e.key === 'r' || e.key === 'R') this.setActiveTool(Tool.Road);
       if (e.key === 'e' || e.key === 'E') this.setActiveTool(Tool.Eraser);
       if (e.key === 'h' || e.key === 'H') this.setActiveTool(Tool.Highway);
+      if (e.key === 'f' || e.key === 'F') this.toggleSpeed();
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
         this.spaceDown = true;
@@ -257,8 +259,20 @@ export class Game {
     };
   }
 
-  onStateUpdate(cb: (state: GameState, score: number, time: number, money: number, demandStats: DemandStat[] | null) => void): void {
+  onStateUpdate(cb: (state: GameState, score: number, time: number, money: number, demandStats: DemandStat[] | null, gameDay: number, timeScale: number) => void): void {
     this.stateCallback = cb;
+  }
+
+  getGameDay(): number {
+    return Math.floor(this.elapsedTime / this.cfg.DAY_LENGTH_SECONDS) + 1;
+  }
+
+  getTimeScale(): number {
+    return this.timeScale;
+  }
+
+  toggleSpeed(): void {
+    this.timeScale = this.timeScale === 1 ? 2 : 1;
   }
 
   private async initAudio(): Promise<void> {
@@ -304,6 +318,7 @@ export class Game {
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
+    this.timeScale = 1;
     if (this.mapConfig?.houses || this.mapConfig?.businesses) {
       this.placePreDefinedEntities();
     } else {
@@ -487,15 +502,16 @@ export class Game {
     // Game simulation — only when playing
     if (this.state !== GameState.Playing) return;
 
-    this.elapsedTime += dt;
-    this.spawnSystem.update(dt);
+    const scaledDt = dt * this.timeScale;
+    this.elapsedTime += scaledDt;
+    this.spawnSystem.update(scaledDt);
 
     if (this.spawnSystem.isDirty) {
       this.renderer.markGroundDirty();
       this.spawnSystem.clearDirty();
     }
 
-    this.demandSystem.update(dt, this.spawnSystem.getBusinesses());
+    this.demandSystem.update(scaledDt, this.spawnSystem.getBusinesses());
     // Chirp in sync with pulse animation (sin wave crossing from negative to positive)
     const hasWarning = this.spawnSystem.getBusinesses().some(b => b.demandPins >= this.cfg.MAX_DEMAND_PINS - 2);
     if (hasWarning) {
@@ -507,7 +523,7 @@ export class Game {
     } else {
       this.demandWarnPrevSin = 0;
     }
-    this.carSystem.update(dt, this.spawnSystem.getHouses(), this.spawnSystem.getBusinesses());
+    this.carSystem.update(scaledDt, this.spawnSystem.getHouses(), this.spawnSystem.getBusinesses());
     this.pendingDeletionSystem.update();
 
     if (this.demandSystem.isGameOver) {
@@ -543,7 +559,7 @@ export class Game {
         businesses: this.spawnSystem.getBusinesses().filter(b => b.color === color).length,
       }));
     }
-    this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money, demandStats);
+    this.stateCallback?.(this.state, this.carSystem.getScore(), this.elapsedTime, this.money, demandStats, this.getGameDay(), this.timeScale);
   }
 
   private onResize(): void {

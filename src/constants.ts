@@ -79,6 +79,9 @@ export const HIGHWAY_REFUND = 150;
 export const HIGHWAY_SPEED_MULTIPLIER = 2.0;
 export const HIGHWAY_PEAK_Y = 35;
 
+// Day length
+export const DAY_LENGTH_SECONDS = 120; // 2 minutes = 1 game day at 1x speed
+
 // Colors - map GameColor enum to hex
 export const COLOR_MAP: Record<GameColor, string> = {
   [GameColor.Red]: '#E74C3C',
@@ -197,6 +200,7 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
   HIGHWAY_COST,
   HIGHWAY_REFUND,
   HIGHWAY_SPEED_MULTIPLIER,
+  DAY_LENGTH_SECONDS,
 };
 
 export function buildConfig(overrides?: Partial<GameConstants>): GameConstants {

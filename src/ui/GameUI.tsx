@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser, ArrowLeft, Route } from 'lucide-react';
+import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser, ArrowLeft, Route, FastForward } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Game, DemandStat } from '../core/Game';
 import { GameState, Tool } from '../types';
@@ -9,21 +9,23 @@ export function GameUI({ game }: { game: Game }) {
   const navigate = useNavigate();
   const [state, setState] = useState<GameState>(game.getState());
   const [score, setScore] = useState(0);
-  const [time, setTime] = useState(0);
   const [money, setMoney] = useState(game.getMoney());
   const [canUndo, setCanUndo] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTool, setActiveTool] = useState<Tool>(game.getActiveTool());
   const [demandStats, setDemandStats] = useState<DemandStat[] | null>(null);
+  const [gameDay, setGameDay] = useState(1);
+  const [timeScale, setTimeScale] = useState(1);
   useEffect(() => {
-    game.onStateUpdate((s, sc, t, m, ds) => {
+    game.onStateUpdate((s, sc, _t, m, ds, day, scale) => {
       setState(s);
       setScore(sc);
-      setTime(t);
       setMoney(m);
       setCanUndo(game.canUndo());
       setDemandStats(ds);
+      setGameDay(day);
+      setTimeScale(scale);
     });
     game.setOnUndoStateChange(() => setCanUndo(game.canUndo()));
     game.onToolChange((tool) => setActiveTool(tool));
@@ -41,13 +43,9 @@ export function GameUI({ game }: { game: Game }) {
   const handleToggleSettings = useCallback(() => setSettingsOpen(o => !o), []);
   const handleBack = useCallback(() => navigate('/'), [navigate]);
 
-  const minutes = Math.floor(time / 60);
-  const seconds = Math.floor(time % 60);
-  const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-
   return (
     <div className="absolute inset-0 pointer-events-none">
-      <HUD score={score} money={money} time={timeStr} state={state} onPause={() => game.togglePause()} canUndo={canUndo} onUndo={handleUndo} onToggleSettings={handleToggleSettings} onBack={handleBack} />
+      <HUD score={score} money={money} gameDay={gameDay} timeScale={timeScale} state={state} onPause={() => game.togglePause()} onToggleSpeed={() => game.toggleSpeed()} canUndo={canUndo} onUndo={handleUndo} onToggleSettings={handleToggleSettings} onBack={handleBack} />
       {(state === GameState.Playing || state === GameState.Paused) && (
         <Toolbar activeTool={activeTool} onSelectTool={(tool) => game.setActiveTool(tool)} />
       )}
@@ -64,7 +62,7 @@ export function GameUI({ game }: { game: Game }) {
   );
 }
 
-function HUD({ score, money, time, state, onPause, canUndo, onUndo, onToggleSettings, onBack }: { score: number; money: number; time: string; state: GameState; onPause: () => void; canUndo: boolean; onUndo: () => void; onToggleSettings: () => void; onBack: () => void }) {
+function HUD({ score, money, gameDay, timeScale, state, onPause, onToggleSpeed, canUndo, onUndo, onToggleSettings, onBack }: { score: number; money: number; gameDay: number; timeScale: number; state: GameState; onPause: () => void; onToggleSpeed: () => void; canUndo: boolean; onUndo: () => void; onToggleSettings: () => void; onBack: () => void }) {
   return (
     <div className="flex justify-between items-start p-2.5">
       <div className="flex items-start gap-2.5">
@@ -86,7 +84,7 @@ function HUD({ score, money, time, state, onPause, canUndo, onUndo, onToggleSett
       </div>
       <div className="flex items-center gap-2.5">
         <span className="text-black font-bold font-mono text-lg">
-          {time}
+          Day {gameDay}
         </span>
         <button
           onClick={onUndo}
@@ -95,6 +93,14 @@ function HUD({ score, money, time, state, onPause, canUndo, onUndo, onToggleSett
           className={`pointer-events-auto bg-transparent border-none p-0 flex items-center ${canUndo ? 'text-black cursor-pointer' : 'text-[#bbb] cursor-default'}`}
         >
           <Undo2 size={18} />
+        </button>
+        <button
+          onClick={onToggleSpeed}
+          title="Toggle speed (F)"
+          className={`pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center gap-0.5 ${timeScale > 1 ? 'text-orange-500' : 'text-black'}`}
+        >
+          <FastForward size={18} />
+          <span className="font-mono text-xs font-bold">{timeScale}x</span>
         </button>
         <button
           onClick={onPause}

@@ -80,6 +80,9 @@ export interface GameConstants {
   HIGHWAY_COST: number;
   HIGHWAY_REFUND: number;
   HIGHWAY_SPEED_MULTIPLIER: number;
+
+  // Day length
+  DAY_LENGTH_SECONDS: number;
 }
 
 export interface MapConfig {
