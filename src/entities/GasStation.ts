@@ -7,10 +7,8 @@ export type GasStationOrientation = 'horizontal' | 'vertical';
 
 export class GasStation {
   readonly id: string;
-  /** First station cell (closer to entry) */
+  /** Station cell (between entry and exit connectors) */
   readonly pos: GridPos;
-  /** Second station cell (closer to exit) */
-  readonly pos2: GridPos;
   readonly orientation: GasStationOrientation;
   readonly entryConnectorPos: GridPos;
   readonly exitConnectorPos: GridPos;
@@ -22,17 +20,15 @@ export class GasStation {
     this.orientation = orientation;
 
     if (orientation === 'horizontal') {
-      // Layout: [Entry] [Station1] [Station2] [Exit] — left to right
+      // Layout: [Entry] [Station] [Exit] — left to right
       this.entryConnectorPos = { gx: anchorPos.gx, gy: anchorPos.gy };
       this.pos = { gx: anchorPos.gx + 1, gy: anchorPos.gy };
-      this.pos2 = { gx: anchorPos.gx + 2, gy: anchorPos.gy };
-      this.exitConnectorPos = { gx: anchorPos.gx + 3, gy: anchorPos.gy };
+      this.exitConnectorPos = { gx: anchorPos.gx + 2, gy: anchorPos.gy };
     } else {
-      // Layout: [Entry(top)] [Station1] [Station2] [Exit(bottom)] — top to bottom
+      // Layout: [Entry(top)] [Station] [Exit(bottom)] — top to bottom
       this.entryConnectorPos = { gx: anchorPos.gx, gy: anchorPos.gy };
       this.pos = { gx: anchorPos.gx, gy: anchorPos.gy + 1 };
-      this.pos2 = { gx: anchorPos.gx, gy: anchorPos.gy + 2 };
-      this.exitConnectorPos = { gx: anchorPos.gx, gy: anchorPos.gy + 3 };
+      this.exitConnectorPos = { gx: anchorPos.gx, gy: anchorPos.gy + 2 };
     }
 
     this.parkingSlots = [];
@@ -41,9 +37,9 @@ export class GasStation {
     }
   }
 
-  /** Returns all 4 cell positions: [entry, station1, station2, exit] */
+  /** Returns all 3 cell positions: [entry, station, exit] */
   getCells(): GridPos[] {
-    return [this.entryConnectorPos, this.pos, this.pos2, this.exitConnectorPos];
+    return [this.entryConnectorPos, this.pos, this.exitConnectorPos];
   }
 
   getFreeParkingSlot(): number | null {

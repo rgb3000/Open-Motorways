@@ -65,8 +65,8 @@ export class GasStationPlacer {
 
   private canPlace(gx: number, gy: number, orientation: 'horizontal' | 'vertical'): boolean {
     const positions = orientation === 'horizontal'
-      ? [{ gx, gy }, { gx: gx + 1, gy }, { gx: gx + 2, gy }, { gx: gx + 3, gy }]
-      : [{ gx, gy }, { gx, gy: gy + 1 }, { gx, gy: gy + 2 }, { gx, gy: gy + 3 }];
+      ? [{ gx, gy }, { gx: gx + 1, gy }, { gx: gx + 2, gy }]
+      : [{ gx, gy }, { gx, gy: gy + 1 }, { gx, gy: gy + 2 }];
 
     for (const pos of positions) {
       if (!this.grid.inBounds(pos.gx, pos.gy)) return false;

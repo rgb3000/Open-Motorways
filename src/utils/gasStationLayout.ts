@@ -9,28 +9,26 @@ export type { Rect2D, Point2D };
 export interface GasStationLayoutInput {
   entryConnectorPos: GridPos;
   pos: GridPos;
-  pos2: GridPos;
   exitConnectorPos: GridPos;
   orientation: 'horizontal' | 'vertical';
 }
 
 export interface GasStationLayout {
-  groundPlate: Rect2D;        // all 4 cells
-  canopy: Rect2D;             // 2 station cells only
+  groundPlate: Rect2D;        // all 3 cells
+  canopy: Rect2D;             // inner space of entire ground plate
   parkingSlots: Rect2D[];     // slots within station cells
   entryPoint: Point2D;        // center of entry connector
   exitPoint: Point2D;         // center of exit connector
 }
 
 export function getGasStationLayout(input: GasStationLayoutInput): GasStationLayout {
-  const allCells = [input.entryConnectorPos, input.pos, input.pos2, input.exitConnectorPos];
+  const allCells = [input.entryConnectorPos, input.pos, input.exitConnectorPos];
   const groundPlate = computeGroundPlate(allCells);
 
-  // Canopy and parking slots within the inner space of the 2 station cells
-  const stationCells = [input.pos, input.pos2];
-  const stationPlate = computeGroundPlate(stationCells, CELL_MARGIN);
+  // Canopy spans the entire inner space; parking slots within station cell only
+  const canopy = computeInnerSpace(groundPlate, GROUND_PLATE_MARGIN);
+  const stationPlate = computeGroundPlate([input.pos], CELL_MARGIN);
   const innerSpace = computeInnerSpace(stationPlate, GROUND_PLATE_MARGIN);
-  const canopy = innerSpace;
   const axis = input.orientation === 'horizontal' ? 'x' : 'z';
   const parkingSlots = computeParkingSlots(innerSpace, GAS_STATION_PARKING_SLOTS, axis);
 
@@ -51,7 +49,6 @@ export function getGasStationParkingSlotOffsets(gs: GasStation): { x: number; y:
   const layout = getGasStationLayout({
     entryConnectorPos: gs.entryConnectorPos,
     pos: gs.pos,
-    pos2: gs.pos2,
     exitConnectorPos: gs.exitConnectorPos,
     orientation: gs.orientation,
   });

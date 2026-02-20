@@ -76,7 +76,6 @@ export class CarRefuelingManager {
     const layout = getGasStationLayout({
       entryConnectorPos: station.entryConnectorPos,
       pos: station.pos,
-      pos2: station.pos2,
       exitConnectorPos: station.exitConnectorPos,
       orientation: station.orientation,
     });

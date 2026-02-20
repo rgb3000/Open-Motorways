@@ -50,12 +50,8 @@ export class GasStationSystem {
       connectorDir: null,
     });
 
-    // Station cells
+    // Station cell
     this.grid.setCell(station.pos.gx, station.pos.gy, {
-      type: CellType.GasStation,
-      entityId: station.id,
-    });
-    this.grid.setCell(station.pos2.gx, station.pos2.gy, {
       type: CellType.GasStation,
       entityId: station.id,
     });

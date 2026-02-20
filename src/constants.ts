@@ -78,7 +78,7 @@ export const FUEL_CAPACITY = 80;
 export const REFUEL_TIME = 2;
 export const GAS_STATION_COST = 150;
 export const GAS_STATION_REFUND = 100;
-export const GAS_STATION_PARKING_SLOTS = 4;
+export const GAS_STATION_PARKING_SLOTS = 2;
 
 // Building layout (shared margin system)
 export const CELL_MARGIN = 7.5;          // ground plate edge inset from cell boundary (px)

@@ -543,7 +543,6 @@ export class BuildingLayer {
     const layout = getGasStationLayout({
       entryConnectorPos: gs.entryConnectorPos,
       pos: gs.pos,
-      pos2: gs.pos2,
       exitConnectorPos: gs.exitConnectorPos,
       orientation: gs.orientation,
     });
