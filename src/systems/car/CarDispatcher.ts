@@ -1,12 +1,16 @@
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
-import { Car, CarState } from '../../entities/Car';
+import type { Car } from '../../entities/Car';
+import { CarState } from '../../entities/Car';
 import type { Pathfinder } from '../../pathfinding/Pathfinder';
 import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
-import { manhattanDist } from '../../utils/math';
+import { manhattanDist, gridToPixelCenter } from '../../utils/math';
 import { getDirection, directionAngle, directionToLane } from '../../utils/direction';
 import { occupancyKey } from './CarTrafficManager';
+import { computePathFuelCost } from '../../pathfinding/pathCost';
+import type { GasStationSystem } from '../GasStationSystem';
+import type { HighwaySystem } from '../HighwaySystem';
 
 const DISPATCH_INTERVAL = 10; // only dispatch every N ticks (~6 Hz)
 
@@ -16,9 +20,14 @@ export class CarDispatcher {
   private _carsEnRoute = new Map<string, number>();
   private _tickCounter = 0;
 
-  constructor(pathfinder: Pathfinder, router: CarRouter) {
+  private gasStationSystem: GasStationSystem | null;
+  private highwaySystem: HighwaySystem | null;
+
+  constructor(pathfinder: Pathfinder, router: CarRouter, gasStationSystem?: GasStationSystem, highwaySystem?: HighwaySystem) {
     this.pathfinder = pathfinder;
     this.router = router;
+    this.gasStationSystem = gasStationSystem ?? null;
+    this.highwaySystem = highwaySystem ?? null;
   }
 
   dispatch(cars: Car[], houses: House[], businesses: Business[], occupied: Map<number, string>): Car[] {
@@ -32,7 +41,7 @@ export class CarDispatcher {
     const carsEnRoute = this._carsEnRoute;
     carsEnRoute.clear();
     for (const car of cars) {
-      if (car.state === CarState.GoingToBusiness && car.targetBusinessId) {
+      if ((car.state === CarState.GoingToBusiness || (car.state === CarState.GoingToGasStation && car.postRefuelIntent === 'business')) && car.targetBusinessId) {
         carsEnRoute.set(car.targetBusinessId, (carsEnRoute.get(car.targetBusinessId) ?? 0) + 1);
       }
     }
@@ -45,7 +54,7 @@ export class CarDispatcher {
       if (neededCars <= 0) continue;
 
       const availableHouses = houses
-        .filter(h => h.color === biz.color && h.availableCars > 0)
+        .filter(h => h.color === biz.color && h.carPool.length > 0)
         .sort((a, b) => manhattanDist(a.pos, biz.parkingLotPos) - manhattanDist(b.pos, biz.parkingLotPos));
 
       let dispatched = 0;
@@ -63,11 +72,44 @@ export class CarDispatcher {
         const spawnKey = occupancyKey(p0.gx, p0.gy, spawnLane);
         if (occupied.has(spawnKey)) continue;
 
-        const car = new Car(house.id, house.color, house.pos);
-        car.state = CarState.GoingToBusiness;
-        car.targetBusinessId = biz.id;
-        car.destination = biz.parkingLotPos;
-        this.router.assignPath(car, path);
+        // Check if car has enough fuel for the trip
+        const fuelCost = computePathFuelCost(path, this.highwaySystem);
+        const car = house.popCar();
+        if (!car) continue;
+
+        // Set pixel position to house location (car may have been elsewhere last)
+        const houseCenter = gridToPixelCenter(house.pos);
+        car.pixelPos.x = houseCenter.x;
+        car.pixelPos.y = houseCenter.y;
+        car.prevPixelPos.x = houseCenter.x;
+        car.prevPixelPos.y = houseCenter.y;
+
+        if (fuelCost > car.fuel && this.gasStationSystem) {
+          // Need to refuel first — find nearest gas station
+          const result = this.gasStationSystem.findNearestReachable(house.pos, this.pathfinder, this.highwaySystem);
+          if (result) {
+            const stationPath = this.pathfinder.findPath(house.pos, result.station.entryConnectorPos);
+            if (stationPath && stationPath.length >= 2) {
+              car.state = CarState.GoingToGasStation;
+              car.targetBusinessId = biz.id;
+              car.targetGasStationId = result.station.id;
+              car.postRefuelIntent = 'business';
+              car.destination = result.station.entryConnectorPos;
+              this.router.assignPath(car, stationPath);
+            } else {
+              house.returnCar(car);
+              continue;
+            }
+          } else {
+            house.returnCar(car);
+            continue;
+          }
+        } else {
+          car.state = CarState.GoingToBusiness;
+          car.targetBusinessId = biz.id;
+          car.destination = biz.parkingLotPos;
+          this.router.assignPath(car, path);
+        }
 
         if (car.smoothPath.length >= 2) {
           car.pixelPos.x = car.smoothPath[0].x;
@@ -83,7 +125,6 @@ export class CarDispatcher {
           }
         }
 
-        house.availableCars--;
         newCars.push(car);
         occupied.set(spawnKey, car.id);
         carsEnRoute.set(biz.id, (carsEnRoute.get(biz.id) ?? 0) + 1);

@@ -6,7 +6,10 @@ import type { Pathfinder } from '../../pathfinding/Pathfinder';
 import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
 import type { PendingDeletionSystem } from '../PendingDeletionSystem';
+import type { GasStationSystem } from '../GasStationSystem';
+import type { HighwaySystem } from '../HighwaySystem';
 import { TILE_SIZE, UNLOAD_TIME, CAR_SPEED } from '../../constants';
+import { computePathFuelCost } from '../../pathfinding/pathCost';
 import { gridToPixelCenter } from '../../utils/math';
 import { getDirection, directionAngle } from '../../utils/direction';
 import { getParkingSlotLayout } from '../../utils/businessLayout';
@@ -84,11 +87,15 @@ export class CarParkingManager {
   private pathfinder: Pathfinder;
   private router: CarRouter;
   private pendingDeletionSystem: PendingDeletionSystem;
+  private gasStationSystem: GasStationSystem | null;
+  private highwaySystem: HighwaySystem | null;
 
-  constructor(pathfinder: Pathfinder, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem) {
+  constructor(pathfinder: Pathfinder, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem, gasStationSystem?: GasStationSystem, highwaySystem?: HighwaySystem) {
     this.pathfinder = pathfinder;
     this.router = router;
     this.pendingDeletionSystem = pendingDeletionSystem;
+    this.gasStationSystem = gasStationSystem ?? null;
+    this.highwaySystem = highwaySystem ?? null;
   }
 
   updateUnloadingCar(
@@ -219,6 +226,43 @@ export class CarParkingManager {
       if (home) {
         const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
         if (homePath) {
+          // Check fuel before going home
+          const fuelCost = computePathFuelCost(homePath, this.highwaySystem);
+          if (fuelCost > car.fuel && this.gasStationSystem) {
+            // Need gas station detour
+            const startPos = homePath.length > 0 ? stepGridPos(homePath[0]) : biz.parkingLotPos;
+            const result = this.gasStationSystem.findNearestReachable(startPos, this.pathfinder, this.highwaySystem);
+            if (result) {
+              const stationPath = this.pathfinder.findPath(startPos, result.station.entryConnectorPos);
+              if (stationPath && stationPath.length >= 2) {
+                car.state = CarState.GoingToGasStation;
+                car.targetBusinessId = null;
+                car.targetGasStationId = result.station.id;
+                car.postRefuelIntent = 'home';
+                car.destination = result.station.entryConnectorPos;
+                this.router.assignPath(car, stationPath);
+                if (car.smoothPath.length >= 2) {
+                  car.pixelPos.x = car.smoothPath[0].x;
+                  car.pixelPos.y = car.smoothPath[0].y;
+                  car.prevPixelPos.x = car.pixelPos.x;
+                  car.prevPixelPos.y = car.pixelPos.y;
+                  if (stationPath.length >= 2) {
+                    const p0 = stepGridPos(stationPath[0]);
+                    const p1 = stepGridPos(stationPath[1]);
+                    const initDir = getDirection(p0, p1);
+                    car.renderAngle = directionAngle(initDir);
+                    car.prevRenderAngle = car.renderAngle;
+                  }
+                } else {
+                  const center = gridToPixelCenter(biz.parkingLotPos);
+                  car.pixelPos.x = center.x;
+                  car.pixelPos.y = center.y;
+                }
+                return;
+              }
+            }
+          }
+
           car.state = CarState.GoingHome;
           car.targetBusinessId = null;
           car.destination = home.pos;
@@ -315,6 +359,52 @@ export class CarParkingManager {
       car.pendingHomePath = null;
 
       if (homePath) {
+        // Check fuel before going home
+        const fuelCost = computePathFuelCost(homePath, this.highwaySystem);
+        if (fuelCost > car.fuel && this.gasStationSystem) {
+          // Need gas station detour
+          const startPos = homePath.length > 0 ? stepGridPos(homePath[0]) : car.destination!;
+          const result = this.gasStationSystem.findNearestReachable(startPos, this.pathfinder, this.highwaySystem);
+          if (result) {
+            const stationPath = this.pathfinder.findPath(startPos, result.station.entryConnectorPos);
+            if (stationPath && stationPath.length >= 2) {
+              car.state = CarState.GoingToGasStation;
+              car.outboundPath = [];
+              car.targetGasStationId = result.station.id;
+              car.postRefuelIntent = 'home';
+              car.assignedSlotIndex = null;
+              car.destination = result.station.entryConnectorPos;
+              this.router.assignPath(car, stationPath);
+              if (car.smoothPath.length >= 2) {
+                car.pixelPos.x = car.smoothPath[0].x;
+                car.pixelPos.y = car.smoothPath[0].y;
+                car.prevPixelPos.x = car.pixelPos.x;
+                car.prevPixelPos.y = car.pixelPos.y;
+                if (stationPath.length >= 2) {
+                  const p0 = stepGridPos(stationPath[0]);
+                  const p1 = stepGridPos(stationPath[1]);
+                  const initDir = getDirection(p0, p1);
+                  car.renderAngle = directionAngle(initDir);
+                  car.prevRenderAngle = car.renderAngle;
+                }
+              }
+              return;
+            }
+          }
+          // No reachable station — strand
+          car.state = CarState.Stranded;
+          car.outboundPath = [];
+          car.targetBusinessId = null;
+          car.assignedSlotIndex = null;
+          car.path = [];
+          car.pathIndex = 0;
+          car.segmentProgress = 0;
+          car.smoothPath = [];
+          car.smoothCumDist = [];
+          car.smoothCellDist = [];
+          return;
+        }
+
         car.state = CarState.GoingHome;
         car.outboundPath = [];
         car.targetBusinessId = null;

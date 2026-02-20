@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser, ArrowLeft, Route, FastForward } from 'lucide-react';
+import { Pause, Play, Undo2, Settings, Volume2, VolumeX, X, Pencil, Eraser, ArrowLeft, Route, FastForward, Fuel } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Game, DemandStat } from '../core/Game';
 import { GameState, Tool } from '../types';
@@ -148,6 +148,7 @@ function Toolbar({ activeTool, onSelectTool }: { activeTool: Tool; onSelectTool:
     { tool: Tool.Road, icon: Pencil, label: 'Road', shortcut: 'R' },
     { tool: Tool.Eraser, icon: Eraser, label: 'Eraser', shortcut: 'E' },
     { tool: Tool.Highway, icon: Route, label: 'Highway', shortcut: 'H' },
+    { tool: Tool.GasStation, icon: Fuel, label: 'Gas Station', shortcut: 'G' },
   ] as const;
 
   return (

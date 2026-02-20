@@ -27,6 +27,7 @@ export const CellType = {
   Connector: 5,
   Mountain: 6,
   Lake: 7,
+  GasStation: 8,
 } as const;
 export type CellType = (typeof CellType)[keyof typeof CellType];
 
@@ -66,6 +67,7 @@ export const Tool = {
   Road: 0,
   Eraser: 1,
   Highway: 2,
+  GasStation: 3,
 } as const;
 export type Tool = (typeof Tool)[keyof typeof Tool];
 

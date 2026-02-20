@@ -73,6 +73,12 @@ export const ROAD_COST = 10;
 export const DELIVERY_REWARD = 50;
 export const ROAD_REFUND = 10;
 
+// Gas stations
+export const FUEL_CAPACITY = 80;
+export const REFUEL_TIME = 2;
+export const GAS_STATION_COST = 150;
+export const GAS_STATION_REFUND = 100;
+
 // Highways
 export const HIGHWAY_COST = 200;
 export const HIGHWAY_REFUND = 150;
@@ -201,6 +207,10 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
   HIGHWAY_REFUND,
   HIGHWAY_SPEED_MULTIPLIER,
   DAY_LENGTH_SECONDS,
+  FUEL_CAPACITY,
+  REFUEL_TIME,
+  GAS_STATION_COST,
+  GAS_STATION_REFUND,
 };
 
 export function buildConfig(overrides?: Partial<GameConstants>): GameConstants {

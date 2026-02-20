@@ -83,6 +83,12 @@ export interface GameConstants {
 
   // Day length
   DAY_LENGTH_SECONDS: number;
+
+  // Gas stations
+  FUEL_CAPACITY: number;
+  REFUEL_TIME: number;
+  GAS_STATION_COST: number;
+  GAS_STATION_REFUND: number;
 }
 
 export interface MapConfig {

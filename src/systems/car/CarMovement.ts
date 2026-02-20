@@ -147,6 +147,22 @@ export class CarMovement {
       const leftStep = car.path[car.pathIndex];
       car.pathIndex++;
 
+      // Fuel consumption for grid steps
+      if (car.pathIndex < car.path.length) {
+        const prevStep = car.path[car.pathIndex - 1];
+        const curStep = car.path[car.pathIndex];
+        if (prevStep.kind === 'grid' && curStep.kind === 'grid') {
+          const dx = Math.abs(curStep.pos.gx - prevStep.pos.gx);
+          const dy = Math.abs(curStep.pos.gy - prevStep.pos.gy);
+          car.fuel -= (dx !== 0 && dy !== 0) ? Math.SQRT2 : 1;
+          car.fuel = Math.max(0, car.fuel);
+          if (car.fuel <= 0 && car.state !== CarState.GoingToGasStation) {
+            car.state = CarState.Stranded;
+            return;
+          }
+        }
+      }
+
       // Check if we're now at a highway step
       if (car.pathIndex < car.path.length && car.path[car.pathIndex].kind === 'highway') {
         this.enterHighway(car, (car.path[car.pathIndex] as { highwayId: string }).highwayId);
@@ -267,6 +283,18 @@ export class CarMovement {
     const easedMultiplier = 1 + (HIGHWAY_SPEED_MULTIPLIER - 1) * Math.sin(Math.PI * progressRatio);
     const speed = CAR_SPEED * easedMultiplier * TILE_SIZE;
     car.highwayProgress += speed * dt;
+
+    // Fuel consumption on highway
+    car.fuel -= (speed * dt) / TILE_SIZE;
+    car.fuel = Math.max(0, car.fuel);
+    if (car.fuel <= 0 && car.state !== CarState.GoingToGasStation) {
+      car.state = CarState.Stranded;
+      car.onHighway = false;
+      car.highwayPolyline = null;
+      car.highwayCumDist = null;
+      car.highwayProgress = 0;
+      return;
+    }
 
     if (car.highwayProgress >= totalDist) {
       // Sample the exact final position on the highway polyline

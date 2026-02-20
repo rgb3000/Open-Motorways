@@ -95,6 +95,7 @@ export class Pathfinder {
         const isDestination = nx === to.gx && ny === to.gy;
         if (cell.type === CellType.Empty) continue;
         if (cell.type === CellType.Business) continue;
+        if (cell.type === CellType.GasStation) continue;
         if ((cell.type === CellType.House || cell.type === CellType.ParkingLot) && !isDestination) continue;
         if (cell.type === CellType.House && cell.connectorDir !== null) {
           if (dir !== opposite(cell.connectorDir)) continue;

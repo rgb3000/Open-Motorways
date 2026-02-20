@@ -63,7 +63,8 @@ export class RoadDrawer {
   }
 
   update(): void {
-    if (this.getActiveTool() === Tool.Highway) {
+    const tool = this.getActiveTool();
+    if (tool === Tool.Highway || tool === Tool.GasStation) {
       // Reset drag state so we don't carry stale state into next tool switch
       this.wasLeftDown = this.input.state.leftDown;
       this.wasRightDown = this.input.state.rightDown;

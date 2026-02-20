@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
+import type { GasStation } from '../../entities/GasStation';
 import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, BIZ_BUILDING_CROSS, BIZ_BUILDING_ALONG, BIZ_SLOT_CROSS, BIZ_SLOT_ALONG } from '../../constants';
 import { Direction } from '../../types';
 import { DIRECTION_OFFSETS } from '../../utils/direction';
@@ -26,6 +27,7 @@ export class BuildingLayer {
   private houseConnectorDirs = new Map<string, Direction>();
   private parkedCarMeshes = new Map<string, THREE.Group[]>();
   private businessMeshes = new Map<string, THREE.Group>();
+  private gasStationMeshes = new Map<string, THREE.Group>();
   private demandPinRefs = new Map<string, THREE.Mesh[]>();
   private debugSprites = new Map<string, THREE.Sprite>();
   private debugCanvas: HTMLCanvasElement | null = null;
@@ -102,6 +104,8 @@ export class BuildingLayer {
   private slotMat = new THREE.MeshStandardMaterial({ color: '#CCCCCC' });
   private bizOutlineMat = new THREE.MeshBasicMaterial({ color: '#666666', side: THREE.DoubleSide });
   private bizSlotLineMat = new THREE.LineBasicMaterial({ color: '#666666' });
+  private gasStationCanopyMat = new THREE.MeshStandardMaterial({ color: '#2EAA8A', roughness: 0.4 });
+  private gasStationPillarMat = new THREE.MeshStandardMaterial({ color: '#666666' });
 
   constructor() {
     const plateSize = TILE_SIZE * 0.7;
@@ -193,7 +197,7 @@ export class BuildingLayer {
     this.initSharedResources();
   }
 
-  update(scene: THREE.Scene, houses: House[], businesses: Business[]): void {
+  update(scene: THREE.Scene, houses: House[], businesses: Business[], gasStations: GasStation[] = []): void {
     // Remove meshes for deleted houses
     const houseIds = new Set(houses.map(h => h.id));
     for (const [id, group] of this.houseMeshes) {
@@ -232,7 +236,7 @@ export class BuildingLayer {
         const parkedCars = this.parkedCarMeshes.get(house.id);
         if (parkedCars) {
           for (let i = 0; i < parkedCars.length; i++) {
-            parkedCars[i].visible = i < house.availableCars;
+            parkedCars[i].visible = i < house.carPool.length;
           }
         }
         continue;
@@ -253,7 +257,7 @@ export class BuildingLayer {
 
       // Set initial visibility
       for (let i = 0; i < parkedCars.length; i++) {
-        parkedCars[i].visible = i < house.availableCars;
+        parkedCars[i].visible = i < house.carPool.length;
       }
     }
 
@@ -278,6 +282,23 @@ export class BuildingLayer {
         } else if (visible) {
           pins[i].scale.set(1, 1, 1);
         }
+      }
+    }
+
+    // Add/remove gas station meshes
+    const gsIds = new Set(gasStations.map(gs => gs.id));
+    for (const [id, group] of this.gasStationMeshes) {
+      if (!gsIds.has(id)) {
+        scene.remove(group);
+        this.disposeGroup(group);
+        this.gasStationMeshes.delete(id);
+      }
+    }
+    for (const gs of gasStations) {
+      if (!this.gasStationMeshes.has(gs.id)) {
+        const group = this.createGasStationMesh(gs);
+        scene.add(group);
+        this.gasStationMeshes.set(gs.id, group);
       }
     }
 
@@ -511,6 +532,54 @@ export class BuildingLayer {
     return { group, pins };
   }
 
+  private createGasStationMesh(gs: GasStation): THREE.Group {
+    const group = new THREE.Group();
+    const isHoriz = gs.orientation === 'horizontal';
+
+    // Canopy covers the 2 station cells
+    const canopyWidth = isHoriz ? TILE_SIZE * 2 : TILE_SIZE;
+    const canopyDepth = isHoriz ? TILE_SIZE : TILE_SIZE * 2;
+    const canopyHeight = 2;
+    const canopyY = 12;
+
+    const canopyGeom = new THREE.BoxGeometry(canopyWidth, canopyHeight, canopyDepth);
+    const canopy = new THREE.Mesh(canopyGeom, this.gasStationCanopyMat);
+    canopy.castShadow = true;
+    canopy.receiveShadow = true;
+
+    // Position canopy at center of the 2 station cells
+    const centerX = (gs.pos.gx + gs.pos2.gx) / 2 * TILE_SIZE + TILE_SIZE / 2;
+    const centerZ = (gs.pos.gy + gs.pos2.gy) / 2 * TILE_SIZE + TILE_SIZE / 2;
+    canopy.position.set(centerX, canopyY, centerZ);
+    group.add(canopy);
+
+    // 4 pillars at corners
+    const pillarGeom = new THREE.BoxGeometry(2, canopyY, 2);
+    const halfW = canopyWidth / 2 - 3;
+    const halfD = canopyDepth / 2 - 3;
+    for (const [ox, oz] of [[-halfW, -halfD], [halfW, -halfD], [-halfW, halfD], [halfW, halfD]]) {
+      const pillar = new THREE.Mesh(pillarGeom, this.gasStationPillarMat);
+      pillar.position.set(centerX + ox, canopyY / 2, centerZ + oz);
+      pillar.castShadow = true;
+      group.add(pillar);
+    }
+
+    // Ground plate
+    const plateGeom = new THREE.BoxGeometry(
+      isHoriz ? TILE_SIZE * 4 - 4 : TILE_SIZE - 4,
+      0.8,
+      isHoriz ? TILE_SIZE - 4 : TILE_SIZE * 4 - 4,
+    );
+    const allCenterX = (gs.entryConnectorPos.gx + gs.exitConnectorPos.gx) / 2 * TILE_SIZE + TILE_SIZE / 2;
+    const allCenterZ = (gs.entryConnectorPos.gy + gs.exitConnectorPos.gy) / 2 * TILE_SIZE + TILE_SIZE / 2;
+    const plate = new THREE.Mesh(plateGeom, this.plateMat);
+    plate.position.set(allCenterX, 0.4, allCenterZ);
+    plate.receiveShadow = true;
+    group.add(plate);
+
+    return group;
+  }
+
   private sharedResources = new Set<THREE.Material | THREE.BufferGeometry>();
 
   private initSharedResources(): void {
@@ -553,6 +622,10 @@ export class BuildingLayer {
       scene.remove(group);
       this.disposeGroup(group);
     }
+    for (const [, group] of this.gasStationMeshes) {
+      scene.remove(group);
+      this.disposeGroup(group);
+    }
     for (const [, sprite] of this.debugSprites) {
       scene.remove(sprite);
       (sprite.material as THREE.SpriteMaterial).map?.dispose();
@@ -562,6 +635,7 @@ export class BuildingLayer {
     this.houseMeshes.clear();
     this.parkedCarMeshes.clear();
     this.businessMeshes.clear();
+    this.gasStationMeshes.clear();
     this.demandPinRefs.clear();
 
     // Dispose prototype geometries and shared materials
@@ -585,6 +659,8 @@ export class BuildingLayer {
     this.chimneyMat.dispose();
     this.bizOutlineMat.dispose();
     this.bizSlotLineMat.dispose();
+    this.gasStationCanopyMat.dispose();
+    this.gasStationPillarMat.dispose();
     this.parkedCabGeom.dispose();
     this.parkedBedGeom.dispose();
     this.parkedBedSideGeom.dispose();

@@ -3,6 +3,7 @@ import type { Grid } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { Business } from '../entities/Business';
 import type { Car } from '../entities/Car';
+import type { GasStation } from '../entities/GasStation';
 import type { GridPos } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, TILE_SIZE, LAKE_DEPTH, LAKE_WATER_SURFACE_Y, LAKE_WATER_COLOR_HEX, LAKE_WATER_OPACITY, ROAD_DEBUG, CAR_ROUTE_DEBUG } from '../constants';
 import { lerp, clamp } from '../utils/math';
@@ -361,6 +362,7 @@ export class Renderer {
     highwaySystem: HighwaySystem | null = null,
     activeTool: Tool = Tool.Road,
     highwayPlacementState: HighwayPlacementState | null = null,
+    gasStations: GasStation[] = [],
   ): void {
     // Smooth zoom/pan animation
     this.updateCamera();
@@ -389,7 +391,7 @@ export class Renderer {
     }
 
     // Update 3D meshes
-    this.buildingLayer.update(this.scene, houses, businesses);
+    this.buildingLayer.update(this.scene, houses, businesses, gasStations);
     this.carLayer.update(this.scene, cars, alpha);
     this.debugLayer.update(this.scene, spawnBounds);
     if (ROAD_DEBUG) this.roadDebugLayer.update(this.scene, this.grid, cars, businesses);

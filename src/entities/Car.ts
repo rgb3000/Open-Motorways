@@ -1,6 +1,7 @@
 import type { GameColor, GridPos, PixelPos, Direction } from '../types';
 import type { PathStep } from '../highways/types';
 import { generateId, gridToPixelCenter } from '../utils/math';
+import { FUEL_CAPACITY } from '../constants';
 
 export const CarState = {
   Idle: 0,
@@ -11,6 +12,8 @@ export const CarState = {
   WaitingToExit: 5,
   ParkingIn: 6,
   ParkingOut: 7,
+  GoingToGasStation: 8,
+  Refueling: 9,
 } as const;
 export type CarState = (typeof CarState)[keyof typeof CarState];
 
@@ -65,6 +68,12 @@ export class Car {
   parkingProgress = 0;
   pendingHomePath: PathStep[] | null = null;
 
+  // Fuel
+  fuel: number = FUEL_CAPACITY;
+  targetGasStationId: string | null = null;
+  refuelTimer = 0;
+  postRefuelIntent: 'business' | 'home' = 'business';
+
   // Rendering interpolation
   pixelPos: PixelPos;
   prevPixelPos: PixelPos;
@@ -74,6 +83,59 @@ export class Car {
     this.color = color;
     this.homeHouseId = homeHouseId;
     const center = gridToPixelCenter(startPos);
+    this.pixelPos = { ...center };
+    this.prevPixelPos = { ...center };
+  }
+
+  /** Reset all driving state back to idle defaults without touching fuel, id, color, or homeHouseId. */
+  resetForPool(homePos: GridPos): void {
+    this.state = CarState.Idle;
+    this.targetBusinessId = null;
+    this.destination = null;
+    this.direction = null;
+    this.renderAngle = 0;
+    this.prevRenderAngle = 0;
+
+    this.path = [];
+    this.pathIndex = 0;
+    this.outboundPath = [];
+    this.segmentProgress = 0;
+    this.intersectionWaitTime = 0;
+    this.sameLaneWaitTime = 0;
+    this.parkingWaitTime = 0;
+    this.stuckTimer = 0;
+    this.lastAdvancedPathIndex = 0;
+    this.wasBlocked = false;
+
+    this.smoothPath = [];
+    this.smoothCumDist = [];
+    this.smoothCellDist = [];
+
+    this.arcDistance = 0;
+    this.currentSpeed = 0;
+    this.leaderId = null;
+    this.leaderGap = Infinity;
+    this.arrivalTime = 0;
+
+    this.onHighway = false;
+    this.elevationY = 0;
+    this.prevElevationY = 0;
+    this.highwayPolyline = null;
+    this.highwayCumDist = null;
+    this.highwayProgress = 0;
+
+    this.assignedSlotIndex = null;
+    this.unloadTimer = 0;
+    this.parkingPath = [];
+    this.parkingCumDist = [];
+    this.parkingProgress = 0;
+    this.pendingHomePath = null;
+
+    this.targetGasStationId = null;
+    this.refuelTimer = 0;
+    this.postRefuelIntent = 'business';
+
+    const center = gridToPixelCenter(homePos);
     this.pixelPos = { ...center };
     this.prevPixelPos = { ...center };
   }

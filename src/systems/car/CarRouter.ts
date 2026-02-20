@@ -8,6 +8,7 @@ import type { GridPos } from '../../types';
 import type { PathStep } from '../../highways/types';
 import { gridToPixelCenter, pixelToGrid } from '../../utils/math';
 import { computeSmoothLanePath } from '../../utils/roadGeometry';
+import type { GasStationSystem } from '../GasStationSystem';
 
 /** Get the grid position of a path step */
 export function stepGridPos(step: PathStep): GridPos {
@@ -18,10 +19,12 @@ export function stepGridPos(step: PathStep): GridPos {
 export class CarRouter {
   private pathfinder: Pathfinder;
   private grid: Grid;
+  private gasStationSystem: GasStationSystem | null;
 
-  constructor(pathfinder: Pathfinder, grid: Grid) {
+  constructor(pathfinder: Pathfinder, grid: Grid, gasStationSystem?: GasStationSystem) {
     this.pathfinder = pathfinder;
     this.grid = grid;
+    this.gasStationSystem = gasStationSystem ?? null;
   }
 
   getCarCurrentTile(car: Car): GridPos {
@@ -119,7 +122,49 @@ export class CarRouter {
 
   rerouteCar(car: Car, houseMap: Map<string, House>): void {
     if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
-        car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) return;
+        car.state === CarState.ParkingIn || car.state === CarState.ParkingOut ||
+        car.state === CarState.Refueling) return;
+
+    // GoingToGasStation: try to reroute to same station or find a new one
+    if (car.state === CarState.GoingToGasStation && this.gasStationSystem && car.targetGasStationId) {
+      const currentTile = this.getCarCurrentTile(car);
+      const station = this.gasStationSystem.getGasStationById(car.targetGasStationId);
+      if (station) {
+        const path = this.pathfinder.findPath(currentTile, station.entryConnectorPos);
+        if (path) {
+          this.assignPath(car, path);
+          if (car.smoothPath.length >= 2) {
+            car.pixelPos.x = car.smoothPath[0].x;
+            car.pixelPos.y = car.smoothPath[0].y;
+          } else {
+            const center = gridToPixelCenter(currentTile);
+            car.pixelPos.x = center.x;
+            car.pixelPos.y = center.y;
+          }
+          return;
+        }
+      }
+      // Try to find a different gas station
+      const result = this.gasStationSystem.findNearestReachable(this.getCarCurrentTile(car), this.pathfinder);
+      if (result) {
+        const path = this.pathfinder.findPath(currentTile, result.station.entryConnectorPos);
+        if (path) {
+          car.targetGasStationId = result.station.id;
+          car.destination = result.station.entryConnectorPos;
+          this.assignPath(car, path);
+          if (car.smoothPath.length >= 2) {
+            car.pixelPos.x = car.smoothPath[0].x;
+            car.pixelPos.y = car.smoothPath[0].y;
+          } else {
+            const center = gridToPixelCenter(currentTile);
+            car.pixelPos.x = center.x;
+            car.pixelPos.y = center.y;
+          }
+          return;
+        }
+      }
+      // Fall through to standard stranded logic below
+    }
 
     const currentTile = this.getCarCurrentTile(car);
     const home = houseMap.get(car.homeHouseId);
