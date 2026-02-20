@@ -157,8 +157,11 @@ export class CarMovement {
           car.fuel -= (dx !== 0 && dy !== 0) ? Math.SQRT2 : 1;
           car.fuel = Math.max(0, car.fuel);
           if (car.fuel <= 0 && car.state !== CarState.GoingToGasStation) {
-            car.state = CarState.Stranded;
-            return;
+            // Allow terminal-arrival handling (e.g., reaching home exactly at 0 fuel).
+            if (car.pathIndex < car.path.length - 1) {
+              car.state = CarState.Stranded;
+              return;
+            }
           }
         }
       }
