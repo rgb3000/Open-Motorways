@@ -150,9 +150,8 @@ export class BuildingLayer {
     this.bizChimneyGeom.rotateX(-Math.PI / 2);
 
     // Business plates (horizontal and vertical)
-    const plateInset = 2;
-    const plateLong = TILE_SIZE * 2 - plateInset - TILE_SIZE * 0.15;
-    const plateShort = TILE_SIZE * 0.7;
+    const plateLong = TILE_SIZE * 2 - 2 * CELL_MARGIN;
+    const plateShort = TILE_SIZE - 2 * CELL_MARGIN;
     const plateH = roundedRectShape(plateLong, plateShort, 3);
     this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.bizPlateGeomH.rotateX(-Math.PI / 2);
