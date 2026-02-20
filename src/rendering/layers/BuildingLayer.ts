@@ -548,18 +548,34 @@ export class BuildingLayer {
       orientation: gs.orientation,
     });
 
-    // Canopy covers the 2 station cells
+    // Canopy frame (4 beams forming an open rectangle)
     const canopyWidth = layout.canopy.width;
     const canopyDepth = layout.canopy.depth;
-    const canopyHeight = 2;
+    const beamThickness = 3;
+    const beamHeight = 2;
     const canopyY = 12;
+    const cx = layout.canopy.centerX;
+    const cz = layout.canopy.centerZ;
 
-    const canopyGeom = new THREE.BoxGeometry(canopyWidth, canopyHeight, canopyDepth);
-    const canopy = new THREE.Mesh(canopyGeom, this.gasStationCanopyMat);
-    canopy.castShadow = true;
-    canopy.receiveShadow = true;
-    canopy.position.set(layout.canopy.centerX, canopyY, layout.canopy.centerZ);
-    group.add(canopy);
+    // Two beams along X (front and back)
+    const beamXGeom = new THREE.BoxGeometry(canopyWidth, beamHeight, beamThickness);
+    for (const sign of [-1, 1]) {
+      const beam = new THREE.Mesh(beamXGeom, this.gasStationCanopyMat);
+      beam.position.set(cx, canopyY, cz + sign * (canopyDepth / 2 - beamThickness / 2));
+      beam.castShadow = true;
+      beam.receiveShadow = true;
+      group.add(beam);
+    }
+    // Two beams along Z (left and right), shortened to fit between X beams
+    const innerZ = canopyDepth - 2 * beamThickness;
+    const beamZGeom = new THREE.BoxGeometry(beamThickness, beamHeight, innerZ);
+    for (const sign of [-1, 1]) {
+      const beam = new THREE.Mesh(beamZGeom, this.gasStationCanopyMat);
+      beam.position.set(cx + sign * (canopyWidth / 2 - beamThickness / 2), canopyY, cz);
+      beam.castShadow = true;
+      beam.receiveShadow = true;
+      group.add(beam);
+    }
 
     // 4 pillars at corners
     const pillarGeom = new THREE.BoxGeometry(2, canopyY, 2);
