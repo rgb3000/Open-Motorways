@@ -44,6 +44,7 @@ export class Renderer {
   private grid: Grid;
   private lakeCells: GridPos[] = [];
   private indicatorMesh: THREE.Mesh | null = null;
+  private gridLines: THREE.LineSegments | null = null;
 
   private offscreenCanvas: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
@@ -138,6 +139,42 @@ export class Renderer {
     this.groundMesh.receiveShadow = true;
     this.groundMesh.castShadow = true;
     this.scene.add(this.groundMesh);
+
+    // Grid lines as 3D line geometry (constant 1px width at any zoom)
+    this.buildGridLines();
+  }
+
+  private buildGridLines(): void {
+    const w = GRID_COLS * TILE_SIZE;
+    const h = GRID_ROWS * TILE_SIZE;
+    const y = 0.15; // just above ground plane
+
+    const points: number[] = [];
+
+    // Vertical lines
+    for (let x = 0; x <= GRID_COLS; x++) {
+      const px = x * TILE_SIZE;
+      points.push(px, y, 0, px, y, h);
+    }
+
+    // Horizontal lines
+    for (let z = 0; z <= GRID_ROWS; z++) {
+      const pz = z * TILE_SIZE;
+      points.push(0, y, pz, w, y, pz);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xD4C4A0,
+      transparent: true,
+      opacity: 0.5,
+      depthTest: true,
+    });
+
+    this.gridLines = new THREE.LineSegments(geom, mat);
+    this.scene.add(this.gridLines);
   }
 
   resize(width: number, height: number): void {
@@ -429,6 +466,12 @@ export class Renderer {
       this.waterSurface.geometry.dispose();
       (this.waterSurface.material as THREE.Material).dispose();
       this.waterSurface = null;
+    }
+    if (this.gridLines) {
+      this.scene.remove(this.gridLines);
+      this.gridLines.geometry.dispose();
+      (this.gridLines.material as THREE.Material).dispose();
+      this.gridLines = null;
     }
 
     // Dispose all remaining scene objects
