@@ -96,6 +96,7 @@ export interface MapConfig {
   name: string;
   description: string;
   debug?: boolean;
+  terrainSvg?: string;  // resolved URL to custom terrain SVG (use Vite static import)
   obstacles?: ObstacleDefinition[];
   houses?: HouseDefinition[];
   businesses?: BusinessDefinition[];

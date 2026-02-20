@@ -141,9 +141,6 @@ export const BIZ_PIN_CENTER_T = 0.45;      // 0=building, 1=lot — where pin gr
 export const BIZ_SLOT_CROSS = 0.15;        // individual slot width (cross-axis)
 export const BIZ_SLOT_ALONG = 0.35;        // individual slot depth (along-axis)
 
-// Rendering colors
-export const BG_COLOR = '#E8D8B4';
-export const GRID_LINE_COLOR = '#D4C4A0';
 // Roads
 export const ROAD_HALF_WIDTH = TILE_SIZE * 0.2;
 export const HIGHWAY_HALF_WIDTH = ROAD_HALF_WIDTH;

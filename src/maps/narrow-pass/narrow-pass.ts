@@ -1,4 +1,5 @@
-import type { MapConfig, ObstacleDefinition } from './types';
+import type { MapConfig, ObstacleDefinition } from '../types';
+import terrainSvg from './terrain.svg';
 
 // Vertical mountain wall at column 35, with a gap from rows 18-22
 const obstacles: ObstacleDefinition[] = [];
@@ -19,6 +20,7 @@ export const narrowPassMap: MapConfig = {
   id: 'narrow-pass',
   name: 'Narrow Pass',
   description: 'A mountain wall splits the map. One gap to connect both sides.',
+  terrainSvg,
   obstacles,
   constants: {
     DEMAND_RATE_GROWTH: 0.4,

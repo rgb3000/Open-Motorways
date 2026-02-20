@@ -1,4 +1,4 @@
-import type { MapConfig } from './types';
+import type { MapConfig } from '../types';
 
 export const classicMap: MapConfig = {
   id: 'classic',

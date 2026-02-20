@@ -110,6 +110,7 @@ export class Game {
     this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem, this.highwaySystem, this.gasStationSystem);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
+    this.renderer.loadTerrain(mapConfig?.terrainSvg);
     this.renderer.resize(window.innerWidth, window.innerHeight);
 
     this.input = new InputHandler(
@@ -325,6 +326,7 @@ export class Game {
     this.setActiveTool(Tool.Road);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
+    this.renderer.loadTerrain(this.mapConfig?.terrainSvg);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
     this.timeScale = 1;

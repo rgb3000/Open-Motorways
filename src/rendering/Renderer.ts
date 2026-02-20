@@ -70,7 +70,7 @@ export class Renderer {
 
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xe8d8b4);
+    this.scene.background = new THREE.Color(0xffffff);
 
     // Camera — orthographic, top-down (frustum set by updateFrustum)
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
@@ -214,6 +214,14 @@ export class Renderer {
 
     // Create water surface
     this.buildWaterSurface(lakeCells);
+  }
+
+  async loadTerrain(svgPath?: string): Promise<void> {
+    await this.terrainLayer.load(svgPath);
+    // Re-render the ground texture with the loaded SVG
+    this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.terrainLayer.render(this.offCtx, this.lakeCells);
+    this.groundTexture.needsUpdate = true;
   }
 
   private displaceGroundForLakes(lakeCells: GridPos[]): void {

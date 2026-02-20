@@ -1,6 +1,6 @@
-import { GameColor, Direction } from '../types';
-import type { MapConfig } from './types';
-import type { HouseDefinition, BusinessDefinition, RoadDefinition } from './types';
+import { GameColor, Direction } from '../../types';
+import type { MapConfig } from '../types';
+import type { HouseDefinition, BusinessDefinition, RoadDefinition } from '../types';
 
 const ALL_COLORS: GameColor[] = [
   GameColor.Red, GameColor.Blue, GameColor.Yellow,

@@ -1,6 +1,6 @@
 
-import { GameColor, Direction } from '../types';
-import type { MapConfig } from './types';
+import { GameColor, Direction } from '../../types';
+import type { MapConfig } from '../types';
 
 const houses = [
   { gx: 29, gy: 16, color: GameColor.Yellow, connectorDir: Direction.Down },
