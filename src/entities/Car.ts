@@ -42,6 +42,13 @@ export class Car {
   smoothCumDist: number[] = [];
   smoothCellDist: number[] = [];
 
+  // Arc-length traffic (continuous distance-based collision)
+  arcDistance = 0;           // current distance along smoothPath (px)
+  currentSpeed = 0;         // current speed in px/sec
+  leaderId: string | null = null;   // car ahead on same lane
+  leaderGap = Infinity;     // pixel distance to leader
+  arrivalTime = 0;          // time when car started waiting at intersection
+
   // Highway state
   onHighway = false;
   elevationY = 0;

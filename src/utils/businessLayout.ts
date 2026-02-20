@@ -145,7 +145,6 @@ export function getParkingSlotLayout(input: BusinessLayoutInput): Rect2D[] {
 
   const slotCross = TILE_SIZE * BIZ_SLOT_CROSS;
   const slotAlong = TILE_SIZE * BIZ_SLOT_ALONG;
-  const plateNarrow = TILE_SIZE * BIZ_PLATE_CROSS;
   const slotSpacing = BIZ_PIN_SPACING; // align with pin grid columns
 
   // Place slots just past the pin grid's far edge (toward lot), with a small gap

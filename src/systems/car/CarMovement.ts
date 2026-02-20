@@ -7,7 +7,7 @@ import { CellType } from '../../types';
 import { getDirection, directionToLane } from '../../utils/direction';
 import { sampleAtDistance } from '../../utils/roadGeometry';
 import type { CarTrafficManager } from './CarTrafficManager';
-import { occupancyKey, isIntersection } from './CarTrafficManager';
+import { occupancyKey, followingSpeedMultiplier } from './CarTrafficManager';
 import type { IntersectionEntry } from './CarTrafficManager';
 import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
@@ -53,10 +53,11 @@ export class CarMovement {
   updateSingleCar(
     car: Car, dt: number,
     houses: House[], bizMap: Map<string, Business>,
-    occupied: Map<string, string>,
-    intersectionMap: Map<string, IntersectionEntry[]>,
+    occupied: Map<number, string>,
+    intersectionMap: Map<number, IntersectionEntry[]>,
     toRemove: string[],
     onArrival: (car: Car, houses: House[], bizMap: Map<string, Business>, toRemove: string[]) => void,
+    houseMap: Map<string, House>,
   ): void {
     car.prevPixelPos.x = car.pixelPos.x;
     car.prevPixelPos.y = car.pixelPos.y;
@@ -70,7 +71,7 @@ export class CarMovement {
     }
 
     if (car.path.length < 2) {
-      this.router.rerouteCar(car, houses);
+      this.router.rerouteCar(car, houseMap);
       return;
     }
 
@@ -108,18 +109,20 @@ export class CarMovement {
       occupied.delete(oldKey);
     }
 
-    const isNextIntersection = car.pathIndex + 1 < car.path.length
-      && nextStep.kind === 'grid'
-      && isIntersection(this.grid, nextTile.gx, nextTile.gy);
+    const nextCell = car.pathIndex + 1 < car.path.length && nextStep.kind === 'grid'
+      ? this.grid.getCell(nextTile.gx, nextTile.gy) : null;
+    const isNextIntersection = nextCell !== null && nextCell._isIntersection;
     const { effectiveSpeed, segmentLength } = this.trafficManager.computeEffectiveSpeed(currentTile, nextTile, dir);
-    const tileDistance = (effectiveSpeed * dt) / segmentLength;
+    // Apply arc-length following + intersection yield as speed multipliers
+    const followingMult = followingSpeedMultiplier(car.leaderGap);
+    const intersectionMult = this.trafficManager.computeIntersectionYield(
+      car, dt, nextTile, dir, isNextIntersection, intersectionMap,
+    );
+    const desiredSpeed = effectiveSpeed * Math.min(followingMult, intersectionMult);
+    car.currentSpeed = desiredSpeed * TILE_SIZE; // store in px/sec for reference
+    const tileDistance = (desiredSpeed * dt) / segmentLength;
     const rawProgress = car.segmentProgress + tileDistance;
     let newProgress = rawProgress;
-
-    newProgress = this.trafficManager.applyCollisionAndYield(
-      car, dt, newProgress, nextTile,
-      dir, lane, isNextIntersection, occupied, intersectionMap,
-    );
 
     // Block car on connector tile if parking lot is full
     if (car.state === CarState.GoingToBusiness && car.pathIndex === car.path.length - 2) {
@@ -135,7 +138,8 @@ export class CarMovement {
     }
 
     car.segmentProgress = newProgress;
-    car.wasBlocked = newProgress < rawProgress - 0.001;
+    const speedMult = Math.min(followingMult, intersectionMult);
+    car.wasBlocked = speedMult < 0.1 || newProgress < rawProgress - 0.001;
 
     // Advance through path segments
     while (car.segmentProgress >= 1 && car.pathIndex < car.path.length - 1) {
@@ -168,7 +172,7 @@ export class CarMovement {
     }
     if (car.stuckTimer >= UNIVERSAL_STUCK_TIMEOUT) {
       car.stuckTimer = 0;
-      this.router.rerouteCar(car, houses);
+      this.router.rerouteCar(car, houseMap);
       return;
     }
 
@@ -186,7 +190,7 @@ export class CarMovement {
         ) && (!cell.pendingDeletion || car.state === CarState.GoingHome);
 
         if (!isTraversable) {
-          this.router.rerouteCar(car, houses);
+          this.router.rerouteCar(car, houseMap);
           return;
         }
       }
@@ -208,6 +212,13 @@ export class CarMovement {
         car.prevPixelPos.y = car.pixelPos.y;
         car.prevRenderAngle = car.renderAngle;
       }
+    }
+
+    // Update arc-length distance along smooth path
+    if (car.smoothCellDist.length > car.pathIndex + 1) {
+      const segStart = car.smoothCellDist[car.pathIndex];
+      const segEnd = car.smoothCellDist[car.pathIndex + 1];
+      car.arcDistance = segStart + car.segmentProgress * (segEnd - segStart);
     }
 
     // Register car in new occupancy position

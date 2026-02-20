@@ -8,17 +8,23 @@ import { manhattanDist } from '../../utils/math';
 import { getDirection, directionAngle, directionToLane } from '../../utils/direction';
 import { occupancyKey } from './CarTrafficManager';
 
+const DISPATCH_INTERVAL = 10; // only dispatch every N ticks (~6 Hz)
+
 export class CarDispatcher {
   private pathfinder: Pathfinder;
   private router: CarRouter;
   private _carsEnRoute = new Map<string, number>();
+  private _tickCounter = 0;
 
   constructor(pathfinder: Pathfinder, router: CarRouter) {
     this.pathfinder = pathfinder;
     this.router = router;
   }
 
-  dispatch(cars: Car[], houses: House[], businesses: Business[], occupied: Map<string, string>): Car[] {
+  dispatch(cars: Car[], houses: House[], businesses: Business[], occupied: Map<number, string>): Car[] {
+    if (++this._tickCounter < DISPATCH_INTERVAL) return [];
+    this._tickCounter = 0;
+
     const demandBusinesses = businesses.filter(b => b.demandPins > 0)
       .sort((a, b) => b.demandPins - a.demandPins);
     if (demandBusinesses.length === 0) return [];

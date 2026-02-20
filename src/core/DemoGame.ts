@@ -148,6 +148,7 @@ export class DemoGame {
       this.pathfinder.clearCache();
       this.carSystem.onRoadsChanged(this.spawnSystem.getHouses());
       this.roadSystem.clearDirty();
+      this.grid.recomputeIntersectionFlags();
       this.renderer.markGroundDirty();
     }
 

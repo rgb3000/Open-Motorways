@@ -76,4 +76,6 @@ export interface Cell {
   color: GameColor | null;
   connectorDir: Direction | null;
   pendingDeletion: boolean;
+  _isIntersection: boolean;   // cached: cardinalConnectionCount >= 3
+  _isTIntersection: boolean;  // cached: cardinalConnectionCount === 3
 }
