@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import type { GasStation } from '../../entities/GasStation';
-import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, BIZ_BUILDING_CROSS, BIZ_BUILDING_ALONG, BIZ_SLOT_CROSS, BIZ_SLOT_ALONG } from '../../constants';
+import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, BIZ_BUILDING_CROSS, BIZ_BUILDING_ALONG, BIZ_SLOT_CROSS, BIZ_SLOT_ALONG, CELL_MARGIN, GROUND_PLATE_MARGIN } from '../../constants';
 import { Direction } from '../../types';
 import { DIRECTION_OFFSETS } from '../../utils/direction';
 import { getBusinessLayout } from '../../utils/businessLayout';
+import { getGasStationLayout } from '../../utils/gasStationLayout';
 
 function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
   const shape = new THREE.Shape();
@@ -108,8 +109,8 @@ export class BuildingLayer {
   private gasStationPillarMat = new THREE.MeshStandardMaterial({ color: '#666666' });
 
   constructor() {
-    const plateSize = TILE_SIZE * 0.7;
-    const size = TILE_SIZE * 0.6;
+    const plateSize = TILE_SIZE - 2 * CELL_MARGIN;       // 35px (matches previous 0.7*TILE)
+    const size = plateSize - 2 * GROUND_PLATE_MARGIN;    // 30px (matches previous 0.6*TILE)
     const height = 5;
 
     // House body
@@ -534,11 +535,18 @@ export class BuildingLayer {
 
   private createGasStationMesh(gs: GasStation): THREE.Group {
     const group = new THREE.Group();
-    const isHoriz = gs.orientation === 'horizontal';
+
+    const layout = getGasStationLayout({
+      entryConnectorPos: gs.entryConnectorPos,
+      pos: gs.pos,
+      pos2: gs.pos2,
+      exitConnectorPos: gs.exitConnectorPos,
+      orientation: gs.orientation,
+    });
 
     // Canopy covers the 2 station cells
-    const canopyWidth = isHoriz ? TILE_SIZE * 2 : TILE_SIZE;
-    const canopyDepth = isHoriz ? TILE_SIZE : TILE_SIZE * 2;
+    const canopyWidth = layout.canopy.width;
+    const canopyDepth = layout.canopy.depth;
     const canopyHeight = 2;
     const canopyY = 12;
 
@@ -546,11 +554,7 @@ export class BuildingLayer {
     const canopy = new THREE.Mesh(canopyGeom, this.gasStationCanopyMat);
     canopy.castShadow = true;
     canopy.receiveShadow = true;
-
-    // Position canopy at center of the 2 station cells
-    const centerX = (gs.pos.gx + gs.pos2.gx) / 2 * TILE_SIZE + TILE_SIZE / 2;
-    const centerZ = (gs.pos.gy + gs.pos2.gy) / 2 * TILE_SIZE + TILE_SIZE / 2;
-    canopy.position.set(centerX, canopyY, centerZ);
+    canopy.position.set(layout.canopy.centerX, canopyY, layout.canopy.centerZ);
     group.add(canopy);
 
     // 4 pillars at corners
@@ -559,23 +563,30 @@ export class BuildingLayer {
     const halfD = canopyDepth / 2 - 3;
     for (const [ox, oz] of [[-halfW, -halfD], [halfW, -halfD], [-halfW, halfD], [halfW, halfD]]) {
       const pillar = new THREE.Mesh(pillarGeom, this.gasStationPillarMat);
-      pillar.position.set(centerX + ox, canopyY / 2, centerZ + oz);
+      pillar.position.set(layout.canopy.centerX + ox, canopyY / 2, layout.canopy.centerZ + oz);
       pillar.castShadow = true;
       group.add(pillar);
     }
 
-    // Ground plate
-    const plateGeom = new THREE.BoxGeometry(
-      isHoriz ? TILE_SIZE * 4 - 4 : TILE_SIZE - 4,
-      0.8,
-      isHoriz ? TILE_SIZE - 4 : TILE_SIZE * 4 - 4,
-    );
-    const allCenterX = (gs.entryConnectorPos.gx + gs.exitConnectorPos.gx) / 2 * TILE_SIZE + TILE_SIZE / 2;
-    const allCenterZ = (gs.entryConnectorPos.gy + gs.exitConnectorPos.gy) / 2 * TILE_SIZE + TILE_SIZE / 2;
+    // Ground plate (rounded, like house/business plates)
+    const plateShape = roundedRectShape(layout.groundPlate.width, layout.groundPlate.depth, 3);
+    const plateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
+    plateGeom.rotateX(-Math.PI / 2);
     const plate = new THREE.Mesh(plateGeom, this.plateMat);
-    plate.position.set(allCenterX, 0.4, allCenterZ);
+    plate.position.set(layout.groundPlate.centerX, 0.05, layout.groundPlate.centerZ);
     plate.receiveShadow = true;
     group.add(plate);
+
+    // Parking slot outlines
+    const outlineY = 0.05 + 0.8 + 0.6 + 0.05; // plate base + depth + bevelThickness + offset
+    for (const slot of layout.parkingSlots) {
+      const slotBoxGeom = new THREE.BoxGeometry(slot.width * 0.9, 0.01, slot.depth * 0.9);
+      const slotEdgeGeom = new THREE.EdgesGeometry(slotBoxGeom);
+      slotBoxGeom.dispose();
+      const outline = new THREE.LineSegments(slotEdgeGeom, this.bizSlotLineMat);
+      outline.position.set(slot.centerX, outlineY, slot.centerZ);
+      group.add(outline);
+    }
 
     return group;
   }

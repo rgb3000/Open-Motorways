@@ -7,8 +7,36 @@ import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
 import type { GasStationSystem } from '../GasStationSystem';
 import { FUEL_CAPACITY, REFUEL_TIME } from '../../constants';
-import { gridToPixelCenter } from '../../utils/math';
 import { getDirection, directionAngle } from '../../utils/direction';
+import { getGasStationLayout } from '../../utils/gasStationLayout';
+
+function computeCumDist(points: { x: number; y: number }[]): number[] {
+  const d = [0];
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    d.push(d[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  return d;
+}
+
+function sampleQuadraticBezier(
+  p0: { x: number; y: number },
+  cp: { x: number; y: number },
+  p1: { x: number; y: number },
+  segments: number,
+): { x: number; y: number }[] {
+  const points: { x: number; y: number }[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const u = 1 - t;
+    points.push({
+      x: u * u * p0.x + 2 * u * t * cp.x + t * t * p1.x,
+      y: u * u * p0.y + 2 * u * t * cp.y + t * t * p1.y,
+    });
+  }
+  return points;
+}
 
 export class CarRefuelingManager {
   private pathfinder: Pathfinder;
@@ -29,51 +57,74 @@ export class CarRefuelingManager {
       return;
     }
 
-    // If station is occupied, car will be blocked by movement logic (stuck at connector)
-    if (station.refuelingCarId !== null && station.refuelingCarId !== car.id) {
-      // Wait — don't change state, let stuck timer handle it
+    const slotIndex = station.getFreeParkingSlot();
+    if (slotIndex === null) {
+      // No free slot — car waits at entry, stuck timer handles it
       return;
     }
 
-    station.refuelingCarId = car.id;
-    car.state = CarState.Refueling;
-    car.refuelTimer = 0;
+    station.occupySlot(slotIndex, car.id);
+    car.assignedSlotIndex = slotIndex;
     car.path = [];
     car.pathIndex = 0;
     car.segmentProgress = 0;
     car.smoothPath = [];
     car.smoothCumDist = [];
     car.smoothCellDist = [];
+
+    // Build Bezier path from entry connector to parking slot
+    const layout = getGasStationLayout({
+      entryConnectorPos: station.entryConnectorPos,
+      pos: station.pos,
+      pos2: station.pos2,
+      exitConnectorPos: station.exitConnectorPos,
+      orientation: station.orientation,
+    });
+
+    const currentPos = { x: car.pixelPos.x, y: car.pixelPos.y };
+    const slotRect = layout.parkingSlots[slotIndex];
+    const slotPos = { x: slotRect.centerX, y: slotRect.centerZ };
+
+    // Control point: L-corner depending on orientation
+    const isHoriz = station.orientation === 'horizontal';
+    const cp = isHoriz
+      ? { x: slotPos.x, y: currentPos.y }
+      : { x: currentPos.x, y: slotPos.y };
+
+    car.parkingPath = sampleQuadraticBezier(currentPos, cp, slotPos, 16);
+    car.parkingCumDist = computeCumDist(car.parkingPath);
+    car.parkingProgress = 0;
+    car.state = CarState.ParkingIn;
   }
 
   updateRefuelingCar(
     car: Car, dt: number,
-    bizMap: Map<string, Business>,
-    houseMap: Map<string, House>,
+    _bizMap: Map<string, Business>,
+    _houseMap: Map<string, House>,
   ): void {
     car.refuelTimer += dt;
     if (car.refuelTimer < REFUEL_TIME) return;
 
     // Refueling complete
     car.fuel = FUEL_CAPACITY;
-
-    if (!this.gasStationSystem) return;
-    const station = car.targetGasStationId ? this.gasStationSystem.getGasStationById(car.targetGasStationId) : undefined;
-    if (station) {
-      station.refuelingCarId = null;
-    }
-    car.targetGasStationId = null;
     car.refuelTimer = 0;
+    car.state = CarState.WaitingToExit;
+  }
 
-    // Reposition car at exit connector
-    const exitPos = station?.exitConnectorPos;
-    if (exitPos) {
-      const center = gridToPixelCenter(exitPos);
-      car.pixelPos.x = center.x;
-      car.pixelPos.y = center.y;
-      car.prevPixelPos.x = center.x;
-      car.prevPixelPos.y = center.y;
+  /** Called from CarParkingManager when ParkingOut completes for a gas station. */
+  routeAfterGasStation(
+    car: Car,
+    bizMap: Map<string, Business>,
+    houseMap: Map<string, House>,
+  ): void {
+    if (!this.gasStationSystem) {
+      car.state = CarState.Stranded;
+      return;
     }
+
+    const station = car.targetGasStationId ? this.gasStationSystem.getGasStationById(car.targetGasStationId) : undefined;
+    const exitPos = station?.exitConnectorPos;
+    car.targetGasStationId = null;
 
     if (car.postRefuelIntent === 'business') {
       // Find highest-demand business of matching color

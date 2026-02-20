@@ -89,6 +89,7 @@ export interface GameConstants {
   REFUEL_TIME: number;
   GAS_STATION_COST: number;
   GAS_STATION_REFUND: number;
+  GAS_STATION_PARKING_SLOTS: number;
 }
 
 export interface MapConfig {

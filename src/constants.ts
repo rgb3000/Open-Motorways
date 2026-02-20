@@ -78,6 +78,11 @@ export const FUEL_CAPACITY = 80;
 export const REFUEL_TIME = 2;
 export const GAS_STATION_COST = 150;
 export const GAS_STATION_REFUND = 100;
+export const GAS_STATION_PARKING_SLOTS = 4;
+
+// Building layout (shared margin system)
+export const CELL_MARGIN = 7.5;          // ground plate edge inset from cell boundary (px)
+export const GROUND_PLATE_MARGIN = 2.5;  // inner building space inset from plate edge (px)
 
 // Highways
 export const HIGHWAY_COST = 200;
@@ -208,6 +213,7 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
   REFUEL_TIME,
   GAS_STATION_COST,
   GAS_STATION_REFUND,
+  GAS_STATION_PARKING_SLOTS,
 };
 
 export function buildConfig(overrides?: Partial<GameConstants>): GameConstants {

@@ -2,10 +2,8 @@ import type { GameColor, GridPos } from '../types';
 import { Direction } from '../types';
 import { PARKING_SLOTS } from '../constants';
 import { generateId } from '../utils/math';
-
-export interface ParkingSlot {
-  carId: string | null;
-}
+import type { ParkingSlot } from './ParkingSlot';
+export type { ParkingSlot } from './ParkingSlot';
 
 export class Business {
   readonly id: string;

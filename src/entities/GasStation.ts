@@ -1,5 +1,7 @@
 import type { GridPos } from '../types';
+import { GAS_STATION_PARKING_SLOTS } from '../constants';
 import { generateId } from '../utils/math';
+import type { ParkingSlot } from './ParkingSlot';
 
 export type GasStationOrientation = 'horizontal' | 'vertical';
 
@@ -13,8 +15,7 @@ export class GasStation {
   readonly entryConnectorPos: GridPos;
   readonly exitConnectorPos: GridPos;
 
-  /** Car currently refueling (at most one) */
-  refuelingCarId: string | null = null;
+  readonly parkingSlots: ParkingSlot[];
 
   constructor(anchorPos: GridPos, orientation: GasStationOrientation) {
     this.id = generateId();
@@ -33,10 +34,34 @@ export class GasStation {
       this.pos2 = { gx: anchorPos.gx, gy: anchorPos.gy + 2 };
       this.exitConnectorPos = { gx: anchorPos.gx, gy: anchorPos.gy + 3 };
     }
+
+    this.parkingSlots = [];
+    for (let i = 0; i < GAS_STATION_PARKING_SLOTS; i++) {
+      this.parkingSlots.push({ carId: null });
+    }
   }
 
   /** Returns all 4 cell positions: [entry, station1, station2, exit] */
   getCells(): GridPos[] {
     return [this.entryConnectorPos, this.pos, this.pos2, this.exitConnectorPos];
+  }
+
+  getFreeParkingSlot(): number | null {
+    for (let i = 0; i < this.parkingSlots.length; i++) {
+      if (this.parkingSlots[i].carId === null) return i;
+    }
+    return null;
+  }
+
+  occupySlot(slotIndex: number, carId: string): void {
+    this.parkingSlots[slotIndex].carId = carId;
+  }
+
+  freeSlot(slotIndex: number): void {
+    this.parkingSlots[slotIndex].carId = null;
+  }
+
+  getOccupiedSlotCount(): number {
+    return this.parkingSlots.filter(s => s.carId !== null).length;
   }
 }

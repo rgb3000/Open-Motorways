@@ -49,6 +49,7 @@ export class CarSystem {
     this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem, highwaySystem);
     this.leaderIndex = new CarLeaderIndex();
     this.refuelingManager = new CarRefuelingManager(pathfinder, this.router, gasStationSystem);
+    this.parkingManager.setRefuelingManager(this.refuelingManager);
     this.rescueManager = new CarRescueManager(pathfinder, grid, this.router, gasStationSystem, highwaySystem);
   }
 
@@ -140,7 +141,7 @@ export class CarSystem {
         continue;
       }
       if (car.state === CarState.ParkingOut) {
-        this.parkingManager.updateParkingOutCar(car, dt, houses, bizMap, toRemove);
+        this.parkingManager.updateParkingOutCar(car, dt, houses, bizMap, toRemove, houseMap);
         continue;
       }
       this.movement.updateSingleCar(

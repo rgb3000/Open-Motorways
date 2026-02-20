@@ -10,24 +10,17 @@ import {
   BIZ_SLOT_CROSS,
   BIZ_SLOT_ALONG,
 } from '../constants';
+import { cellCenter } from './buildingLayout';
+import type { Rect2D, Point2D } from './buildingLayout';
+
+// Re-export shared types for backward compatibility
+export type { Rect2D, Point2D };
 
 export interface BusinessLayoutInput {
   buildingPos: { gx: number; gy: number };
   parkingLotPos: { gx: number; gy: number };
   orientation: 'horizontal' | 'vertical';
   connectorSide: 'positive' | 'negative';
-}
-
-export interface Rect2D {
-  centerX: number;  // world X (Three.js X)
-  centerZ: number;  // world Z (Three.js Z)
-  width: number;    // X dimension
-  depth: number;    // Z dimension
-}
-
-export interface Point2D {
-  x: number;  // world X
-  z: number;  // world Z
 }
 
 export interface BusinessLayout {
@@ -52,13 +45,6 @@ function toWorld(
     // along = +Z (building→lot), cross = X
     return { x: originX + cross, z: originZ + along };
   }
-}
-
-function cellCenter(pos: { gx: number; gy: number }): { x: number; z: number } {
-  return {
-    x: pos.gx * TILE_SIZE + TILE_SIZE / 2,
-    z: pos.gy * TILE_SIZE + TILE_SIZE / 2,
-  };
 }
 
 export function getGroundPlateLayout(input: BusinessLayoutInput): Rect2D {
