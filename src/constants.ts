@@ -136,7 +136,6 @@ export const ROAD_GRAPH_DEBUG = false;
 export const CAR_ROUTE_DEBUG = true;
 
 // Business layout dimensions (fractions of TILE_SIZE unless noted)
-export const BIZ_BUILDING_CROSS = 0.7;     // building width (cross-axis)
 export const BIZ_BUILDING_ALONG = 0.45;    // building depth (along-axis)
 export const BIZ_PIN_SPACING = 8;          // px between pin centers
 export const BIZ_PIN_CENTER_T = 0.45;      // 0=building, 1=lot — where pin grid center sits

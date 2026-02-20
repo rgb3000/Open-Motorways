@@ -1,13 +1,12 @@
 import {
   TILE_SIZE,
-  BIZ_BUILDING_CROSS,
   BIZ_BUILDING_ALONG,
   BIZ_PIN_SPACING,
   BIZ_PIN_CENTER_T,
   BIZ_SLOT_CROSS,
   BIZ_SLOT_ALONG,
 } from '../constants';
-import { cellCenter, computeGroundPlate } from './buildingLayout';
+import { cellCenter, computeGroundPlate, computeInnerSpace } from './buildingLayout';
 import type { Rect2D, Point2D } from './buildingLayout';
 
 // Re-export shared types for backward compatibility
@@ -51,7 +50,9 @@ export function getGroundPlateLayout(input: BusinessLayoutInput): Rect2D {
 export function getBuildingLayout(input: BusinessLayoutInput): Rect2D {
   const bldg = cellCenter(input.buildingPos);
   const isH = input.orientation === 'horizontal';
-  const crossSize = TILE_SIZE * BIZ_BUILDING_CROSS;
+  const bldgPlate = computeGroundPlate([input.buildingPos]);
+  const bldgInner = computeInnerSpace(bldgPlate);
+  const crossSize = isH ? bldgInner.depth : bldgInner.width;
   const alongSize = TILE_SIZE * BIZ_BUILDING_ALONG;
   return {
     centerX: bldg.x,

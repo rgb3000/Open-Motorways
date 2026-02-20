@@ -26,13 +26,11 @@ export function getGasStationLayout(input: GasStationLayoutInput): GasStationLay
   const allCells = [input.entryConnectorPos, input.pos, input.pos2, input.exitConnectorPos];
   const groundPlate = computeGroundPlate(allCells);
 
-  // Canopy covers just the 2 station cells
+  // Canopy and parking slots within the inner space of the 2 station cells
   const stationCells = [input.pos, input.pos2];
-  const canopy = computeGroundPlate(stationCells, CELL_MARGIN);
-
-  // Parking slots within the inner space of the 2 station cells
   const stationPlate = computeGroundPlate(stationCells, CELL_MARGIN);
   const innerSpace = computeInnerSpace(stationPlate, GROUND_PLATE_MARGIN);
+  const canopy = innerSpace;
   const axis = input.orientation === 'horizontal' ? 'x' : 'z';
   const parkingSlots = computeParkingSlots(innerSpace, GAS_STATION_PARKING_SLOTS, axis);
 

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import type { GasStation } from '../../entities/GasStation';
-import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, BIZ_BUILDING_CROSS, BIZ_BUILDING_ALONG, BIZ_SLOT_CROSS, BIZ_SLOT_ALONG, CELL_MARGIN, GROUND_PLATE_MARGIN } from '../../constants';
+import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, BIZ_BUILDING_ALONG, BIZ_SLOT_CROSS, BIZ_SLOT_ALONG, CELL_MARGIN } from '../../constants';
+import { computeGroundPlate, computeInnerSpace } from '../../utils/buildingLayout';
 import { Direction } from '../../types';
 import { DIRECTION_OFFSETS } from '../../utils/direction';
 import { getBusinessLayout } from '../../utils/businessLayout';
@@ -109,8 +110,10 @@ export class BuildingLayer {
   private gasStationPillarMat = new THREE.MeshStandardMaterial({ color: '#666666' });
 
   constructor() {
-    const plateSize = TILE_SIZE - 2 * CELL_MARGIN;       // 35px (matches previous 0.7*TILE)
-    const size = plateSize - 2 * GROUND_PLATE_MARGIN;    // 30px (matches previous 0.6*TILE)
+    const housePlate = computeGroundPlate([{ gx: 0, gy: 0 }]);
+    const houseInner = computeInnerSpace(housePlate);
+    const plateSize = housePlate.width;                   // 35px
+    const size = houseInner.width;                        // 30px
     const height = 5;
 
     // House body
@@ -127,7 +130,9 @@ export class BuildingLayer {
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
     // Business body (rectangular: wider on cross-axis, shorter on along-axis)
-    const bizCross = TILE_SIZE * BIZ_BUILDING_CROSS;
+    const bizPlate = computeGroundPlate([{ gx: 0, gy: 0 }]);
+    const bizInner = computeInnerSpace(bizPlate);
+    const bizCross = bizInner.width;                      // 30px (fits within inner space)
     const bizAlong = TILE_SIZE * BIZ_BUILDING_ALONG;
     const buildingHeight = 14;
     // Horizontal: along=X, cross=Z → shape(along, cross) → shape(w=along, h=cross)
@@ -573,6 +578,7 @@ export class BuildingLayer {
     plateGeom.rotateX(-Math.PI / 2);
     const plate = new THREE.Mesh(plateGeom, this.plateMat);
     plate.position.set(layout.groundPlate.centerX, 0.05, layout.groundPlate.centerZ);
+    plate.castShadow = true;
     plate.receiveShadow = true;
     group.add(plate);
 
