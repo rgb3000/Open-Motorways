@@ -64,26 +64,26 @@ export function GameUI({ game }: { game: Game }) {
 
 function HUD({ score, money, gameDay, timeScale, state, onPause, onToggleSpeed, canUndo, onUndo, onToggleSettings, onBack }: { score: number; money: number; gameDay: number; timeScale: number; state: GameState; onPause: () => void; onToggleSpeed: () => void; canUndo: boolean; onUndo: () => void; onToggleSettings: () => void; onBack: () => void }) {
   return (
-    <div className="flex justify-between items-start p-2.5">
+    <div className="flex justify-between items-start p-4">
       <div className="flex items-start gap-2.5">
         <button
           onClick={onBack}
           title="Back to map select"
           className="pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center text-black mt-0.5"
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={36} />
         </button>
         <div className="flex flex-col gap-0.5">
-          <span className="text-black font-bold font-mono text-lg">
+          <span className="text-black font-bold font-mono text-2xl">
             Score: {score}
           </span>
-          <span className="text-[#2a7d2a] font-bold font-mono text-lg">
+          <span className="text-[#2a7d2a] font-bold font-mono text-2xl">
             ${money}
           </span>
         </div>
       </div>
       <div className="flex items-center gap-2.5">
-        <span className="text-black font-bold font-mono text-lg">
+        <span className="text-black font-bold font-mono text-2xl">
           Day {gameDay}
         </span>
         <button
@@ -92,28 +92,28 @@ function HUD({ score, money, gameDay, timeScale, state, onPause, onToggleSpeed, 
           title="Undo (Ctrl+Z)"
           className={`pointer-events-auto bg-transparent border-none p-0 flex items-center ${canUndo ? 'text-black cursor-pointer' : 'text-[#bbb] cursor-default'}`}
         >
-          <Undo2 size={18} />
+          <Undo2 size={36} />
         </button>
         <button
           onClick={onToggleSpeed}
           title="Toggle speed (F)"
           className={`pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center gap-0.5 ${timeScale > 1 ? 'text-orange-500' : 'text-black'}`}
         >
-          <FastForward size={18} />
-          <span className="font-mono text-xs font-bold">{timeScale}x</span>
+          <FastForward size={36} />
+          <span className="font-mono text-base font-bold">{timeScale}x</span>
         </button>
         <button
           onClick={onPause}
           className="pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center text-black"
         >
-          {state === GameState.Paused ? <Play size={18} /> : <Pause size={18} />}
+          {state === GameState.Paused ? <Play size={36} /> : <Pause size={36} />}
         </button>
         <button
           onClick={onToggleSettings}
           className="pointer-events-auto bg-transparent border-none p-0 cursor-pointer flex items-center text-black"
           title="Settings"
         >
-          <Settings size={18} />
+          <Settings size={36} />
         </button>
       </div>
     </div>
@@ -123,20 +123,20 @@ function HUD({ score, money, gameDay, timeScale, state, onPause, onToggleSpeed, 
 function SettingsOverlay({ onClose, musicEnabled, onToggleMusic }: { onClose: () => void; musicEnabled: boolean; onToggleMusic: () => void }) {
   return (
     <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center pointer-events-auto">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-[320px]">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-[400px]">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-black font-bold font-mono text-2xl">Settings</h2>
+          <h2 className="text-black font-bold font-mono text-3xl">Settings</h2>
           <button onClick={onClose} className="bg-transparent border-none p-0 cursor-pointer text-black">
-            <X size={20} />
+            <X size={36} />
           </button>
         </div>
         <button
           onClick={onToggleMusic}
-          className="flex items-center gap-3 w-full bg-transparent border-none p-2 cursor-pointer text-black font-mono text-base rounded-lg hover:bg-gray-100"
+          className="flex items-center gap-3 w-full bg-transparent border-none p-2 cursor-pointer text-black font-mono text-xl rounded-lg hover:bg-gray-100"
         >
-          {musicEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+          {musicEnabled ? <Volume2 size={36} /> : <VolumeX size={36} />}
           <span>Music</span>
-          <span className="ml-auto text-sm text-gray-500">{musicEnabled ? 'On' : 'Off'}</span>
+          <span className="ml-auto text-base text-gray-500">{musicEnabled ? 'On' : 'Off'}</span>
         </button>
       </div>
     </div>
@@ -152,19 +152,19 @@ function Toolbar({ activeTool, onSelectTool }: { activeTool: Tool; onSelectTool:
   ] as const;
 
   return (
-    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 pointer-events-auto">
+    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
       {tools.map(({ tool, icon: Icon, label, shortcut }) => (
         <button
           key={tool}
           onClick={() => onSelectTool(tool)}
           title={`${label} (${shortcut})`}
-          className={`w-10 h-10 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-colors ${
+          className={`w-20 h-20 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-colors ${
             activeTool === tool
               ? 'bg-white border-black text-black'
               : 'bg-white/50 border-transparent text-black/40 hover:bg-white/80 hover:text-black/70'
           }`}
         >
-          <Icon size={20} />
+          <Icon size={40} />
         </button>
       ))}
     </div>
@@ -204,9 +204,9 @@ function GameOverOverlay({ score, onRestart }: { score: number; onRestart: () =>
       onClick={onRestart}
       className="absolute inset-0 bg-black/60 flex flex-col justify-center items-center gap-2.5 cursor-pointer pointer-events-auto"
     >
-      <div className="text-white font-bold font-mono text-5xl">GAME OVER</div>
-      <div className="text-white font-bold font-mono text-2xl">Score: {score}</div>
-      <div className="text-[#ccc] font-mono text-lg">Click to restart</div>
+      <div className="text-white font-bold font-mono text-7xl">GAME OVER</div>
+      <div className="text-white font-bold font-mono text-4xl">Score: {score}</div>
+      <div className="text-[#ccc] font-mono text-2xl">Click to restart</div>
     </div>
   );
 }
