@@ -35,6 +35,7 @@ export class CarSystem {
   private _toRemove: string[] = [];
   private _toRemoveSet = new Set<string>();
   private _businessMap = new Map<string, Business>();
+  private _houseMap = new Map<string, House>();
 
   constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem, highwaySystem?: HighwaySystem) {
     this.pathfinder = pathfinder;
@@ -58,6 +59,11 @@ export class CarSystem {
   }
 
   update(dt: number, houses: House[], businesses: Business[]): void {
+    // Build house lookup map
+    const houseMap = this._houseMap;
+    houseMap.clear();
+    for (const h of houses) houseMap.set(h.id, h);
+
     // Build occupancy map before dispatch so spawning checks for existing traffic
     const occupied = this.trafficManager.buildOccupancyMap(this.cars);
     const newCars = this.dispatcher.dispatch(this.cars, houses, businesses, occupied);
@@ -65,17 +71,22 @@ export class CarSystem {
       this.cars.push(car);
     }
 
-    this.moveCars(dt, houses, businesses, occupied);
+    this.moveCars(dt, houses, businesses, occupied, houseMap);
   }
 
   onRoadsChanged(houses: House[]): void {
+    // Build house map for O(1) lookups
+    const houseMap = this._houseMap;
+    houseMap.clear();
+    for (const h of houses) houseMap.set(h.id, h);
+
     for (const car of this.cars) {
       if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
           car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) continue;
       if (car.state !== CarState.Stranded) continue;
 
       const currentTile = this.router.getCarCurrentTile(car);
-      const home = houses.find(h => h.id === car.homeHouseId);
+      const home = houseMap.get(car.homeHouseId);
 
       if (car.destination) {
         const path = this.pathfinder.findPath(currentTile, car.destination);
@@ -134,12 +145,12 @@ export class CarSystem {
         }
       }
       if (crossesPending) {
-        this.router.rerouteCar(car, houses);
+        this.router.rerouteCar(car, houseMap);
       }
     }
   }
 
-  private moveCars(dt: number, houses: House[], businesses: Business[], occupied: Map<number, string>): void {
+  private moveCars(dt: number, houses: House[], businesses: Business[], occupied: Map<number, string>, houseMap: Map<string, House>): void {
     this.trafficManager.advanceFrameTime(dt);
 
     for (const [bizId, cd] of this.exitCooldowns) {
@@ -178,7 +189,7 @@ export class CarSystem {
       }
       if (car.state === CarState.WaitingToExit) {
         this.parkingManager.updateWaitingToExitCar(
-          car, houses, bizMap, this.cars, toRemove,
+          car, houseMap, bizMap, occupied, toRemove,
           this.exitCooldowns,
           (bizId) => { this.exitCooldowns.set(bizId, PARKING_EXIT_DELAY); },
         );
@@ -194,7 +205,8 @@ export class CarSystem {
       }
       this.movement.updateSingleCar(
         car, dt, houses, bizMap, occupied, intersectionMap, toRemove,
-        (c, h, bm, tr) => this.handleArrival(c, h, bm, tr),
+        (c, h, bm, tr) => this.handleArrival(c, h, bm, tr, houseMap),
+        houseMap,
       );
     }
 
@@ -209,11 +221,11 @@ export class CarSystem {
     }
   }
 
-  private handleArrival(car: Car, houses: House[], bizMap: Map<string, Business>, toRemove: string[]): void {
+  private handleArrival(car: Car, _houses: House[], bizMap: Map<string, Business>, toRemove: string[], houseMap: Map<string, House>): void {
     if (car.state === CarState.GoingToBusiness) {
-      this.parkingManager.handleParkingArrival(car, houses, bizMap, toRemove);
+      this.parkingManager.handleParkingArrival(car, houseMap, bizMap, toRemove);
     } else if (car.state === CarState.GoingHome) {
-      const home = houses.find(h => h.id === car.homeHouseId);
+      const home = houseMap.get(car.homeHouseId);
       if (home) {
         home.availableCars++;
       }

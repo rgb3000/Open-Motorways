@@ -117,12 +117,12 @@ export class CarRouter {
     this.computeAndAssignSmoothPath(car, gridPositions, startIdx);
   }
 
-  rerouteCar(car: Car, houses: House[]): void {
+  rerouteCar(car: Car, houseMap: Map<string, House>): void {
     if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
         car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) return;
 
     const currentTile = this.getCarCurrentTile(car);
-    const home = houses.find(h => h.id === car.homeHouseId);
+    const home = houseMap.get(car.homeHouseId);
 
     if (car.destination) {
       const path = this.pathfinder.findPath(currentTile, car.destination);

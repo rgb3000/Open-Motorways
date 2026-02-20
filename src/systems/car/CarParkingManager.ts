@@ -10,6 +10,8 @@ import { TILE_SIZE, UNLOAD_TIME, CAR_SPEED } from '../../constants';
 import { gridToPixelCenter } from '../../utils/math';
 import { getDirection, directionAngle } from '../../utils/direction';
 import { getParkingSlotLayout } from '../../utils/businessLayout';
+import { occupancyKey } from './CarTrafficManager';
+import { LaneId } from '../../types';
 
 const PARKING_MOVE_SPEED = CAR_SPEED * TILE_SIZE * 0.5;
 
@@ -108,8 +110,8 @@ export class CarParkingManager {
 
   updateWaitingToExitCar(
     car: Car,
-    houses: House[], bizMap: Map<string, Business>,
-    cars: Car[], toRemove: string[],
+    houseMap: Map<string, House>, bizMap: Map<string, Business>,
+    occupied: Map<number, string>, toRemove: string[],
     exitCooldowns: Map<string, number>,
     onSetCooldown: (bizId: string) => void,
   ): void {
@@ -119,18 +121,17 @@ export class CarParkingManager {
     const cooldown = exitCooldowns.get(biz.id) ?? 0;
     if (cooldown > 0) return;
 
-    // Check connector cell is free
-    const connectorFree = !cars.some(other => {
-      if (other.id === car.id) return false;
-      if (other.state === CarState.Idle || other.state === CarState.Stranded ||
-          other.state === CarState.Unloading || other.state === CarState.WaitingToExit ||
-          other.state === CarState.ParkingIn || other.state === CarState.ParkingOut) return false;
-      if (other.state === CarState.GoingToBusiness && other.targetBusinessId === biz.id) return false;
-      if (other.path.length < 2 || other.onHighway) return false;
-      const step = other.path[other.segmentProgress < 0.5 ? other.pathIndex : Math.min(other.pathIndex + 1, other.path.length - 1)];
-      const tile = stepGridPos(step);
-      return tile.gx === biz.connectorPos.gx && tile.gy === biz.connectorPos.gy;
-    });
+    // Check connector cell is free using occupancy map (O(1) per lane)
+    const cx = biz.connectorPos.gx;
+    const cy = biz.connectorPos.gy;
+    let connectorFree = true;
+    for (let lane = 0 as LaneId; lane <= 7; lane++) {
+      const occupant = occupied.get(occupancyKey(cx, cy, lane as LaneId));
+      if (occupant && occupant !== car.id) {
+        connectorFree = false;
+        break;
+      }
+    }
     if (!connectorFree) return;
 
     if (car.assignedSlotIndex !== null) {
@@ -138,7 +139,7 @@ export class CarParkingManager {
     }
     onSetCooldown(biz.id);
 
-    const home = houses.find(h => h.id === car.homeHouseId);
+    const home = houseMap.get(car.homeHouseId);
     if (home) {
       const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
       if (homePath) {
@@ -183,7 +184,7 @@ export class CarParkingManager {
   }
 
   handleParkingArrival(
-    car: Car, houses: House[], bizMap: Map<string, Business>, toRemove: string[],
+    car: Car, houseMap: Map<string, House>, bizMap: Map<string, Business>, toRemove: string[],
   ): void {
     const biz = car.targetBusinessId ? bizMap.get(car.targetBusinessId) : undefined;
     if (!biz) { toRemove.push(car.id); return; }
@@ -214,7 +215,7 @@ export class CarParkingManager {
       car.state = CarState.ParkingIn;
     } else {
       // No free slot — bounce back home
-      const home = houses.find(h => h.id === car.homeHouseId);
+      const home = houseMap.get(car.homeHouseId);
       if (home) {
         const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
         if (homePath) {

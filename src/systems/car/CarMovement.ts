@@ -57,6 +57,7 @@ export class CarMovement {
     intersectionMap: Map<number, IntersectionEntry[]>,
     toRemove: string[],
     onArrival: (car: Car, houses: House[], bizMap: Map<string, Business>, toRemove: string[]) => void,
+    houseMap: Map<string, House>,
   ): void {
     car.prevPixelPos.x = car.pixelPos.x;
     car.prevPixelPos.y = car.pixelPos.y;
@@ -70,7 +71,7 @@ export class CarMovement {
     }
 
     if (car.path.length < 2) {
-      this.router.rerouteCar(car, houses);
+      this.router.rerouteCar(car, houseMap);
       return;
     }
 
@@ -171,7 +172,7 @@ export class CarMovement {
     }
     if (car.stuckTimer >= UNIVERSAL_STUCK_TIMEOUT) {
       car.stuckTimer = 0;
-      this.router.rerouteCar(car, houses);
+      this.router.rerouteCar(car, houseMap);
       return;
     }
 
@@ -189,7 +190,7 @@ export class CarMovement {
         ) && (!cell.pendingDeletion || car.state === CarState.GoingHome);
 
         if (!isTraversable) {
-          this.router.rerouteCar(car, houses);
+          this.router.rerouteCar(car, houseMap);
           return;
         }
       }

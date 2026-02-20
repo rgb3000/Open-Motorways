@@ -477,6 +477,10 @@ export class Renderer {
   }
 
   private updateCamera(): void {
+    const prevZoom = this.currentZoom;
+    const prevCX = this.cameraCenterX;
+    const prevCZ = this.cameraCenterZ;
+
     this.currentZoom = lerp(this.currentZoom, this.targetZoom, ZOOM_LERP);
     if (Math.abs(this.currentZoom - this.targetZoom) < 0.001) {
       this.currentZoom = this.targetZoom;
@@ -491,7 +495,14 @@ export class Renderer {
       this.cameraCenterZ = this.cameraTargetZ;
     }
 
-    this.updateFrustum();
-    this.updateCameraPosition();
+    // Only update projection matrix and camera position when something changed
+    const changed = this.currentZoom !== prevZoom ||
+      this.cameraCenterX !== prevCX ||
+      this.cameraCenterZ !== prevCZ;
+
+    if (changed) {
+      this.updateFrustum();
+      this.updateCameraPosition();
+    }
   }
 }
