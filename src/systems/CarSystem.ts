@@ -5,7 +5,7 @@ import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
 import { PARKING_EXIT_DELAY } from '../constants';
 import { gridToPixelCenter } from '../utils/math';
-import { CarRouter } from './car/CarRouter';
+import { CarRouter, stepGridPos } from './car/CarRouter';
 import { CarTrafficManager } from './car/CarTrafficManager';
 import { CarParkingManager } from './car/CarParkingManager';
 import { CarDispatcher } from './car/CarDispatcher';
@@ -13,6 +13,10 @@ import { CarMovement } from './car/CarMovement';
 import { CarLeaderIndex } from './car/CarLeaderIndex';
 import type { PendingDeletionSystem } from './PendingDeletionSystem';
 import type { HighwaySystem } from './HighwaySystem';
+import type { GasStationSystem } from './GasStationSystem';
+import { FUEL_CAPACITY, REFUEL_TIME } from '../constants';
+import { getDirection, directionAngle } from '../utils/direction';
+import { computePathFuelCost } from '../pathfinding/pathCost';
 
 export class CarSystem {
   private cars: Car[] = [];
@@ -30,6 +34,8 @@ export class CarSystem {
   private leaderIndex: CarLeaderIndex;
   private pendingDeletionSystem: PendingDeletionSystem;
   private grid: Grid;
+  private gasStationSystem: GasStationSystem | null;
+  private highwaySystem: HighwaySystem | null;
 
   // Reusable collections
   private _toRemove: string[] = [];
@@ -37,15 +43,17 @@ export class CarSystem {
   private _businessMap = new Map<string, Business>();
   private _houseMap = new Map<string, House>();
 
-  constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem, highwaySystem?: HighwaySystem) {
+  constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem, highwaySystem?: HighwaySystem, gasStationSystem?: GasStationSystem) {
     this.pathfinder = pathfinder;
     this.pendingDeletionSystem = pendingDeletionSystem;
     this.grid = grid;
+    this.gasStationSystem = gasStationSystem ?? null;
+    this.highwaySystem = highwaySystem ?? null;
 
-    this.router = new CarRouter(pathfinder, grid);
+    this.router = new CarRouter(pathfinder, grid, gasStationSystem);
     this.trafficManager = new CarTrafficManager(grid);
-    this.dispatcher = new CarDispatcher(pathfinder, this.router);
-    this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem);
+    this.dispatcher = new CarDispatcher(pathfinder, this.router, gasStationSystem, highwaySystem);
+    this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem, gasStationSystem, highwaySystem);
     this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem, highwaySystem);
     this.leaderIndex = new CarLeaderIndex();
   }
@@ -82,38 +90,44 @@ export class CarSystem {
 
     for (const car of this.cars) {
       if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
-          car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) continue;
+          car.state === CarState.ParkingIn || car.state === CarState.ParkingOut ||
+          car.state === CarState.Refueling) continue;
       if (car.state !== CarState.Stranded) continue;
 
       const currentTile = this.router.getCarCurrentTile(car);
       const home = houseMap.get(car.homeHouseId);
 
+      // Try to find a path to the car's destination or home
+      let rescuePath: typeof car.path | null = null;
+      let rescueState: CarState = CarState.Stranded;
+
       if (car.destination) {
         const path = this.pathfinder.findPath(currentTile, car.destination);
         if (path) {
-          car.state = home && car.destination.gx === home.pos.gx && car.destination.gy === home.pos.gy
+          rescuePath = path;
+          rescueState = home && car.destination.gx === home.pos.gx && car.destination.gy === home.pos.gy
             ? CarState.GoingHome
             : CarState.GoingToBusiness;
-          this.router.assignPath(car, path);
-          if (car.smoothPath.length >= 2) {
-            car.pixelPos.x = car.smoothPath[0].x;
-            car.pixelPos.y = car.smoothPath[0].y;
-          } else {
-            const center = gridToPixelCenter(currentTile);
-            car.pixelPos.x = center.x;
-            car.pixelPos.y = center.y;
-          }
-          continue;
         }
       }
 
-      if (home) {
+      if (!rescuePath && home) {
         const homePath = this.pathfinder.findPath(currentTile, home.pos, true);
         if (homePath) {
-          car.state = CarState.GoingHome;
+          rescuePath = homePath;
+          rescueState = CarState.GoingHome;
           car.targetBusinessId = null;
           car.destination = home.pos;
-          this.router.assignPath(car, homePath);
+        }
+      }
+
+      // Check if the car has enough fuel for the rescue path
+      if (rescuePath) {
+        const fuelCost = computePathFuelCost(rescuePath, this.highwaySystem);
+        if (fuelCost <= car.fuel) {
+          // Enough fuel — send car on its way
+          car.state = rescueState;
+          this.router.assignPath(car, rescuePath);
           if (car.smoothPath.length >= 2) {
             car.pixelPos.x = car.smoothPath[0].x;
             car.pixelPos.y = car.smoothPath[0].y;
@@ -124,13 +138,40 @@ export class CarSystem {
           }
           continue;
         }
+        // Not enough fuel — fall through to gas station routing
       }
+
+      // Car needs fuel (no path found, or not enough fuel for path) — try gas station
+      if (this.gasStationSystem) {
+        const result = this.gasStationSystem.findNearestReachable(currentTile, this.pathfinder, this.highwaySystem);
+        if (result && result.fuelCost <= car.fuel) {
+          const stationPath = this.pathfinder.findPath(currentTile, result.station.entryConnectorPos);
+          if (stationPath) {
+            car.state = CarState.GoingToGasStation;
+            car.targetGasStationId = result.station.id;
+            car.postRefuelIntent = 'home';
+            if (home) car.destination = home.pos;
+            this.router.assignPath(car, stationPath);
+            if (car.smoothPath.length >= 2) {
+              car.pixelPos.x = car.smoothPath[0].x;
+              car.pixelPos.y = car.smoothPath[0].y;
+            } else {
+              const center = gridToPixelCenter(currentTile);
+              car.pixelPos.x = center.x;
+              car.pixelPos.y = center.y;
+            }
+            continue;
+          }
+        }
+      }
+
+      // No rescue possible — car stays stranded
     }
 
     // Reroute active cars whose path crosses a pending-deletion cell
     for (const car of this.cars) {
       if (car.path.length === 0) continue;
-      if (car.state !== CarState.GoingToBusiness && car.state !== CarState.GoingHome) continue;
+      if (car.state !== CarState.GoingToBusiness && car.state !== CarState.GoingHome && car.state !== CarState.GoingToGasStation) continue;
       if (car.onHighway) continue;
 
       let crossesPending = false;
@@ -180,6 +221,10 @@ export class CarSystem {
 
     for (const car of this.cars) {
       if (car.state === CarState.Idle || car.state === CarState.Stranded) continue;
+      if (car.state === CarState.Refueling) {
+        this.updateRefuelingCar(car, dt, houses, bizMap, houseMap, toRemove);
+        continue;
+      }
       if (car.state === CarState.Unloading) {
         this.parkingManager.updateUnloadingCar(car, dt, bizMap, () => {
           this.score++;
@@ -222,16 +267,146 @@ export class CarSystem {
   }
 
   private handleArrival(car: Car, _houses: House[], bizMap: Map<string, Business>, toRemove: string[], houseMap: Map<string, House>): void {
+    if (car.state === CarState.GoingToGasStation) {
+      this.handleGasStationArrival(car);
+      return;
+    }
     if (car.state === CarState.GoingToBusiness) {
       this.parkingManager.handleParkingArrival(car, houseMap, bizMap, toRemove);
     } else if (car.state === CarState.GoingHome) {
       const home = houseMap.get(car.homeHouseId);
       if (home) {
-        home.availableCars++;
+        home.returnCar(car);
       }
       this.onHomeReturn?.();
       toRemove.push(car.id);
     }
+  }
+
+  private handleGasStationArrival(car: Car): void {
+    if (!this.gasStationSystem) return;
+    const station = car.targetGasStationId ? this.gasStationSystem.getGasStationById(car.targetGasStationId) : undefined;
+    if (!station) {
+      car.state = CarState.Stranded;
+      return;
+    }
+
+    // If station is occupied, car will be blocked by movement logic (stuck at connector)
+    if (station.refuelingCarId !== null && station.refuelingCarId !== car.id) {
+      // Wait — don't change state, let stuck timer handle it
+      return;
+    }
+
+    station.refuelingCarId = car.id;
+    car.state = CarState.Refueling;
+    car.refuelTimer = 0;
+    car.path = [];
+    car.pathIndex = 0;
+    car.segmentProgress = 0;
+    car.smoothPath = [];
+    car.smoothCumDist = [];
+    car.smoothCellDist = [];
+  }
+
+  private updateRefuelingCar(
+    car: Car, dt: number,
+    _houses: House[], bizMap: Map<string, Business>,
+    houseMap: Map<string, House>, _toRemove: string[],
+  ): void {
+    car.refuelTimer += dt;
+    if (car.refuelTimer < REFUEL_TIME) return;
+
+    // Refueling complete
+    car.fuel = FUEL_CAPACITY;
+
+    if (!this.gasStationSystem) return;
+    const station = car.targetGasStationId ? this.gasStationSystem.getGasStationById(car.targetGasStationId) : undefined;
+    if (station) {
+      station.refuelingCarId = null;
+    }
+    car.targetGasStationId = null;
+    car.refuelTimer = 0;
+
+    // Reposition car at exit connector
+    const exitPos = station?.exitConnectorPos;
+    if (exitPos) {
+      const center = gridToPixelCenter(exitPos);
+      car.pixelPos.x = center.x;
+      car.pixelPos.y = center.y;
+      car.prevPixelPos.x = center.x;
+      car.prevPixelPos.y = center.y;
+    }
+
+    if (car.postRefuelIntent === 'business') {
+      // Find highest-demand business of matching color
+      let bestBiz: Business | null = null;
+      let bestDemand = 0;
+      for (const [, biz] of bizMap) {
+        if (biz.color === car.color && biz.demandPins > bestDemand) {
+          bestDemand = biz.demandPins;
+          bestBiz = biz;
+        }
+      }
+
+      if (bestBiz && exitPos) {
+        const path = this.pathfinder.findPath(exitPos, bestBiz.parkingLotPos);
+        if (path && path.length >= 2) {
+          car.state = CarState.GoingToBusiness;
+          car.targetBusinessId = bestBiz.id;
+          car.destination = bestBiz.parkingLotPos;
+          this.router.assignPath(car, path);
+          if (car.smoothPath.length >= 2) {
+            car.pixelPos.x = car.smoothPath[0].x;
+            car.pixelPos.y = car.smoothPath[0].y;
+            car.prevPixelPos.x = car.pixelPos.x;
+            car.prevPixelPos.y = car.pixelPos.y;
+            if (path.length >= 2) {
+              const p0 = stepGridPos(path[0]);
+              const p1 = stepGridPos(path[1]);
+              const initDir = getDirection(p0, p1);
+              car.renderAngle = directionAngle(initDir);
+              car.prevRenderAngle = car.renderAngle;
+            }
+          }
+          return;
+        }
+      }
+    } else {
+      // Going home
+      const home = houseMap.get(car.homeHouseId);
+      if (home && exitPos) {
+        const homePath = this.pathfinder.findPath(exitPos, home.pos, true);
+        if (homePath && homePath.length >= 2) {
+          car.state = CarState.GoingHome;
+          car.targetBusinessId = null;
+          car.destination = home.pos;
+          this.router.assignPath(car, homePath);
+          if (car.smoothPath.length >= 2) {
+            car.pixelPos.x = car.smoothPath[0].x;
+            car.pixelPos.y = car.smoothPath[0].y;
+            car.prevPixelPos.x = car.pixelPos.x;
+            car.prevPixelPos.y = car.pixelPos.y;
+            if (homePath.length >= 2) {
+              const p0 = stepGridPos(homePath[0]);
+              const p1 = stepGridPos(homePath[1]);
+              const initDir = getDirection(p0, p1);
+              car.renderAngle = directionAngle(initDir);
+              car.prevRenderAngle = car.renderAngle;
+            }
+          }
+          return;
+        }
+      }
+    }
+
+    // If no path found, strand the car
+    car.state = CarState.Stranded;
+    car.path = [];
+    car.pathIndex = 0;
+    car.segmentProgress = 0;
+    car.smoothPath = [];
+    car.smoothCumDist = [];
+    car.smoothCellDist = [];
   }
 
   reset(): void {
