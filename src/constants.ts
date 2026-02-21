@@ -51,8 +51,8 @@ export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color
 export const COLOR_UNLOCK_INTERVAL = 35;   // seconds between new colors
 export const HOUSE_CLUSTER_RADIUS = 3;     // tiles
 export const MIN_BUSINESS_DISTANCE = 8;    // tiles from matching houses
-export const SPAWN_INTERVAL = 30;          // seconds between spawns
-export const MIN_SPAWN_INTERVAL = 10;
+export const SPAWN_INTERVAL = 60;          // seconds – initial time between house/business spawns; after each spawn this is multiplied by SPAWN_INTERVAL_DECAY (0.97), gradually accelerating spawns down to MIN_SPAWN_INTERVAL
+export const MIN_SPAWN_INTERVAL = 10;    // seconds – lower bound for spawn interval; SPAWN_INTERVAL decays by SPAWN_INTERVAL_DECAY after each spawn but never drops below this value
 export const SPAWN_INTERVAL_DECAY = 0.97;
 export const SPAWN_AREA_INTERVALS = [
   { threshold: 0, inset: 0.42 },   //  0 entities: 10% of grid
@@ -68,16 +68,16 @@ export const SPAWN_AREA_INTERVALS = [
 ];
 
 // Money
-export const STARTING_MONEY = 400;
-export const ROAD_COST = 10;
+export const STARTING_MONEY = 600;
+export const ROAD_COST = 20;
 export const DELIVERY_REWARD = 50;
-export const ROAD_REFUND = 10;
+export const ROAD_REFUND = 20;
 
 // Gas stations
-export const FUEL_CAPACITY = 80;
+export const FUEL_CAPACITY = 100;
 export const REFUEL_TIME = 2;
-export const GAS_STATION_COST = 150;
-export const GAS_STATION_REFUND = 100;
+export const GAS_STATION_COST = 200;
+export const GAS_STATION_REFUND = 150;
 export const GAS_STATION_PARKING_SLOTS = 2;
 
 // Building layout (shared margin system)
@@ -85,8 +85,8 @@ export const CELL_MARGIN = 6;          // ground plate edge inset from cell boun
 export const GROUND_PLATE_MARGIN = 3;  // inner building space inset from plate edge (px)
 
 // Highways
-export const HIGHWAY_COST = 200;
-export const HIGHWAY_REFUND = 150;
+export const HIGHWAY_COST = 500;
+export const HIGHWAY_REFUND = 450;
 export const HIGHWAY_SPEED_MULTIPLIER = 2.0;
 export const HIGHWAY_PEAK_Y = 35;
 
