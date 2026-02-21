@@ -2,10 +2,8 @@ import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import type { GasStation } from '../../entities/GasStation';
-import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, BIZ_BUILDING_ALONG, BIZ_SLOT_CROSS, BIZ_SLOT_ALONG, CELL_MARGIN } from '../../constants';
+import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, CELL_MARGIN } from '../../constants';
 import { computeGroundPlate, computeInnerSpace } from '../../utils/buildingLayout';
-import { Direction } from '../../types';
-import { DIRECTION_OFFSETS } from '../../utils/direction';
 import { getBusinessLayout } from '../../utils/businessLayout';
 import { getGasStationLayout } from '../../utils/gasStationLayout';
 
@@ -26,7 +24,6 @@ function roundedRectShape(w: number, h: number, r: number): THREE.Shape {
 
 export class BuildingLayer {
   private houseMeshes = new Map<string, THREE.Group>();
-  private houseConnectorDirs = new Map<string, Direction>();
   private parkedCarMeshes = new Map<string, THREE.Group[]>();
   private businessMeshes = new Map<string, THREE.Group>();
   private gasStationMeshes = new Map<string, THREE.Group>();
@@ -39,17 +36,12 @@ export class BuildingLayer {
   private houseBodyGeom: THREE.ExtrudeGeometry;
   private houseRoofGeom: THREE.ConeGeometry;
   private housePlateGeom: THREE.ExtrudeGeometry;
-  private bizBodyGeomH: THREE.ExtrudeGeometry;
-  private bizBodyGeomV: THREE.ExtrudeGeometry;
+  private bizBodyGeom: THREE.ExtrudeGeometry;
   private bizTowerGeom: THREE.BoxGeometry;
   private bizChimneyGeom: THREE.ExtrudeGeometry;
-  private bizPlateGeomH: THREE.ExtrudeGeometry;
-  private bizPlateGeomV: THREE.ExtrudeGeometry;
-  private bizSlotGeom: THREE.BoxGeometry;
+  private bizPlateGeom: THREE.ExtrudeGeometry;
   private bizPinGeom: THREE.SphereGeometry;
   private bizPinOutlineGeom: THREE.CircleGeometry;
-  private bizSlotOutlineGeom: THREE.BufferGeometry;
-  private bizSlotOutlineGeomH: THREE.BufferGeometry;
 
   // Parked car prototype geometries (simplified pickup truck)
   private parkedCabGeom: THREE.ExtrudeGeometry;
@@ -129,20 +121,14 @@ export class BuildingLayer {
     this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
-    // Business body (rectangular: wider on cross-axis, shorter on along-axis)
-    const bizPlate = computeGroundPlate([{ gx: 0, gy: 0 }]);
-    const bizInner = computeInnerSpace(bizPlate);
-    const bizCross = bizInner.width;                      // 30px (fits within inner space)
-    const bizAlong = TILE_SIZE * BIZ_BUILDING_ALONG;
+    // Business body (fits within a single cell's inner space)
+    const bizCellPlate = computeGroundPlate([{ gx: 0, gy: 0 }]);
+    const bizCellInner = computeInnerSpace(bizCellPlate);
+    const bizBodySize = bizCellInner.width; // square: fits in one cell
     const buildingHeight = 14;
-    // Horizontal: along=X, cross=Z → shape(along, cross) → shape(w=along, h=cross)
-    const bizBodyShapeH = roundedRectShape(bizAlong, bizCross, 2);
-    this.bizBodyGeomH = new THREE.ExtrudeGeometry(bizBodyShapeH, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
-    this.bizBodyGeomH.rotateX(-Math.PI / 2);
-    // Vertical: along=Z, cross=X → shape(w=cross, h=along)
-    const bizBodyShapeV = roundedRectShape(bizCross, bizAlong, 2);
-    this.bizBodyGeomV = new THREE.ExtrudeGeometry(bizBodyShapeV, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
-    this.bizBodyGeomV.rotateX(-Math.PI / 2);
+    const bizBodyShape = roundedRectShape(bizBodySize, bizBodySize, 2);
+    this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
+    this.bizBodyGeom.rotateX(-Math.PI / 2);
 
     // Business tower
     const towerSize = TILE_SIZE * 0.3;
@@ -154,20 +140,11 @@ export class BuildingLayer {
     this.bizChimneyGeom = new THREE.ExtrudeGeometry(chimneyShape, { depth: 12, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.7, bevelSegments: 3, curveSegments: 8 });
     this.bizChimneyGeom.rotateX(-Math.PI / 2);
 
-    // Business plates (horizontal and vertical)
-    const plateLong = TILE_SIZE * 2 - 2 * CELL_MARGIN;
-    const plateShort = TILE_SIZE - 2 * CELL_MARGIN;
-    const plateH = roundedRectShape(plateLong, plateShort, 3);
-    this.bizPlateGeomH = new THREE.ExtrudeGeometry(plateH, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
-    this.bizPlateGeomH.rotateX(-Math.PI / 2);
-    const plateV = roundedRectShape(plateShort, plateLong, 3);
-    this.bizPlateGeomV = new THREE.ExtrudeGeometry(plateV, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
-    this.bizPlateGeomV.rotateX(-Math.PI / 2);
-
-    // Business slot markings (new 1x4 row layout)
-    const slotW = TILE_SIZE * BIZ_SLOT_CROSS;
-    const slotD = TILE_SIZE * BIZ_SLOT_ALONG;
-    this.bizSlotGeom = new THREE.BoxGeometry(slotW, 0.05, slotD);
+    // Business plate (2x2 cells)
+    const bizPlateSize = TILE_SIZE * 2 - 2 * CELL_MARGIN;
+    const bizPlateShape = roundedRectShape(bizPlateSize, bizPlateSize, 3);
+    this.bizPlateGeom = new THREE.ExtrudeGeometry(bizPlateShape, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
+    this.bizPlateGeom.rotateX(-Math.PI / 2);
 
     // Demand pins (3D spheres)
     this.bizPinGeom = new THREE.SphereGeometry(3.5, 16, 12);
@@ -175,15 +152,6 @@ export class BuildingLayer {
     // Pin outline (grey filled circles on ground plate)
     this.bizPinOutlineGeom = new THREE.CircleGeometry(3, 16);
     this.bizPinOutlineGeom.rotateX(-Math.PI / 2);
-
-    // Slot outline (border-only rectangles) — vertical variant (slotW x slotD)
-    const slotOutlineBoxGeom = new THREE.BoxGeometry(slotW, 0.01, slotD);
-    this.bizSlotOutlineGeom = new THREE.EdgesGeometry(slotOutlineBoxGeom);
-    slotOutlineBoxGeom.dispose();
-    // Horizontal variant (slotD x slotW) — swapped
-    const slotOutlineBoxGeomH = new THREE.BoxGeometry(slotD, 0.01, slotW);
-    this.bizSlotOutlineGeomH = new THREE.EdgesGeometry(slotOutlineBoxGeomH);
-    slotOutlineBoxGeomH.dispose();
 
     // Parked car geometries (simplified pickup truck matching CarLayer style)
     const parkedCabLen = CAR_LENGTH * 0.38;
@@ -210,7 +178,6 @@ export class BuildingLayer {
         scene.remove(group);
         this.disposeGroup(group);
         this.houseMeshes.delete(id);
-        this.houseConnectorDirs.delete(id);
         this.parkedCarMeshes.delete(id);
       }
     }
@@ -235,34 +202,19 @@ export class BuildingLayer {
 
     // Add or update meshes for houses
     for (const house of houses) {
-      const prevDir = this.houseConnectorDirs.get(house.id);
-      if (this.houseMeshes.has(house.id) && prevDir === house.connectorDir) {
-        // Just update parked car visibility
-        const parkedCars = this.parkedCarMeshes.get(house.id);
-        if (parkedCars) {
-          for (let i = 0; i < parkedCars.length; i++) {
-            parkedCars[i].visible = i < house.carPool.length;
-          }
+      if (!this.houseMeshes.has(house.id)) {
+        const { group, parkedCars } = this.createHouseMesh(house);
+        scene.add(group);
+        this.houseMeshes.set(house.id, group);
+        this.parkedCarMeshes.set(house.id, parkedCars);
+      }
+
+      // Update parked car visibility
+      const parkedCars = this.parkedCarMeshes.get(house.id);
+      if (parkedCars) {
+        for (let i = 0; i < parkedCars.length; i++) {
+          parkedCars[i].visible = i < house.carPool.length;
         }
-        continue;
-      }
-
-      // Remove old mesh if connector direction changed
-      if (this.houseMeshes.has(house.id)) {
-        const oldGroup = this.houseMeshes.get(house.id)!;
-        scene.remove(oldGroup);
-        this.disposeGroup(oldGroup);
-      }
-
-      const { group, parkedCars } = this.createHouseMesh(house);
-      scene.add(group);
-      this.houseMeshes.set(house.id, group);
-      this.houseConnectorDirs.set(house.id, house.connectorDir);
-      this.parkedCarMeshes.set(house.id, parkedCars);
-
-      // Set initial visibility
-      for (let i = 0; i < parkedCars.length; i++) {
-        parkedCars[i].visible = i < house.carPool.length;
       }
     }
 
@@ -356,8 +308,8 @@ export class BuildingLayer {
           tex.needsUpdate = true;
         }
 
-        const px = biz.pos.gx * TILE_SIZE + TILE_SIZE / 2;
-        const pz = biz.pos.gy * TILE_SIZE + TILE_SIZE / 2;
+        const px = biz.buildingPos.gx * TILE_SIZE + TILE_SIZE / 2;
+        const pz = biz.buildingPos.gy * TILE_SIZE + TILE_SIZE / 2;
         sprite.position.set(px + 10, 2, pz + 15);
       }
     }
@@ -387,18 +339,8 @@ export class BuildingLayer {
     plate.receiveShadow = true;
     group.add(plate);
 
-    // Parked car indicators (simplified pickup trucks sticking out toward connector)
+    // Parked car indicators (simplified pickup trucks, fixed layout)
     const parkedCars: THREE.Group[] = [];
-    const off = DIRECTION_OFFSETS[house.connectorDir];
-    // Direction vector in 3D: x = off.gx, z = off.gy
-    const dirX = off.gx;
-    const dirZ = off.gy;
-    // Perpendicular vector (rotate 90 degrees clockwise in xz plane)
-    const perpX = -dirZ;
-    const perpZ = dirX;
-    // Rotation angle: car mesh is built along local X axis
-    const angle = Math.atan2(dirZ, dirX);
-
     const cabOffsetX = CAR_LENGTH * 0.18;
     const bedOffsetX = -CAR_LENGTH * 0.20;
     const sideY = 1.2;
@@ -430,15 +372,13 @@ export class BuildingLayer {
       rearWall.position.set(bedOffsetX - CAR_LENGTH * 0.24, sideY, 0);
       carGroup.add(rearWall);
 
-      // Position: offset along connector direction, staggered laterally
+      // Position: staggered laterally within the house plate
       const lateralOffset = (i === 0 ? -1 : 1) * LANE_OFFSET;
-      const alongOffset = TILE_SIZE * 0.3; // push car center toward connector
       carGroup.position.set(
-        dirX * alongOffset + perpX * lateralOffset,
+        0,
         0.8, // ground Y
-        dirZ * alongOffset + perpZ * lateralOffset,
+        lateralOffset,
       );
-      carGroup.rotation.y = -angle;
 
       group.add(carGroup);
       parkedCars.push(carGroup);
@@ -458,18 +398,14 @@ export class BuildingLayer {
     const mat = new THREE.MeshStandardMaterial({ color: hexColor });
 
     const layout = getBusinessLayout({
-      buildingPos: biz.pos,
-      parkingLotPos: biz.parkingLotPos,
-      orientation: biz.orientation,
-      connectorSide: biz.connectorSide,
+      anchorPos: biz.pos,
+      rotation: biz.rotation,
     });
 
     const buildingHeight = 14;
-    const isHoriz = biz.orientation === 'horizontal';
 
-    // Body (rectangular, orientation-aware)
-    const bodyProto = isHoriz ? this.bizBodyGeomH : this.bizBodyGeomV;
-    const body = new THREE.Mesh(bodyProto.clone(), mat);
+    // Body (square, fits in one cell)
+    const body = new THREE.Mesh(this.bizBodyGeom.clone(), mat);
     body.position.set(layout.building.centerX, 0, layout.building.centerZ);
     body.castShadow = true;
     body.receiveShadow = true;
@@ -490,9 +426,8 @@ export class BuildingLayer {
     chimney.castShadow = true;
     group.add(chimney);
 
-    // Background plate
-    const plateProto = isHoriz ? this.bizPlateGeomH : this.bizPlateGeomV;
-    const plate = new THREE.Mesh(plateProto.clone(), this.plateMat);
+    // Ground plate (2x2 cells)
+    const plate = new THREE.Mesh(this.bizPlateGeom.clone(), this.plateMat);
     plate.position.set(layout.groundPlate.centerX, 0.05, layout.groundPlate.centerZ);
     plate.castShadow = true;
     plate.receiveShadow = true;
@@ -507,9 +442,11 @@ export class BuildingLayer {
     }
 
     // Parking slot outlines (grey border rectangles on ground plate surface)
-    const slotOutlineGeom = isHoriz ? this.bizSlotOutlineGeomH : this.bizSlotOutlineGeom;
     for (const slot of layout.parkingSlots) {
-      const outline = new THREE.LineSegments(slotOutlineGeom, this.bizSlotLineMat);
+      const slotBoxGeom = new THREE.BoxGeometry(slot.width * 0.9, 0.01, slot.depth * 0.9);
+      const slotEdgeGeom = new THREE.EdgesGeometry(slotBoxGeom);
+      slotBoxGeom.dispose();
+      const outline = new THREE.LineSegments(slotEdgeGeom, this.bizSlotLineMat);
       outline.position.set(slot.centerX, outlineY, slot.centerZ);
       group.add(outline);
     }
@@ -619,11 +556,8 @@ export class BuildingLayer {
     this.sharedResources.add(this.chimneyMat);
     this.sharedResources.add(this.bizOutlineMat);
     this.sharedResources.add(this.bizChimneyGeom);
-    this.sharedResources.add(this.bizSlotGeom);
     this.sharedResources.add(this.bizPinGeom);
     this.sharedResources.add(this.bizPinOutlineGeom);
-    this.sharedResources.add(this.bizSlotOutlineGeom);
-    this.sharedResources.add(this.bizSlotOutlineGeomH);
     this.sharedResources.add(this.parkedCabGeom);
     this.sharedResources.add(this.parkedBedGeom);
     this.sharedResources.add(this.parkedBedSideGeom);
@@ -673,17 +607,12 @@ export class BuildingLayer {
     this.houseBodyGeom.dispose();
     this.houseRoofGeom.dispose();
     this.housePlateGeom.dispose();
-    this.bizBodyGeomH.dispose();
-    this.bizBodyGeomV.dispose();
+    this.bizBodyGeom.dispose();
     this.bizTowerGeom.dispose();
-    this.bizPlateGeomH.dispose();
-    this.bizPlateGeomV.dispose();
+    this.bizPlateGeom.dispose();
     this.bizChimneyGeom.dispose();
-    this.bizSlotGeom.dispose();
     this.bizPinGeom.dispose();
     this.bizPinOutlineGeom.dispose();
-    this.bizSlotOutlineGeom.dispose();
-    this.bizSlotOutlineGeomH.dispose();
     this.plateMat.dispose();
     this.plateNoiseTexture.dispose();
     this.slotMat.dispose();

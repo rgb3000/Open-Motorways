@@ -55,6 +55,14 @@ export const LaneId = {
 } as const;
 export type LaneId = (typeof LaneId)[keyof typeof LaneId];
 
+export const BusinessRotation = {
+  R0: 0,
+  R90: 90,
+  R180: 180,
+  R270: 270,
+} as const;
+export type BusinessRotation = (typeof BusinessRotation)[keyof typeof BusinessRotation];
+
 export const GameState = {
   WaitingToStart: 3,
   Playing: 0,

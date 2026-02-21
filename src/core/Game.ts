@@ -463,12 +463,12 @@ export class Game {
   private placePreDefinedEntities(): void {
     if (this.mapConfig?.houses) {
       for (const h of this.mapConfig.houses) {
-        this.spawnSystem.spawnHouse({ gx: h.gx, gy: h.gy }, h.color, h.connectorDir);
+        this.spawnSystem.spawnHouse({ gx: h.gx, gy: h.gy }, h.color);
       }
     }
     if (this.mapConfig?.businesses) {
       for (const b of this.mapConfig.businesses) {
-        this.spawnSystem.spawnBusiness({ gx: b.gx, gy: b.gy }, b.color, b.orientation, b.connectorSide);
+        this.spawnSystem.spawnBusiness({ gx: b.gx, gy: b.gy }, b.color, b.rotation);
       }
     }
     this.spawnSystem.unlockAllColors();
@@ -485,13 +485,13 @@ export class Game {
 
       cell.roadConnections = r.connections ?? 0;
     }
-    // Restore road-side bits on connector cells
+    // Restore road-side bits on connector and house cells
     for (const r of this.mapConfig.roads) {
       const cell = this.grid.getCell(r.gx, r.gy);
       if (!cell || cell.type !== CellType.Road) continue;
       forEachDirection(cell.roadConnections, (dir) => {
         const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
-        if (neighbor && neighbor.cell.type === CellType.Connector) {
+        if (neighbor && (neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.House)) {
           neighbor.cell.roadConnections |= opposite(dir);
         }
       });

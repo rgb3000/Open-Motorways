@@ -1,4 +1,4 @@
-import { GameColor, Direction } from '../../types';
+import { GameColor } from '../../types';
 import type { MapConfig } from '../types';
 import type { HouseDefinition, BusinessDefinition, RoadDefinition } from '../types';
 
@@ -8,7 +8,6 @@ const ALL_COLORS: GameColor[] = [
 ];
 
 // Generate houses in rows across the map
-// House at (gx, gy) with connectorDir Down -> connector at (gx, gy+1)
 const houses: HouseDefinition[] = [];
 const houseXPositions = [12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56];
 for (let row = 0; row < 3; row++) {
@@ -18,26 +17,22 @@ for (let row = 0; row < 3; row++) {
       gx: houseXPositions[i],
       gy,
       color: ALL_COLORS[i % ALL_COLORS.length],
-      connectorDir: Direction.Down,
     });
   }
 }
 
-// Generate businesses in rows across the map
-// Business at (gx, gy), vertical, negative:
-//   parking at (gx, gy+1), connector at (gx-1, gy+1)
-// So the connector x = gx - 1
+// Generate businesses in rows across the map (2x2 layout)
+// Rotation 0: anchor at top-left → connector at (anchor.gx, anchor.gy + 1)
 const businesses: BusinessDefinition[] = [];
 const bizXPositions = [14, 18, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58];
 for (let row = 0; row < 3; row++) {
   const gy = 27 + row * 4; // y = 27, 31, 35
   for (let i = 0; i < bizXPositions.length; i++) {
     businesses.push({
-      gx: bizXPositions[i],
+      gx: bizXPositions[i] - 1, // anchor = top-left of 2x2
       gy,
       color: ALL_COLORS[i % ALL_COLORS.length],
-      orientation: 'vertical',
-      connectorSide: 'negative',
+      rotation: 0,
     });
   }
 }
@@ -60,18 +55,18 @@ for (const x of houseXPositions) {
   }
 }
 
-// Vertical roads from each house connector (gy+1) down to upper trunk (y=19)
+// Vertical roads from each house (gy) down to upper trunk (y=19)
+// Roads go from gy+1 (adjacent to house) down to y=18 (adjacent to trunk)
 for (const h of houses) {
-  const connY = h.gy + 1; // connector cell
-  for (let y = connY + 1; y < 19; y++) {
+  for (let y = h.gy + 1; y < 19; y++) {
     roads.push({ gx: h.gx, gy: y });
   }
 }
 
 // Vertical roads from lower trunk (y=23) down to each business connector
-// Connector is at (bizX - 1, bizY + 1)
+// With rotation 0: connector is at (anchor.gx, anchor.gy + 1)
 for (const b of businesses) {
-  const connX = b.gx - 1;
+  const connX = b.gx; // anchor.gx = connector.gx for rotation 0
   const connY = b.gy + 1;
   // Vertical drop from trunk to connector row
   for (let y = 24; y < connY; y++) {

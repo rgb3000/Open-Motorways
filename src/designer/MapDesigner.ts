@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CellType, Direction, GameColor, Tool } from '../types';
+import { CellType, GameColor, Tool, type BusinessRotation } from '../types';
 import { Grid } from '../core/Grid';
 import { opposite, ALL_DIRECTIONS } from '../utils/direction';
 import { Renderer } from '../rendering/Renderer';
@@ -44,9 +44,7 @@ export class MapDesigner {
   // Designer state
   activeTool: DesignerTool = DesignerTool.Road;
   activeColor: GameColor = GameColor.Red;
-  houseConnectorDir: Direction = Direction.Down;
-  businessOrientation: 'horizontal' | 'vertical' = 'horizontal';
-  businessConnectorSide: 'positive' | 'negative' = 'positive';
+  businessRotation: BusinessRotation = 0;
   obstacleType: 'mountain' | 'lake' = 'mountain';
 
   // Callbacks
@@ -272,41 +270,20 @@ export class MapDesigner {
     const cell = this.grid.getCell(gx, gy);
     if (!cell || cell.type !== CellType.Empty) return;
 
-    // Check connector cell is empty
-    const off = this.grid.getDirectionOffset(this.houseConnectorDir);
-    const cx = gx + off.gx;
-    const cy = gy + off.gy;
-    const connCell = this.grid.getCell(cx, cy);
-    if (!connCell || connCell.type !== CellType.Empty) return;
-
-    this.spawnSystem.spawnHouse({ gx, gy }, this.activeColor, this.houseConnectorDir);
+    this.spawnSystem.spawnHouse({ gx, gy }, this.activeColor);
     this.renderer.markGroundDirty();
   }
 
   placeBusiness(gx: number, gy: number): void {
-    const cell = this.grid.getCell(gx, gy);
-    if (!cell || cell.type !== CellType.Empty) return;
-
-    // Check parking lot and connector cells
-    let parkGx: number, parkGy: number, connGx: number, connGy: number;
-    if (this.businessOrientation === 'horizontal') {
-      parkGx = gx + 1;
-      parkGy = gy;
-      connGx = gx + 1;
-      connGy = gy + (this.businessConnectorSide === 'positive' ? 1 : -1);
-    } else {
-      parkGx = gx;
-      parkGy = gy + 1;
-      connGx = gx + (this.businessConnectorSide === 'positive' ? 1 : -1);
-      connGy = gy + 1;
+    // Check all 4 cells of the 2x2 block are empty
+    for (let dy = 0; dy <= 1; dy++) {
+      for (let dx = 0; dx <= 1; dx++) {
+        const cell = this.grid.getCell(gx + dx, gy + dy);
+        if (!cell || cell.type !== CellType.Empty) return;
+      }
     }
 
-    const parkCell = this.grid.getCell(parkGx, parkGy);
-    const connCell = this.grid.getCell(connGx, connGy);
-    if (!parkCell || parkCell.type !== CellType.Empty) return;
-    if (!connCell || connCell.type !== CellType.Empty) return;
-
-    this.spawnSystem.spawnBusiness({ gx, gy }, this.activeColor, this.businessOrientation, this.businessConnectorSide);
+    this.spawnSystem.spawnBusiness({ gx, gy }, this.activeColor, this.businessRotation);
     this.renderer.markGroundDirty();
   }
 
@@ -390,15 +367,16 @@ export class MapDesigner {
     const house = this.spawnSystem.getHouses().find(h => h.id === entityId);
     if (house) {
       this.clearCell(house.pos.gx, house.pos.gy);
-      this.clearConnectorCell(house.connectorPos.gx, house.connectorPos.gy);
       this.spawnSystem.removeHouse(entityId);
+      this.roadSystem.markDirty();
       return;
     }
 
-    // Find and remove a business
+    // Find and remove a business (4 cells)
     const business = this.spawnSystem.getBusinesses().find(b => b.id === entityId);
     if (business) {
-      this.clearCell(business.pos.gx, business.pos.gy);
+      this.clearCell(business.buildingPos.gx, business.buildingPos.gy);
+      this.clearCell(business.pinsPos.gx, business.pinsPos.gy);
       this.clearCell(business.parkingLotPos.gx, business.parkingLotPos.gy);
       this.clearConnectorCell(business.connectorPos.gx, business.connectorPos.gy);
       this.spawnSystem.removeBusiness(entityId);
@@ -467,15 +445,13 @@ export class MapDesigner {
       gx: h.pos.gx,
       gy: h.pos.gy,
       color: h.color,
-      connectorDir: h.connectorDir,
     }));
 
     const businesses = this.spawnSystem.getBusinesses().map(b => ({
       gx: b.pos.gx,
       gy: b.pos.gy,
       color: b.color,
-      orientation: b.orientation,
-      connectorSide: b.connectorSide,
+      rotation: b.rotation,
     }));
 
     const roads: { gx: number; gy: number; connections?: number }[] = [];

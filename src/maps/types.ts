@@ -1,4 +1,4 @@
-import type { GameColor, Direction } from '../types';
+import type { GameColor } from '../types';
 
 export interface ObstacleDefinition {
   gx: number;
@@ -11,15 +11,13 @@ export interface HouseDefinition {
   gx: number;
   gy: number;
   color: GameColor;
-  connectorDir?: Direction;
 }
 
 export interface BusinessDefinition {
   gx: number;
   gy: number;
   color: GameColor;
-  orientation: 'horizontal' | 'vertical';
-  connectorSide: 'positive' | 'negative';
+  rotation: 0 | 90 | 180 | 270;
 }
 
 export interface RoadDefinition {

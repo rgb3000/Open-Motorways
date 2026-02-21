@@ -1,7 +1,5 @@
 import type { Grid } from '../core/Grid';
 import type { Cell } from '../types';
-import type { House } from '../entities/House';
-import type { Direction } from '../types';
 
 interface CellSnapshot {
   gx: number;
@@ -9,15 +7,9 @@ interface CellSnapshot {
   cell: Cell; // deep copy
 }
 
-interface HouseConnectorSnapshot {
-  house: House;
-  oldDir: Direction;
-}
-
 interface UndoGroup {
   cellSnapshots: Map<string, CellSnapshot>;
   moneyDelta: number;
-  houseConnectorChange: HouseConnectorSnapshot | null;
 }
 
 const MAX_UNDO_STACK = 50;
@@ -48,7 +40,6 @@ export class UndoSystem {
     this.currentGroup = {
       cellSnapshots: new Map(),
       moneyDelta: 0,
-      houseConnectorChange: null,
     };
   }
 
@@ -81,14 +72,6 @@ export class UndoSystem {
     this.currentGroup.moneyDelta += delta;
   }
 
-  setHouseConnectorChange(house: House, oldDir: Direction): void {
-    if (!this.currentGroup) return;
-    // Only record the first change per group (original state)
-    if (!this.currentGroup.houseConnectorChange) {
-      this.currentGroup.houseConnectorChange = { house, oldDir };
-    }
-  }
-
   endGroup(): void {
     if (!this.currentGroup) return;
     if (this.currentGroup.cellSnapshots.size === 0) {
@@ -109,11 +92,6 @@ export class UndoSystem {
     // Restore all snapshotted cells
     for (const snapshot of group.cellSnapshots.values()) {
       this.grid.setCell(snapshot.gx, snapshot.gy, deepCopyCell(snapshot.cell));
-    }
-
-    // Restore house connector direction
-    if (group.houseConnectorChange) {
-      group.houseConnectorChange.house.setConnectorDir(group.houseConnectorChange.oldDir);
     }
 
     return group;

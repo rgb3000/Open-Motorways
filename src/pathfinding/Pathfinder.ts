@@ -75,11 +75,8 @@ export class Pathfinder {
         const off = DIRECTION_OFFSETS[dir];
         const diag = isDiagonalDir(dir);
 
-        if (currentCell && (currentCell.type === CellType.Road || currentCell.type === CellType.Connector)) {
+        if (currentCell && (currentCell.type === CellType.Road || currentCell.type === CellType.Connector || currentCell.type === CellType.House)) {
           if (!(currentCell.roadConnections & dir)) continue;
-        }
-        if (currentCell && currentCell.type === CellType.House) {
-          if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
         }
         if (currentCell && currentCell.type === CellType.ParkingLot) {
           if (currentCell.connectorDir !== null && dir !== currentCell.connectorDir) continue;
@@ -97,8 +94,9 @@ export class Pathfinder {
         if (cell.type === CellType.Business) continue;
         if (cell.type === CellType.GasStation) continue;
         if ((cell.type === CellType.House || cell.type === CellType.ParkingLot) && !isDestination) continue;
-        if (cell.type === CellType.House && cell.connectorDir !== null) {
-          if (dir !== opposite(cell.connectorDir)) continue;
+        if (cell.type === CellType.House) {
+          // Can only enter from a direction the house has a road connection toward
+          if (!(cell.roadConnections & opposite(dir))) continue;
         }
 
         const nKey = `${nx},${ny}`;

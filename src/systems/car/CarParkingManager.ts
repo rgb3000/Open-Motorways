@@ -72,10 +72,8 @@ function sampleQuadraticBezier(
 // Compute parking slot offsets relative to lot cell center using layout system
 export function getParkingSlotOffsets(biz: Business): { x: number; y: number }[] {
   const slots = getParkingSlotLayout({
-    buildingPos: biz.pos,
-    parkingLotPos: biz.parkingLotPos,
-    orientation: biz.orientation,
-    connectorSide: biz.connectorSide,
+    anchorPos: biz.pos,
+    rotation: biz.rotation,
   });
   const lotCenterX = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
   const lotCenterZ = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;

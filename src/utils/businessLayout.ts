@@ -1,22 +1,14 @@
-import {
-  TILE_SIZE,
-  BIZ_BUILDING_ALONG,
-  BIZ_PIN_SPACING,
-  BIZ_PIN_CENTER_T,
-  BIZ_SLOT_CROSS,
-  BIZ_SLOT_ALONG,
-} from '../constants';
-import { cellCenter, computeGroundPlate, computeInnerSpace } from './buildingLayout';
+import type { BusinessRotation } from '../types';
+import { BIZ_PIN_SPACING } from '../constants';
+import { cellCenter, computeGroundPlate, computeInnerSpace, computeParkingSlots } from './buildingLayout';
 import type { Rect2D, Point2D } from './buildingLayout';
 
 // Re-export shared types for backward compatibility
 export type { Rect2D, Point2D };
 
 export interface BusinessLayoutInput {
-  buildingPos: { gx: number; gy: number };
-  parkingLotPos: { gx: number; gy: number };
-  orientation: 'horizontal' | 'vertical';
-  connectorSide: 'positive' | 'negative';
+  anchorPos: { gx: number; gy: number };
+  rotation: BusinessRotation;
 }
 
 export interface BusinessLayout {
@@ -26,91 +18,73 @@ export interface BusinessLayout {
   parkingSlots: Rect2D[];     // 4 slot rectangles
 }
 
-/** Convert (along, cross) to (worldX, worldZ) relative to an origin. */
-function toWorld(
-  originX: number,
-  originZ: number,
-  along: number,
-  cross: number,
-  isHorizontal: boolean,
-): { x: number; z: number } {
-  if (isHorizontal) {
-    // along = +X (building→lot), cross = Z
-    return { x: originX + along, z: originZ + cross };
-  } else {
-    // along = +Z (building→lot), cross = X
-    return { x: originX + cross, z: originZ + along };
-  }
-}
+/** Cell offsets from anchor for each rotation (mirrors Business entity). */
+const LAYOUT_OFFSETS: Record<BusinessRotation, {
+  building: { gx: number; gy: number };
+  pins: { gx: number; gy: number };
+  connector: { gx: number; gy: number };
+  parkingLot: { gx: number; gy: number };
+}> = {
+  0:   { building: { gx: 0, gy: 0 }, pins: { gx: 1, gy: 0 }, connector: { gx: 0, gy: 1 }, parkingLot: { gx: 1, gy: 1 } },
+  90:  { building: { gx: 1, gy: 0 }, pins: { gx: 1, gy: 1 }, connector: { gx: 0, gy: 0 }, parkingLot: { gx: 0, gy: 1 } },
+  180: { building: { gx: 1, gy: 1 }, pins: { gx: 0, gy: 1 }, connector: { gx: 1, gy: 0 }, parkingLot: { gx: 0, gy: 0 } },
+  270: { building: { gx: 0, gy: 1 }, pins: { gx: 0, gy: 0 }, connector: { gx: 1, gy: 1 }, parkingLot: { gx: 1, gy: 0 } },
+};
 
-export function getGroundPlateLayout(input: BusinessLayoutInput): Rect2D {
-  return computeGroundPlate([input.buildingPos, input.parkingLotPos]);
-}
+/** Parking slot axis: perpendicular to connector→parking direction. */
+const PARKING_AXIS: Record<BusinessRotation, 'x' | 'z'> = {
+  0:   'z',  // connector→parking is horizontal (Right), slots along Z
+  90:  'x',  // connector→parking is vertical (Down), slots along X
+  180: 'z',  // connector→parking is horizontal (Left), slots along Z
+  270: 'x',  // connector→parking is vertical (Up), slots along X
+};
 
-export function getBuildingLayout(input: BusinessLayoutInput): Rect2D {
-  const bldg = cellCenter(input.buildingPos);
-  const isH = input.orientation === 'horizontal';
-  const bldgPlate = computeGroundPlate([input.buildingPos]);
-  const bldgInner = computeInnerSpace(bldgPlate);
-  const crossSize = isH ? bldgInner.depth : bldgInner.width;
-  const alongSize = TILE_SIZE * BIZ_BUILDING_ALONG;
+function getCellPositions(input: BusinessLayoutInput) {
+  const { anchorPos, rotation } = input;
+  const offsets = LAYOUT_OFFSETS[rotation];
   return {
-    centerX: bldg.x,
-    centerZ: bldg.z,
-    width: isH ? alongSize : crossSize,
-    depth: isH ? crossSize : alongSize,
+    building: { gx: anchorPos.gx + offsets.building.gx, gy: anchorPos.gy + offsets.building.gy },
+    pins: { gx: anchorPos.gx + offsets.pins.gx, gy: anchorPos.gy + offsets.pins.gy },
+    connector: { gx: anchorPos.gx + offsets.connector.gx, gy: anchorPos.gy + offsets.connector.gy },
+    parkingLot: { gx: anchorPos.gx + offsets.parkingLot.gx, gy: anchorPos.gy + offsets.parkingLot.gy },
   };
 }
 
-export function getPinGridLayout(input: BusinessLayoutInput): Point2D[] {
-  const bldg = cellCenter(input.buildingPos);
-  const lot = cellCenter(input.parkingLotPos);
-  const isH = input.orientation === 'horizontal';
+export function getGroundPlateLayout(input: BusinessLayoutInput): Rect2D {
+  const cells = getCellPositions(input);
+  return computeGroundPlate([cells.building, cells.pins, cells.connector, cells.parkingLot]);
+}
 
-  const anchorX = bldg.x + (lot.x - bldg.x) * BIZ_PIN_CENTER_T;
-  const anchorZ = bldg.z + (lot.z - bldg.z) * BIZ_PIN_CENTER_T;
+export function getBuildingLayout(input: BusinessLayoutInput): Rect2D {
+  const cells = getCellPositions(input);
+  const bldgPlate = computeGroundPlate([cells.building]);
+  return computeInnerSpace(bldgPlate);
+}
+
+export function getPinGridLayout(input: BusinessLayoutInput): Point2D[] {
+  const cells = getCellPositions(input);
+  const pinsCenter = cellCenter(cells.pins);
 
   const points: Point2D[] = [];
   for (let i = 0; i < 8; i++) {
-    const col = i % 4;       // 0..3 (cross-axis)
-    const row = (i / 4) | 0; // 0 or 1 (along-axis)
-    const crossOffset = (col - 1.5) * BIZ_PIN_SPACING;
-    const alongOffset = (row - 0.5) * BIZ_PIN_SPACING;
-    const pt = toWorld(anchorX, anchorZ, alongOffset, crossOffset, isH);
-    points.push(pt);
+    const col = i % 4;       // 0..3
+    const row = (i / 4) | 0; // 0 or 1
+    const offsetA = (col - 1.5) * BIZ_PIN_SPACING;
+    const offsetB = (row - 0.5) * BIZ_PIN_SPACING;
+    points.push({
+      x: pinsCenter.x + offsetA,
+      z: pinsCenter.z + offsetB,
+    });
   }
   return points;
 }
 
 export function getParkingSlotLayout(input: BusinessLayoutInput): Rect2D[] {
-  const bldg = cellCenter(input.buildingPos);
-  const lot = cellCenter(input.parkingLotPos);
-  const isH = input.orientation === 'horizontal';
-
-  // Pin anchor (same as getPinGridLayout)
-  const anchorX = bldg.x + (lot.x - bldg.x) * BIZ_PIN_CENTER_T;
-  const anchorZ = bldg.z + (lot.z - bldg.z) * BIZ_PIN_CENTER_T;
-
-  const slotCross = TILE_SIZE * BIZ_SLOT_CROSS;
-  const slotAlong = TILE_SIZE * BIZ_SLOT_ALONG;
-  const slotSpacing = BIZ_PIN_SPACING; // align with pin grid columns
-
-  // Place slots just past the pin grid's far edge (toward lot), with a small gap
-  const pinFarEdge = 0.5 * BIZ_PIN_SPACING; // pin grid extends this far from anchor toward lot
-  const gap = 6; // px gap between pins and parking slots
-  const slotAlongOffset = pinFarEdge + gap + slotAlong / 2;
-
-  const slots: Rect2D[] = [];
-  for (let i = 0; i < 4; i++) {
-    const crossOffset = (i - 1.5) * slotSpacing;
-    const pt = toWorld(anchorX, anchorZ, slotAlongOffset, crossOffset, isH);
-    if (isH) {
-      slots.push({ centerX: pt.x, centerZ: pt.z, width: slotAlong, depth: slotCross });
-    } else {
-      slots.push({ centerX: pt.x, centerZ: pt.z, width: slotCross, depth: slotAlong });
-    }
-  }
-  return slots;
+  const cells = getCellPositions(input);
+  const lotPlate = computeGroundPlate([cells.parkingLot]);
+  const lotInner = computeInnerSpace(lotPlate);
+  const axis = PARKING_AXIS[input.rotation];
+  return computeParkingSlots(lotInner, 4, axis);
 }
 
 export function getBusinessLayout(input: BusinessLayoutInput): BusinessLayout {
