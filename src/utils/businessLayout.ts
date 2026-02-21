@@ -14,7 +14,7 @@ export interface BusinessLayoutInput {
 export interface BusinessLayout {
   groundPlate: Rect2D;
   building: Rect2D;
-  pinSlots: Point2D[];        // 8 positions (4 cols x 2 rows)
+  pinSlots: Point2D[];        // 9 positions (3 cols x 3 rows)
   parkingSlots: Rect2D[];     // 4 slot rectangles
 }
 
@@ -70,16 +70,16 @@ export function getPinGridLayout(input: BusinessLayoutInput): Point2D[] {
   const cells = getCellPositions(input);
   const pinRect = computeCellWithinPlate(cells.pins, getPlateInner(input));
 
-  // Spread pins evenly across the cell's inner rect (4 cols × 2 rows)
-  const cols = 4;
-  const rows = 2;
+  // Spread pins evenly across the cell's inner rect (3 cols × 3 rows)
+  const cols = 3;
+  const rows = 3;
   const spacingX = pinRect.width / cols;
   const spacingZ = pinRect.depth / rows;
 
   const points: Point2D[] = [];
-  for (let i = 0; i < 8; i++) {
-    const col = i % cols;       // 0..3
-    const row = (i / cols) | 0; // 0 or 1
+  for (let i = 0; i < 9; i++) {
+    const col = i % cols;       // 0..2
+    const row = (i / cols) | 0; // 0..2
     const offsetX = (col - (cols - 1) / 2) * spacingX;
     const offsetZ = (row - (rows - 1) / 2) * spacingZ;
     points.push({

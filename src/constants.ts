@@ -12,7 +12,7 @@ export const FIXED_DT = 1 / 60;         // 60 updates/sec
 export const MAX_FRAME_TIME = 0.2;       // spiral-of-death cap
 
 // Demand
-export const MAX_DEMAND_PINS = 8;
+export const MAX_DEMAND_PINS = 9;
 export const DEMAND_BASE_RATE = 1.5;   // pins/min for a fresh business
 export const DEMAND_RATE_GROWTH = 0.3; // additional pins/min per minute of age
 export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to the same business

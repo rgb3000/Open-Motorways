@@ -1,18 +1,18 @@
 import type { MapConfig, ObstacleDefinition } from '../types';
 import terrainSvg from './terrain.svg';
 
-// Vertical mountain wall at column 35, with a gap from rows 18-22
+// Vertical mountain wall at column 40, with a gap from rows 23-27
 const obstacles: ObstacleDefinition[] = [];
 
-for (let gy = 2; gy <= 17; gy++) {
+for (let gy = 2; gy <= 22; gy++) {
   for (let dx = -1; dx <= 1; dx++) {
-    obstacles.push({ gx: 35 + dx, gy, type: 'mountain', height: 10 + Math.abs(dx) * -2 });
+    obstacles.push({ gx: 40 + dx, gy, type: 'mountain', height: 10 + Math.abs(dx) * -2 });
   }
 }
 
-for (let gy = 23; gy <= 37; gy++) {
+for (let gy = 28; gy <= 47; gy++) {
   for (let dx = -1; dx <= 1; dx++) {
-    obstacles.push({ gx: 35 + dx, gy, type: 'mountain', height: 10 + Math.abs(dx) * -2 });
+    obstacles.push({ gx: 40 + dx, gy, type: 'mountain', height: 10 + Math.abs(dx) * -2 });
   }
 }
 
