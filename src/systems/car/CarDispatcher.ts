@@ -41,7 +41,13 @@ export class CarDispatcher {
     const carsEnRoute = this._carsEnRoute;
     carsEnRoute.clear();
     for (const car of cars) {
-      if ((car.state === CarState.GoingToBusiness || (car.state === CarState.GoingToGasStation && car.postRefuelIntent === 'business')) && car.targetBusinessId) {
+      if (car.targetBusinessId && (
+        car.state === CarState.GoingToBusiness ||
+        car.state === CarState.ParkingIn ||
+        car.state === CarState.Unloading ||
+        car.state === CarState.WaitingToExit ||
+        (car.state === CarState.GoingToGasStation && car.postRefuelIntent === 'business')
+      )) {
         carsEnRoute.set(car.targetBusinessId, (carsEnRoute.get(car.targetBusinessId) ?? 0) + 1);
       }
     }
