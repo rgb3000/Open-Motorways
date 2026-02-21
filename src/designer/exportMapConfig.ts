@@ -12,16 +12,6 @@ const COLOR_NAMES: Record<GameColor, string> = {
   [GameColor.Orange]: 'GameColor.Orange',
 };
 
-const DIR_NAMES: Record<Direction, string> = {
-  [Direction.Up]: 'Direction.Up',
-  [Direction.Down]: 'Direction.Down',
-  [Direction.Left]: 'Direction.Left',
-  [Direction.Right]: 'Direction.Right',
-  [Direction.UpLeft]: 'Direction.UpLeft',
-  [Direction.UpRight]: 'Direction.UpRight',
-  [Direction.DownLeft]: 'Direction.DownLeft',
-  [Direction.DownRight]: 'Direction.DownRight',
-};
 
 export function exportMapConfig(
   grid: Grid,
@@ -41,7 +31,7 @@ export function exportMapConfig(
   if (houses.length > 0) {
     lines.push('const houses = [');
     for (const h of houses) {
-      lines.push(`  { gx: ${h.pos.gx}, gy: ${h.pos.gy}, color: ${COLOR_NAMES[h.color]}, connectorDir: ${DIR_NAMES[h.connectorDir]} },`);
+      lines.push(`  { gx: ${h.pos.gx}, gy: ${h.pos.gy}, color: ${COLOR_NAMES[h.color]} },`);
     }
     lines.push('];');
     lines.push('');
@@ -51,7 +41,7 @@ export function exportMapConfig(
   if (businesses.length > 0) {
     lines.push('const businesses = [');
     for (const b of businesses) {
-      lines.push(`  { gx: ${b.pos.gx}, gy: ${b.pos.gy}, color: ${COLOR_NAMES[b.color]}, orientation: '${b.orientation}' as const, connectorSide: '${b.connectorSide}' as const },`);
+      lines.push(`  { gx: ${b.pos.gx}, gy: ${b.pos.gy}, color: ${COLOR_NAMES[b.color]}, rotation: ${b.rotation} },`);
     }
     lines.push('];');
     lines.push('');

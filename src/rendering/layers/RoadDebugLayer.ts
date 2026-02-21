@@ -69,10 +69,8 @@ export class RoadDebugLayer {
     // Parking debug: entry/exit lines and slot dots per business
     for (const biz of businesses) {
       const layout = getBusinessLayout({
-        buildingPos: biz.pos,
-        parkingLotPos: biz.parkingLotPos,
-        orientation: biz.orientation,
-        connectorSide: biz.connectorSide,
+        anchorPos: biz.pos,
+        rotation: biz.rotation,
       });
 
       const connCX = biz.connectorPos.gx * TILE_SIZE + half;

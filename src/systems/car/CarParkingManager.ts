@@ -5,11 +5,16 @@ import type { House } from '../../entities/House';
 import type { Pathfinder } from '../../pathfinding/Pathfinder';
 import type { CarRouter } from './CarRouter';
 import { stepGridPos } from './CarRouter';
+import type { CarRefuelingManager } from './CarRefuelingManager';
 import type { PendingDeletionSystem } from '../PendingDeletionSystem';
+import type { GasStationSystem } from '../GasStationSystem';
+import type { HighwaySystem } from '../HighwaySystem';
 import { TILE_SIZE, UNLOAD_TIME, CAR_SPEED } from '../../constants';
+import { computePathFuelCost } from '../../pathfinding/pathCost';
 import { gridToPixelCenter } from '../../utils/math';
 import { getDirection, directionAngle } from '../../utils/direction';
 import { getParkingSlotLayout } from '../../utils/businessLayout';
+import { getGasStationLayout } from '../../utils/gasStationLayout';
 import { occupancyKey } from './CarTrafficManager';
 import { LaneId } from '../../types';
 
@@ -67,10 +72,8 @@ function sampleQuadraticBezier(
 // Compute parking slot offsets relative to lot cell center using layout system
 export function getParkingSlotOffsets(biz: Business): { x: number; y: number }[] {
   const slots = getParkingSlotLayout({
-    buildingPos: biz.pos,
-    parkingLotPos: biz.parkingLotPos,
-    orientation: biz.orientation,
-    connectorSide: biz.connectorSide,
+    anchorPos: biz.pos,
+    rotation: biz.rotation,
   });
   const lotCenterX = biz.parkingLotPos.gx * TILE_SIZE + TILE_SIZE / 2;
   const lotCenterZ = biz.parkingLotPos.gy * TILE_SIZE + TILE_SIZE / 2;
@@ -84,11 +87,21 @@ export class CarParkingManager {
   private pathfinder: Pathfinder;
   private router: CarRouter;
   private pendingDeletionSystem: PendingDeletionSystem;
+  private gasStationSystem: GasStationSystem | null;
+  private highwaySystem: HighwaySystem | null;
+  private refuelingManager: CarRefuelingManager | null = null;
 
-  constructor(pathfinder: Pathfinder, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem) {
+  constructor(pathfinder: Pathfinder, router: CarRouter, pendingDeletionSystem: PendingDeletionSystem, gasStationSystem?: GasStationSystem, highwaySystem?: HighwaySystem) {
     this.pathfinder = pathfinder;
     this.router = router;
     this.pendingDeletionSystem = pendingDeletionSystem;
+    this.gasStationSystem = gasStationSystem ?? null;
+    this.highwaySystem = highwaySystem ?? null;
+  }
+
+  /** Set after construction to break circular dependency. */
+  setRefuelingManager(manager: CarRefuelingManager): void {
+    this.refuelingManager = manager;
   }
 
   updateUnloadingCar(
@@ -115,6 +128,12 @@ export class CarParkingManager {
     exitCooldowns: Map<string, number>,
     onSetCooldown: (bizId: string) => void,
   ): void {
+    // Gas station branch
+    if (car.targetGasStationId && this.gasStationSystem) {
+      this.handleGasStationWaitingToExit(car, occupied);
+      return;
+    }
+
     const biz = car.targetBusinessId ? bizMap.get(car.targetBusinessId) : undefined;
     if (!biz) { toRemove.push(car.id); return; }
 
@@ -183,6 +202,53 @@ export class CarParkingManager {
     }
   }
 
+  private handleGasStationWaitingToExit(car: Car, occupied: Map<number, string>): void {
+    const station = car.targetGasStationId ? this.gasStationSystem!.getGasStationById(car.targetGasStationId) : undefined;
+    if (!station) {
+      car.state = CarState.Stranded;
+      return;
+    }
+
+    // Check exit connector is free
+    const cx = station.exitConnectorPos.gx;
+    const cy = station.exitConnectorPos.gy;
+    let connectorFree = true;
+    for (let lane = 0 as LaneId; lane <= 7; lane++) {
+      const occupant = occupied.get(occupancyKey(cx, cy, lane as LaneId));
+      if (occupant && occupant !== car.id) {
+        connectorFree = false;
+        break;
+      }
+    }
+    if (!connectorFree) return;
+
+    // Free the parking slot
+    if (car.assignedSlotIndex !== null) {
+      station.freeSlot(car.assignedSlotIndex);
+    }
+
+    // Build Bezier path from slot to exit connector center
+    const layout = getGasStationLayout({
+      entryConnectorPos: station.entryConnectorPos,
+      pos: station.pos,
+      exitConnectorPos: station.exitConnectorPos,
+      orientation: station.orientation,
+    });
+
+    const slotPos = { x: car.pixelPos.x, y: car.pixelPos.y };
+    const exitCenter = { x: layout.exitPoint.x, y: layout.exitPoint.z };
+    const isHoriz = station.orientation === 'horizontal';
+    const cp = isHoriz
+      ? { x: exitCenter.x, y: slotPos.y }
+      : { x: slotPos.x, y: exitCenter.y };
+
+    car.parkingPath = sampleQuadraticBezier(slotPos, cp, exitCenter, 16);
+    car.parkingCumDist = computeCumDist(car.parkingPath);
+    car.parkingProgress = 0;
+    car.state = CarState.ParkingOut;
+    car.assignedSlotIndex = null;
+  }
+
   handleParkingArrival(
     car: Car, houseMap: Map<string, House>, bizMap: Map<string, Business>, toRemove: string[],
   ): void {
@@ -219,6 +285,43 @@ export class CarParkingManager {
       if (home) {
         const homePath = this.pathfinder.findPath(biz.parkingLotPos, home.pos, true);
         if (homePath) {
+          // Check fuel before going home
+          const fuelCost = computePathFuelCost(homePath, this.highwaySystem);
+          if (fuelCost > car.fuel && this.gasStationSystem) {
+            // Need gas station detour
+            const startPos = homePath.length > 0 ? stepGridPos(homePath[0]) : biz.parkingLotPos;
+            const result = this.gasStationSystem.findNearestReachable(startPos, this.pathfinder, this.highwaySystem);
+            if (result) {
+              const stationPath = this.pathfinder.findPath(startPos, result.station.entryConnectorPos);
+              if (stationPath && stationPath.length >= 2) {
+                car.state = CarState.GoingToGasStation;
+                car.targetBusinessId = null;
+                car.targetGasStationId = result.station.id;
+                car.postRefuelIntent = 'home';
+                car.destination = result.station.entryConnectorPos;
+                this.router.assignPath(car, stationPath);
+                if (car.smoothPath.length >= 2) {
+                  car.pixelPos.x = car.smoothPath[0].x;
+                  car.pixelPos.y = car.smoothPath[0].y;
+                  car.prevPixelPos.x = car.pixelPos.x;
+                  car.prevPixelPos.y = car.pixelPos.y;
+                  if (stationPath.length >= 2) {
+                    const p0 = stepGridPos(stationPath[0]);
+                    const p1 = stepGridPos(stationPath[1]);
+                    const initDir = getDirection(p0, p1);
+                    car.renderAngle = directionAngle(initDir);
+                    car.prevRenderAngle = car.renderAngle;
+                  }
+                } else {
+                  const center = gridToPixelCenter(biz.parkingLotPos);
+                  car.pixelPos.x = center.x;
+                  car.pixelPos.y = center.y;
+                }
+                return;
+              }
+            }
+          }
+
           car.state = CarState.GoingHome;
           car.targetBusinessId = null;
           car.destination = home.pos;
@@ -266,11 +369,18 @@ export class CarParkingManager {
       car.pixelPos.y = endPt.y;
       car.prevPixelPos.x = endPt.x;
       car.prevPixelPos.y = endPt.y;
-      car.state = CarState.Unloading;
-      car.unloadTimer = 0;
       car.parkingPath = [];
       car.parkingCumDist = [];
       car.parkingProgress = 0;
+
+      // Gas station: transition to Refueling instead of Unloading
+      if (car.targetGasStationId) {
+        car.state = CarState.Refueling;
+        car.refuelTimer = 0;
+      } else {
+        car.state = CarState.Unloading;
+        car.unloadTimer = 0;
+      }
       return;
     }
 
@@ -293,13 +403,14 @@ export class CarParkingManager {
 
   updateParkingOutCar(
     car: Car, dt: number,
-    _houses: House[], _bizMap: Map<string, Business>, _toRemove: string[],
+    _houses: House[], bizMap: Map<string, Business>, _toRemove: string[],
+    houseMap?: Map<string, House>,
   ): void {
     const totalDist = car.parkingCumDist[car.parkingCumDist.length - 1];
     car.parkingProgress += PARKING_MOVE_SPEED * dt;
 
     if (car.parkingProgress >= totalDist) {
-      // Arrived at connector — transition to GoingHome
+      // Arrived at connector
       const endPt = car.parkingPath[car.parkingPath.length - 1];
       car.pixelPos.x = endPt.x;
       car.pixelPos.y = endPt.y;
@@ -311,10 +422,62 @@ export class CarParkingManager {
       car.parkingCumDist = [];
       car.parkingProgress = 0;
 
+      // Gas station branch: route after refueling
+      if (car.targetGasStationId && this.refuelingManager && houseMap) {
+        this.refuelingManager.routeAfterGasStation(car, bizMap, houseMap);
+        return;
+      }
+
       const homePath = car.pendingHomePath;
       car.pendingHomePath = null;
 
       if (homePath) {
+        // Check fuel before going home
+        const fuelCost = computePathFuelCost(homePath, this.highwaySystem);
+        if (fuelCost > car.fuel && this.gasStationSystem) {
+          // Need gas station detour
+          const startPos = homePath.length > 0 ? stepGridPos(homePath[0]) : car.destination!;
+          const result = this.gasStationSystem.findNearestReachable(startPos, this.pathfinder, this.highwaySystem);
+          if (result) {
+            const stationPath = this.pathfinder.findPath(startPos, result.station.entryConnectorPos);
+            if (stationPath && stationPath.length >= 2) {
+              car.state = CarState.GoingToGasStation;
+              car.outboundPath = [];
+              car.targetGasStationId = result.station.id;
+              car.postRefuelIntent = 'home';
+              car.assignedSlotIndex = null;
+              car.destination = result.station.entryConnectorPos;
+              this.router.assignPath(car, stationPath);
+              if (car.smoothPath.length >= 2) {
+                car.pixelPos.x = car.smoothPath[0].x;
+                car.pixelPos.y = car.smoothPath[0].y;
+                car.prevPixelPos.x = car.pixelPos.x;
+                car.prevPixelPos.y = car.pixelPos.y;
+                if (stationPath.length >= 2) {
+                  const p0 = stepGridPos(stationPath[0]);
+                  const p1 = stepGridPos(stationPath[1]);
+                  const initDir = getDirection(p0, p1);
+                  car.renderAngle = directionAngle(initDir);
+                  car.prevRenderAngle = car.renderAngle;
+                }
+              }
+              return;
+            }
+          }
+          // No reachable station — strand
+          car.state = CarState.Stranded;
+          car.outboundPath = [];
+          car.targetBusinessId = null;
+          car.assignedSlotIndex = null;
+          car.path = [];
+          car.pathIndex = 0;
+          car.segmentProgress = 0;
+          car.smoothPath = [];
+          car.smoothCumDist = [];
+          car.smoothCellDist = [];
+          return;
+        }
+
         car.state = CarState.GoingHome;
         car.outboundPath = [];
         car.targetBusinessId = null;

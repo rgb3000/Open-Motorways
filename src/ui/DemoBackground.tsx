@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { DemoGame } from '../core/DemoGame';
-import { homeBackgroundMap } from '../maps/home-background';
+import { homeBackgroundMap } from '../maps/home-background/home-background';
 
 export function DemoBackground() {
   const containerRef = useRef<HTMLDivElement>(null);

@@ -1,8 +1,8 @@
 import type { MapConfig } from './types';
-import { classicMap } from './classic';
-import { lakelandMap } from './lakeland';
-import { narrowPassMap } from './narrow-pass';
-import { trafficStressTestMap } from './traffic-stress-test';
+import { classicMap } from './classic/classic';
+import { lakelandMap } from './lakeland/lakeland';
+import { narrowPassMap } from './narrow-pass/narrow-pass';
+import { trafficStressTestMap } from './traffic-stress-test/traffic-stress-test';
 
 export const allMaps: MapConfig[] = [classicMap, lakelandMap, narrowPassMap, trafficStressTestMap];
 

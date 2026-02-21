@@ -1,9 +1,9 @@
 import { GameColor } from './types';
 
 // Grid
-export const GRID_COLS = 70;
-export const GRID_ROWS = 40;
-export const TILE_SIZE = 50;
+export const GRID_COLS = 80;
+export const GRID_ROWS = 50;
+export const TILE_SIZE = 40;
 export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;
 export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE;
 
@@ -12,7 +12,7 @@ export const FIXED_DT = 1 / 60;         // 60 updates/sec
 export const MAX_FRAME_TIME = 0.2;       // spiral-of-death cap
 
 // Demand
-export const MAX_DEMAND_PINS = 8;
+export const MAX_DEMAND_PINS = 9;
 export const DEMAND_BASE_RATE = 1.5;   // pins/min for a fresh business
 export const DEMAND_RATE_GROWTH = 0.3; // additional pins/min per minute of age
 export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to the same business
@@ -21,8 +21,8 @@ export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to
 export const CARS_PER_HOUSE = 2;
 export const CAR_SPEED = 1; // tiles per second
 export const LANE_OFFSET = TILE_SIZE * 0.12;    // px from tile center to lane center
-export const CAR_WIDTH = TILE_SIZE * 0.15;       // px (narrow dimension, perpendicular to travel)
-export const CAR_LENGTH = TILE_SIZE * 0.32;      // px (long dimension, along travel direction)
+export const CAR_WIDTH = TILE_SIZE * 0.12;       // px (narrow dimension, perpendicular to travel)
+export const CAR_LENGTH = TILE_SIZE * 0.3;      // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.7;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
 export const SAME_LANE_DEADLOCK_TIMEOUT = 5.0; // seconds (safety net only, arc-length following handles normal cases)
@@ -51,7 +51,7 @@ export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color
 export const COLOR_UNLOCK_INTERVAL = 35;   // seconds between new colors
 export const HOUSE_CLUSTER_RADIUS = 3;     // tiles
 export const MIN_BUSINESS_DISTANCE = 8;    // tiles from matching houses
-export const SPAWN_INTERVAL = 18;          // seconds between spawns
+export const SPAWN_INTERVAL = 30;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 10;
 export const SPAWN_INTERVAL_DECAY = 0.97;
 export const SPAWN_AREA_INTERVALS = [
@@ -72,6 +72,17 @@ export const STARTING_MONEY = 400;
 export const ROAD_COST = 10;
 export const DELIVERY_REWARD = 50;
 export const ROAD_REFUND = 10;
+
+// Gas stations
+export const FUEL_CAPACITY = 80;
+export const REFUEL_TIME = 2;
+export const GAS_STATION_COST = 150;
+export const GAS_STATION_REFUND = 100;
+export const GAS_STATION_PARKING_SLOTS = 2;
+
+// Building layout (shared margin system)
+export const CELL_MARGIN = 6;          // ground plate edge inset from cell boundary (px)
+export const GROUND_PLATE_MARGIN = 3;  // inner building space inset from plate edge (px)
 
 // Highways
 export const HIGHWAY_COST = 200;
@@ -124,20 +135,9 @@ export const ROAD_DEBUG = false;
 export const ROAD_GRAPH_DEBUG = false;
 export const CAR_ROUTE_DEBUG = true;
 
-// Business layout dimensions (fractions of TILE_SIZE unless noted)
-export const BIZ_PLATE_CROSS = 0.7;       // ground plate width (cross-axis)
-export const BIZ_PLATE_INSET = 2;          // px inset from full 2-tile span
-export const BIZ_BUILDING_CROSS = 0.7;     // building width (cross-axis)
-export const BIZ_BUILDING_ALONG = 0.45;    // building depth (along-axis)
-export const BIZ_BUILDING_SHIFT = 0.15;    // shift building away from parking (fraction of TILE_SIZE)
+// Business layout dimensions
 export const BIZ_PIN_SPACING = 8;          // px between pin centers
-export const BIZ_PIN_CENTER_T = 0.45;      // 0=building, 1=lot — where pin grid center sits
-export const BIZ_SLOT_CROSS = 0.15;        // individual slot width (cross-axis)
-export const BIZ_SLOT_ALONG = 0.35;        // individual slot depth (along-axis)
 
-// Rendering colors
-export const BG_COLOR = '#E8D8B4';
-export const GRID_LINE_COLOR = '#D4C4A0';
 // Roads
 export const ROAD_HALF_WIDTH = TILE_SIZE * 0.2;
 export const HIGHWAY_HALF_WIDTH = ROAD_HALF_WIDTH;
@@ -201,6 +201,11 @@ export const DEFAULT_GAME_CONSTANTS: GameConstants = {
   HIGHWAY_REFUND,
   HIGHWAY_SPEED_MULTIPLIER,
   DAY_LENGTH_SECONDS,
+  FUEL_CAPACITY,
+  REFUEL_TIME,
+  GAS_STATION_COST,
+  GAS_STATION_REFUND,
+  GAS_STATION_PARKING_SLOTS,
 };
 
 export function buildConfig(overrides?: Partial<GameConstants>): GameConstants {

@@ -2,7 +2,7 @@ import { type Grid } from '../core/Grid';
 import { opposite } from '../utils/direction';
 import { House } from '../entities/House';
 import { Business } from '../entities/Business';
-import { CellType, Direction, type GameColor, type GridPos } from '../types';
+import { CellType, type GameColor, type GridPos, type BusinessRotation } from '../types';
 import type { DemandSystem } from './DemandSystem';
 import {
   COLOR_UNLOCK_ORDER,
@@ -17,10 +17,11 @@ import {
 } from '../constants';
 import type { GameConstants } from '../maps/types';
 
-interface EmptyLShape {
+const ALL_ROTATIONS: BusinessRotation[] = [0, 90, 180, 270];
+
+interface Empty2x2 {
   pos: GridPos;
-  orientation: 'horizontal' | 'vertical';
-  connectorSide: 'positive' | 'negative';
+  rotation: BusinessRotation;
 }
 
 export class SpawnSystem {
@@ -96,12 +97,12 @@ export class SpawnSystem {
     const hy = Math.floor(this.grid.rows * 0.45) + Math.floor(Math.random() * 3 - 1);
     this.spawnHouse({ gx: hx, gy: hy }, COLOR_UNLOCK_ORDER[0]);
 
-    // For initial business, find an L-shape spot near desired location
+    // For initial business, find a 2x2 spot near desired location
     const bx = Math.floor(this.grid.cols * 0.55) + Math.floor(Math.random() * 5 - 2);
     const by = Math.floor(this.grid.rows * 0.55) + Math.floor(Math.random() * 3 - 1);
-    const spot = this.findEmptyLShapeNear({ gx: bx, gy: by }, 5, COLOR_UNLOCK_ORDER[0]);
+    const spot = this.findEmpty2x2Near({ gx: bx, gy: by }, 5, COLOR_UNLOCK_ORDER[0]);
     if (spot) {
-      this.spawnBusiness(spot.pos, COLOR_UNLOCK_ORDER[0], spot.orientation, spot.connectorSide);
+      this.spawnBusiness(spot.pos, COLOR_UNLOCK_ORDER[0], spot.rotation);
     }
   }
 
@@ -160,11 +161,11 @@ export class SpawnSystem {
 
     if (sameColorHouses.length > 0) {
       const anchor = sameColorHouses[Math.floor(Math.random() * sameColorHouses.length)];
-      pos = this.findEmptyWithAdjacentEmpty(anchor.pos, this.houseClusterRadius);
+      pos = this.findEmptyNear(anchor.pos, this.houseClusterRadius);
     }
 
     if (!pos) {
-      pos = this.findRandomEmptyWithAdjacentEmpty();
+      pos = this.findRandomEmpty();
     }
 
     if (pos) {
@@ -173,71 +174,44 @@ export class SpawnSystem {
   }
 
   private trySpawnBusinessForColor(color: GameColor): void {
-    const spot = this.findRandomEmptyLShape(color);
+    const spot = this.findRandomEmpty2x2(color);
     if (spot) {
-      this.spawnBusiness(spot.pos, color, spot.orientation, spot.connectorSide);
+      this.spawnBusiness(spot.pos, color, spot.rotation);
     }
   }
 
-  spawnHouse(pos: GridPos, color: GameColor, connectorDir?: Direction): void {
+  spawnHouse(pos: GridPos, color: GameColor): void {
     this.dirty = true;
 
-    // Find an empty adjacent cell for the connector
-    let connDir: Direction;
-    if (connectorDir !== undefined) {
-      connDir = connectorDir;
-    } else {
-      const tryDirs = [
-        Direction.Down, Direction.Right, Direction.Up, Direction.Left,
-        Direction.DownRight, Direction.DownLeft, Direction.UpRight, Direction.UpLeft,
-      ];
-      connDir = Direction.Down;
-      for (const dir of tryDirs) {
-        const off = this.grid.getDirectionOffset(dir);
-        const nx = pos.gx + off.gx;
-        const ny = pos.gy + off.gy;
-        if (this.isCellEmpty(nx, ny)) {
-          connDir = dir;
-          break;
-        }
-      }
-    }
-
-    const house = new House(pos, color, connDir);
+    const house = new House(pos, color);
     this.houses.push(house);
     this.onSpawn?.();
 
-    // House cell
+    // House cell — roads connect directly to this cell
     this.grid.setCell(pos.gx, pos.gy, {
       type: CellType.House,
       entityId: house.id,
       color,
-      connectorDir: connDir,
-    });
-
-    // Connector cell owned by the house
-    const connToHouseDir = house.getConnectorToHouseDir();
-    this.grid.setCell(house.connectorPos.gx, house.connectorPos.gy, {
-      type: CellType.Connector,
-      entityId: house.id,
-      color: null,
-      roadConnections: connToHouseDir,
       connectorDir: null,
     });
   }
 
-  spawnBusiness(
-    pos: GridPos, color: GameColor,
-    orientation: 'horizontal' | 'vertical',
-    connectorSide: 'positive' | 'negative',
-  ): void {
+  spawnBusiness(pos: GridPos, color: GameColor, rotation: BusinessRotation): void {
     this.dirty = true;
-    const business = new Business(pos, color, orientation, connectorSide);
+    const business = new Business(pos, color, rotation);
     this.businesses.push(business);
     this.onSpawn?.();
 
     // Building cell
-    this.grid.setCell(pos.gx, pos.gy, {
+    this.grid.setCell(business.buildingPos.gx, business.buildingPos.gy, {
+      type: CellType.Business,
+      entityId: business.id,
+      color,
+      connectorDir: null,
+    });
+
+    // Pins cell (also CellType.Business to block road placement)
+    this.grid.setCell(business.pinsPos.gx, business.pinsPos.gy, {
       type: CellType.Business,
       entityId: business.id,
       color,
@@ -284,14 +258,14 @@ export class SpawnSystem {
     return gx >= b.minX && gx <= b.maxX && gy >= b.minY && gy <= b.maxY;
   }
 
-  private findEmptyLShapeNear(center: GridPos, radius: number, color?: GameColor): EmptyLShape | null {
-    const candidates: EmptyLShape[] = [];
+  private findEmpty2x2Near(center: GridPos, radius: number, color?: GameColor): Empty2x2 | null {
+    const candidates: Empty2x2[] = [];
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         const gx = center.gx + dx;
         const gy = center.gy + dy;
         if (!this.isInBounds(gx, gy)) continue;
-        this.tryLShapeCandidates(gx, gy, candidates);
+        this.try2x2Candidates(gx, gy, candidates);
       }
     }
     let filtered = candidates;
@@ -302,8 +276,8 @@ export class SpawnSystem {
     return filtered[Math.floor(Math.random() * filtered.length)];
   }
 
-  private findRandomEmptyLShape(color?: GameColor): EmptyLShape | null {
-    let candidates = this.getAllEmptyLShapes().filter(spot => this.isInBounds(spot.pos.gx, spot.pos.gy));
+  private findRandomEmpty2x2(color?: GameColor): Empty2x2 | null {
+    let candidates = this.getAllEmpty2x2().filter(spot => this.isInBounds(spot.pos.gx, spot.pos.gy));
     if (color !== undefined) {
       candidates = candidates.filter(spot => this.isFarFromSameColorHouses(spot.pos, color, 2));
     }
@@ -311,49 +285,27 @@ export class SpawnSystem {
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  private getAllEmptyLShapes(): EmptyLShape[] {
-    const results: EmptyLShape[] = [];
-    for (let gy = 0; gy < this.grid.rows; gy++) {
-      for (let gx = 0; gx < this.grid.cols; gx++) {
-        this.tryLShapeCandidates(gx, gy, results);
+  private getAllEmpty2x2(): Empty2x2[] {
+    const results: Empty2x2[] = [];
+    for (let gy = 0; gy < this.grid.rows - 1; gy++) {
+      for (let gx = 0; gx < this.grid.cols - 1; gx++) {
+        this.try2x2Candidates(gx, gy, results);
       }
     }
     return results;
   }
 
-  private tryLShapeCandidates(gx: number, gy: number, results: EmptyLShape[]): void {
-    // For each building position, try 2 orientations x 2 connector sides
-    const orientations: Array<'horizontal' | 'vertical'> = ['horizontal', 'vertical'];
-    const sides: Array<'positive' | 'negative'> = ['positive', 'negative'];
-
-    for (const orientation of orientations) {
-      for (const connectorSide of sides) {
-        // Compute the 3 cell positions
-        let parkingLot: GridPos;
-        let connector: GridPos;
-
-        if (orientation === 'horizontal') {
-          parkingLot = { gx: gx + 1, gy };
-          connector = {
-            gx: gx + 1,
-            gy: gy + (connectorSide === 'positive' ? 1 : -1),
-          };
-        } else {
-          parkingLot = { gx, gy: gy + 1 };
-          connector = {
-            gx: gx + (connectorSide === 'positive' ? 1 : -1),
-            gy: gy + 1,
-          };
-        }
-
-        if (
-          this.isCellEmpty(gx, gy) &&
-          this.isCellEmpty(parkingLot.gx, parkingLot.gy) &&
-          this.isCellEmpty(connector.gx, connector.gy)
-        ) {
-          results.push({ pos: { gx, gy }, orientation, connectorSide });
-        }
-      }
+  private try2x2Candidates(gx: number, gy: number, results: Empty2x2[]): void {
+    // Check all 4 cells of the 2x2 block are empty
+    if (
+      this.isCellEmpty(gx, gy) &&
+      this.isCellEmpty(gx + 1, gy) &&
+      this.isCellEmpty(gx, gy + 1) &&
+      this.isCellEmpty(gx + 1, gy + 1)
+    ) {
+      // All 4 rotations are valid for any empty 2x2 block; pick one randomly
+      const rotation = ALL_ROTATIONS[Math.floor(Math.random() * ALL_ROTATIONS.length)];
+      results.push({ pos: { gx, gy }, rotation });
     }
   }
 
@@ -372,15 +324,7 @@ export class SpawnSystem {
     return true;
   }
 
-  private hasAdjacentEmpty(gx: number, gy: number): boolean {
-    for (const dir of [Direction.Down, Direction.Right, Direction.Up, Direction.Left]) {
-      const off = this.grid.getDirectionOffset(dir);
-      if (this.isCellEmpty(gx + off.gx, gy + off.gy)) return true;
-    }
-    return false;
-  }
-
-  private findEmptyWithAdjacentEmpty(center: GridPos, radius: number): GridPos | null {
+  private findEmptyNear(center: GridPos, radius: number): GridPos | null {
     const candidates: GridPos[] = [];
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
@@ -388,7 +332,7 @@ export class SpawnSystem {
         const gx = center.gx + dx;
         const gy = center.gy + dy;
         if (!this.isInBounds(gx, gy)) continue;
-        if (this.isCellEmpty(gx, gy) && this.hasAdjacentEmpty(gx, gy)) {
+        if (this.isCellEmpty(gx, gy)) {
           candidates.push({ gx, gy });
         }
       }
@@ -397,9 +341,9 @@ export class SpawnSystem {
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  private findRandomEmptyWithAdjacentEmpty(): GridPos | null {
+  private findRandomEmpty(): GridPos | null {
     const empty = this.grid.getEmptyCells()
-      .filter(p => this.isInBounds(p.gx, p.gy) && this.hasAdjacentEmpty(p.gx, p.gy));
+      .filter(p => this.isInBounds(p.gx, p.gy));
     if (empty.length === 0) return null;
     return empty[Math.floor(Math.random() * empty.length)];
   }

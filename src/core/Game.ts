@@ -19,6 +19,8 @@ import { Pathfinder } from '../pathfinding/Pathfinder';
 import { PendingDeletionSystem } from '../systems/PendingDeletionSystem';
 import { HighwaySystem } from '../systems/HighwaySystem';
 import { HighwayDrawer } from '../input/HighwayDrawer';
+import { GasStationPlacer } from '../input/GasStationPlacer';
+import { GasStationSystem } from '../systems/GasStationSystem';
 import { CarState } from '../entities/Car';
 import { stepGridPos } from '../systems/car/CarRouter';
 import { SPAWN_DEBUG, DEMAND_DEBUG, buildConfig } from '../constants';
@@ -51,6 +53,8 @@ export class Game {
   private obstacleSystem: ObstacleSystem;
   private highwaySystem: HighwaySystem;
   private highwayDrawer: HighwayDrawer;
+  private gasStationSystem: GasStationSystem;
+  private gasStationPlacer: GasStationPlacer;
   private pathfinder: Pathfinder;
   private musicSystem: MusicSystem = new MusicSystem();
   private soundEffects: SoundEffectSystem = new SoundEffectSystem();
@@ -98,13 +102,15 @@ export class Game {
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.highwaySystem = new HighwaySystem();
+    this.gasStationSystem = new GasStationSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid, this.highwaySystem);
     this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
     this.demandSystem = new DemandSystem(this.cfg);
     this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem, this.cfg);
-    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem, this.highwaySystem);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem, this.highwaySystem, this.gasStationSystem);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
+    this.renderer.loadTerrain(mapConfig?.terrainSvg);
     this.renderer.resize(window.innerWidth, window.innerHeight);
 
     this.input = new InputHandler(
@@ -115,6 +121,7 @@ export class Game {
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
     this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
     this.highwayDrawer = new HighwayDrawer(this.input, this.highwaySystem, this.grid, this.createMoneyInterface(), () => this.activeTool);
+    this.gasStationPlacer = new GasStationPlacer(this.input, this.gasStationSystem, this.grid, this.createMoneyInterface(), () => this.activeTool);
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
@@ -140,6 +147,7 @@ export class Game {
       if (e.key === 'r' || e.key === 'R') this.setActiveTool(Tool.Road);
       if (e.key === 'e' || e.key === 'E') this.setActiveTool(Tool.Eraser);
       if (e.key === 'h' || e.key === 'H') this.setActiveTool(Tool.Highway);
+      if (e.key === 'g' || e.key === 'G') this.setActiveTool(Tool.GasStation);
       if (e.key === 'f' || e.key === 'F') this.toggleSpeed();
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
@@ -302,20 +310,23 @@ export class Game {
     this.obstacleSystem.generate();
     this.roadSystem = new RoadSystem(this.grid);
     this.highwaySystem = new HighwaySystem();
+    this.gasStationSystem = new GasStationSystem(this.grid);
     this.pathfinder = new Pathfinder(this.grid, this.highwaySystem);
     this.pendingDeletionSystem = new PendingDeletionSystem(this.grid, this.roadSystem);
     this.demandSystem = new DemandSystem(this.cfg);
     this.spawnSystem = new SpawnSystem(this.grid, this.demandSystem, this.cfg);
     this.demandWarnPrevSin = 0;
-    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem, this.highwaySystem);
+    this.carSystem = new CarSystem(this.pathfinder, this.grid, this.pendingDeletionSystem, this.highwaySystem, this.gasStationSystem);
     this.money = this.cfg.STARTING_MONEY;
     this.undoSystem = new UndoSystem(this.grid);
     this.roadDrawer = new RoadDrawer(this.input, this.roadSystem, this.grid, this.createMoneyInterface(), () => this.spawnSystem.getHouses(), this.undoSystem, () => this.activeTool);
     this.roadDrawer.onTryErase = (gx, gy) => this.handleTryErase(gx, gy);
     this.highwayDrawer = new HighwayDrawer(this.input, this.highwaySystem, this.grid, this.createMoneyInterface(), () => this.activeTool);
+    this.gasStationPlacer = new GasStationPlacer(this.input, this.gasStationSystem, this.grid, this.createMoneyInterface(), () => this.activeTool);
     this.setActiveTool(Tool.Road);
     this.renderer = new Renderer(this.webglRenderer, this.grid, () => this.spawnSystem.getHouses(), () => this.spawnSystem.getBusinesses());
     this.renderer.buildObstacles(this.obstacleSystem.getMountainCells(), this.obstacleSystem.getMountainHeightMap(), this.obstacleSystem.getLakeCells());
+    this.renderer.loadTerrain(this.mapConfig?.terrainSvg);
     this.renderer.resize(window.innerWidth, window.innerHeight);
     this.elapsedTime = 0;
     this.timeScale = 1;
@@ -378,7 +389,7 @@ export class Game {
   setActiveTool(tool: Tool): void {
     if (this.activeTool === tool) return;
     this.activeTool = tool;
-    this.canvas.style.cursor = tool === Tool.Eraser ? 'crosshair' : tool === Tool.Highway ? 'crosshair' : 'default';
+    this.canvas.style.cursor = (tool === Tool.Eraser || tool === Tool.Highway || tool === Tool.GasStation) ? 'crosshair' : 'default';
     this.toolChangeCallback?.(tool);
   }
 
@@ -390,7 +401,17 @@ export class Game {
     // Also try erasing highways at this cell
     this.highwayDrawer.tryEraseAtCell(gx, gy);
 
+    // Try erasing gas station
     const cell = this.grid.getCell(gx, gy);
+    if (cell && (cell.type === CellType.GasStation || (cell.type === CellType.Connector && cell.entityId))) {
+      const station = this.gasStationSystem.findByCellPos(gx, gy);
+      if (station) {
+        this.gasStationSystem.removeGasStation(station.id);
+        this.money += this.cfg.GAS_STATION_REFUND;
+        return true;
+      }
+    }
+
     if (!cell || cell.type !== CellType.Road) return false;
 
     if (cell.pendingDeletion) return false;
@@ -442,12 +463,12 @@ export class Game {
   private placePreDefinedEntities(): void {
     if (this.mapConfig?.houses) {
       for (const h of this.mapConfig.houses) {
-        this.spawnSystem.spawnHouse({ gx: h.gx, gy: h.gy }, h.color, h.connectorDir);
+        this.spawnSystem.spawnHouse({ gx: h.gx, gy: h.gy }, h.color);
       }
     }
     if (this.mapConfig?.businesses) {
       for (const b of this.mapConfig.businesses) {
-        this.spawnSystem.spawnBusiness({ gx: b.gx, gy: b.gy }, b.color, b.orientation, b.connectorSide);
+        this.spawnSystem.spawnBusiness({ gx: b.gx, gy: b.gy }, b.color, b.rotation);
       }
     }
     this.spawnSystem.unlockAllColors();
@@ -464,13 +485,13 @@ export class Game {
 
       cell.roadConnections = r.connections ?? 0;
     }
-    // Restore road-side bits on connector cells
+    // Restore road-side bits on connector and house cells
     for (const r of this.mapConfig.roads) {
       const cell = this.grid.getCell(r.gx, r.gy);
       if (!cell || cell.type !== CellType.Road) continue;
       forEachDirection(cell.roadConnections, (dir) => {
         const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
-        if (neighbor && neighbor.cell.type === CellType.Connector) {
+        if (neighbor && (neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.House)) {
           neighbor.cell.roadConnections |= opposite(dir);
         }
       });
@@ -481,11 +502,12 @@ export class Game {
   private update(dt: number): void {
     if (this.state === GameState.WaitingToStart) return;
 
-    // Road/highway editing — always runs (even when paused)
+    // Road/highway/gas station editing — always runs (even when paused)
     this.roadDrawer.update();
     this.highwayDrawer.update();
+    this.gasStationPlacer.update();
 
-    if (this.roadSystem.isDirty || this.highwaySystem.isDirty) {
+    if (this.roadSystem.isDirty || this.highwaySystem.isDirty || this.gasStationSystem.isDirty) {
       this.pathfinder.clearCache();
       this.carSystem.onRoadsChanged(this.spawnSystem.getHouses());
       if (this.roadSystem.isDirty) {
@@ -496,6 +518,10 @@ export class Game {
       if (this.highwaySystem.isDirty) {
         this.highwaySystem.clearDirty();
         this.renderer.markHighwayDirty();
+      }
+      if (this.gasStationSystem.isDirty) {
+        this.gasStationSystem.clearDirty();
+        this.renderer.markGroundDirty();
       }
     }
 
@@ -546,6 +572,7 @@ export class Game {
       this.highwaySystem,
       this.activeTool,
       this.highwayDrawer.getPlacementState(),
+      this.gasStationSystem.getGasStations(),
     );
     let demandStats: DemandStat[] | null = null;
     if (DEMAND_DEBUG) {

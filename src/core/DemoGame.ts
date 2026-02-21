@@ -63,12 +63,12 @@ export class DemoGame {
     // Place predefined entities
     if (mapConfig.houses) {
       for (const h of mapConfig.houses) {
-        this.spawnSystem.spawnHouse({ gx: h.gx, gy: h.gy }, h.color, h.connectorDir);
+        this.spawnSystem.spawnHouse({ gx: h.gx, gy: h.gy }, h.color);
       }
     }
     if (mapConfig.businesses) {
       for (const b of mapConfig.businesses) {
-        this.spawnSystem.spawnBusiness({ gx: b.gx, gy: b.gy }, b.color, b.orientation, b.connectorSide);
+        this.spawnSystem.spawnBusiness({ gx: b.gx, gy: b.gy }, b.color, b.rotation);
       }
     }
     this.spawnSystem.unlockAllColors();
@@ -90,7 +90,7 @@ export class DemoGame {
             const ny = r.gy + dy;
             const neighbor = this.grid.getCell(nx, ny);
             if (!neighbor) continue;
-            if (neighbor.type === CellType.Road || neighbor.type === CellType.Connector) {
+            if (neighbor.type === CellType.Road || neighbor.type === CellType.Connector || neighbor.type === CellType.House) {
               this.roadSystem.connectRoads(r.gx, r.gy, nx, ny);
             }
           }
@@ -102,7 +102,7 @@ export class DemoGame {
         if (!cell || cell.type !== CellType.Road) continue;
         forEachDirection(cell.roadConnections, (dir) => {
           const neighbor = this.grid.getNeighbor(r.gx, r.gy, dir);
-          if (neighbor && neighbor.cell.type === CellType.Connector) {
+          if (neighbor && (neighbor.cell.type === CellType.Connector || neighbor.cell.type === CellType.House)) {
             neighbor.cell.roadConnections |= opposite(dir);
           }
         });

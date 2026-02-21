@@ -2,16 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Pencil, Eraser, Home, Store, Mountain, X, Copy, Check, Play } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapDesigner, DesignerTool } from '../designer/MapDesigner';
-import { GameColor, Direction } from '../types';
+import { GameColor, type BusinessRotation } from '../types';
 import { COLOR_MAP } from '../constants';
 
 export function DesignerUI({ designer, onTestPlay }: { designer: MapDesigner; onTestPlay: () => void }) {
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<DesignerTool>(designer.activeTool);
   const [activeColor, setActiveColor] = useState<GameColor>(designer.activeColor);
-  const [connectorDir, setConnectorDir] = useState<Direction>(designer.houseConnectorDir);
-  const [orientation, setOrientation] = useState(designer.businessOrientation);
-  const [connectorSide, setConnectorSide] = useState(designer.businessConnectorSide);
+  const [bizRotation, setBizRotation] = useState<BusinessRotation>(designer.businessRotation);
   const [obstacleType, setObstacleType] = useState(designer.obstacleType);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportCode, setExportCode] = useState('');
@@ -35,19 +33,9 @@ export function DesignerUI({ designer, onTestPlay }: { designer: MapDesigner; on
     setActiveColor(color);
   }, [designer]);
 
-  const selectDir = useCallback((dir: Direction) => {
-    designer.houseConnectorDir = dir;
-    setConnectorDir(dir);
-  }, [designer]);
-
-  const selectOrientation = useCallback((o: 'horizontal' | 'vertical') => {
-    designer.businessOrientation = o;
-    setOrientation(o);
-  }, [designer]);
-
-  const selectSide = useCallback((s: 'positive' | 'negative') => {
-    designer.businessConnectorSide = s;
-    setConnectorSide(s);
+  const selectBizRotation = useCallback((r: BusinessRotation) => {
+    designer.businessRotation = r;
+    setBizRotation(r);
   }, [designer]);
 
   const selectObstacleType = useCallback((t: 'mountain' | 'lake') => {
@@ -79,13 +67,6 @@ export function DesignerUI({ designer, onTestPlay }: { designer: MapDesigner; on
   const colors: GameColor[] = [
     GameColor.Red, GameColor.Blue, GameColor.Yellow,
     GameColor.Green, GameColor.Purple, GameColor.Orange,
-  ];
-
-  const cardinalDirs: { dir: Direction; label: string }[] = [
-    { dir: Direction.Up, label: '\u2191' },
-    { dir: Direction.Down, label: '\u2193' },
-    { dir: Direction.Left, label: '\u2190' },
-    { dir: Direction.Right, label: '\u2192' },
   ];
 
   return (
@@ -157,68 +138,23 @@ export function DesignerUI({ designer, onTestPlay }: { designer: MapDesigner; on
             </div>
           </div>
 
-          {activeTool === DesignerTool.House && (
+          {activeTool === DesignerTool.Business && (
             <div>
-              <div className="text-xs font-mono text-gray-500 mb-1">Connector</div>
-              <div className="grid grid-cols-3 gap-1 w-fit">
-                <div />
-                <DirButton dir={Direction.Up} label={cardinalDirs[0].label} active={connectorDir} onSelect={selectDir} />
-                <div />
-                <DirButton dir={Direction.Left} label={cardinalDirs[2].label} active={connectorDir} onSelect={selectDir} />
-                <div className="w-7 h-7" />
-                <DirButton dir={Direction.Right} label={cardinalDirs[3].label} active={connectorDir} onSelect={selectDir} />
-                <div />
-                <DirButton dir={Direction.Down} label={cardinalDirs[1].label} active={connectorDir} onSelect={selectDir} />
-                <div />
+              <div className="text-xs font-mono text-gray-500 mb-1">Rotation</div>
+              <div className="flex gap-1">
+                {([0, 90, 180, 270] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => selectBizRotation(r)}
+                    className={`px-2 py-1 rounded text-xs font-mono cursor-pointer border ${
+                      bizRotation === r ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-
-          {activeTool === DesignerTool.Business && (
-            <>
-              <div className="mb-2">
-                <div className="text-xs font-mono text-gray-500 mb-1">Orientation</div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => selectOrientation('horizontal')}
-                    className={`px-2 py-1 rounded text-xs font-mono cursor-pointer border ${
-                      orientation === 'horizontal' ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300'
-                    }`}
-                  >
-                    H
-                  </button>
-                  <button
-                    onClick={() => selectOrientation('vertical')}
-                    className={`px-2 py-1 rounded text-xs font-mono cursor-pointer border ${
-                      orientation === 'vertical' ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300'
-                    }`}
-                  >
-                    V
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-mono text-gray-500 mb-1">Connector Side</div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => selectSide('positive')}
-                    className={`px-2 py-1 rounded text-xs font-mono cursor-pointer border ${
-                      connectorSide === 'positive' ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300'
-                    }`}
-                  >
-                    +
-                  </button>
-                  <button
-                    onClick={() => selectSide('negative')}
-                    className={`px-2 py-1 rounded text-xs font-mono cursor-pointer border ${
-                      connectorSide === 'negative' ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300'
-                    }`}
-                  >
-                    -
-                  </button>
-                </div>
-              </div>
-            </>
           )}
         </div>
       )}
@@ -270,23 +206,5 @@ export function DesignerUI({ designer, onTestPlay }: { designer: MapDesigner; on
         </div>
       )}
     </div>
-  );
-}
-
-function DirButton({ dir, label, active, onSelect }: {
-  dir: Direction;
-  label: string;
-  active: Direction;
-  onSelect: (dir: Direction) => void;
-}) {
-  return (
-    <button
-      onClick={() => onSelect(dir)}
-      className={`w-7 h-7 rounded flex items-center justify-center cursor-pointer text-sm font-mono border ${
-        active === dir ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300'
-      }`}
-    >
-      {label}
-    </button>
   );
 }

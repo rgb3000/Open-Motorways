@@ -1,6 +1,6 @@
 import type { Grid } from '../core/Grid';
 import { CellType } from '../types';
-import { opposite, directionFromDelta, ALL_DIRECTIONS } from '../utils/direction';
+import { opposite, directionFromDelta, ALL_DIRECTIONS, connectionCount } from '../utils/direction';
 
 export class RoadSystem {
   private dirty = false;
@@ -49,9 +49,9 @@ export class RoadSystem {
         const oppDir = opposite(dir);
         // Skip disconnecting connector cells' permanent connections
         if (neighbor.cell.type === CellType.Connector) {
-          // Check if this connection points toward the parking lot or house (permanent)
+          // Check if this connection points toward the parking lot (permanent)
           const permanentNeighbor = this.grid.getNeighbor(neighbor.gx, neighbor.gy, oppDir);
-          if (permanentNeighbor && (permanentNeighbor.cell.type === CellType.ParkingLot || permanentNeighbor.cell.type === CellType.House)) continue;
+          if (permanentNeighbor && permanentNeighbor.cell.type === CellType.ParkingLot) continue;
         }
         neighbor.cell.roadConnections &= ~oppDir;
       }
@@ -75,8 +75,8 @@ export class RoadSystem {
     const cell2 = this.grid.getCell(gx2, gy2);
     if (!cell1 || !cell2) return false;
 
-    if (cell1.type === CellType.Empty || cell1.type === CellType.Business || cell1.type === CellType.House) return false;
-    if (cell2.type === CellType.Empty || cell2.type === CellType.Business || cell2.type === CellType.House) return false;
+    if (cell1.type === CellType.Empty || cell1.type === CellType.Business) return false;
+    if (cell2.type === CellType.Empty || cell2.type === CellType.Business) return false;
 
     // Must be adjacent (cardinal or diagonal): Chebyshev distance = 1
     const dx = gx2 - gx1;
@@ -85,6 +85,14 @@ export class RoadSystem {
 
     const dir = directionFromDelta(dx, dy);
     const oppDir = opposite(dir);
+
+    // Houses are limited to 1 road connection
+    if (cell1.type === CellType.House && connectionCount(cell1.roadConnections) >= 1) return false;
+    if (cell2.type === CellType.House && connectionCount(cell2.roadConnections) >= 1) return false;
+
+    // Business/gas station connectors: 1 permanent inward + at most 1 road = max 2
+    if (cell1.type === CellType.Connector && connectionCount(cell1.roadConnections) >= 2) return false;
+    if (cell2.type === CellType.Connector && connectionCount(cell2.roadConnections) >= 2) return false;
 
     cell1.roadConnections |= dir;
     cell2.roadConnections |= oppDir;

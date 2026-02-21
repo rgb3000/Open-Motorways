@@ -4,20 +4,21 @@ import { Car, CarState } from '../entities/Car';
 import type { Pathfinder } from '../pathfinding/Pathfinder';
 import type { Grid } from '../core/Grid';
 import { PARKING_EXIT_DELAY } from '../constants';
-import { gridToPixelCenter } from '../utils/math';
 import { CarRouter } from './car/CarRouter';
 import { CarTrafficManager } from './car/CarTrafficManager';
 import { CarParkingManager } from './car/CarParkingManager';
 import { CarDispatcher } from './car/CarDispatcher';
 import { CarMovement } from './car/CarMovement';
 import { CarLeaderIndex } from './car/CarLeaderIndex';
+import { CarRefuelingManager } from './car/CarRefuelingManager';
+import { CarRescueManager } from './car/CarRescueManager';
 import type { PendingDeletionSystem } from './PendingDeletionSystem';
 import type { HighwaySystem } from './HighwaySystem';
+import type { GasStationSystem } from './GasStationSystem';
 
 export class CarSystem {
   private cars: Car[] = [];
   private score = 0;
-  private pathfinder: Pathfinder;
   private exitCooldowns = new Map<string, number>();
   onDelivery: (() => void) | null = null;
   onHomeReturn: (() => void) | null = null;
@@ -28,8 +29,9 @@ export class CarSystem {
   private dispatcher: CarDispatcher;
   private movement: CarMovement;
   private leaderIndex: CarLeaderIndex;
+  private refuelingManager: CarRefuelingManager;
+  private rescueManager: CarRescueManager;
   private pendingDeletionSystem: PendingDeletionSystem;
-  private grid: Grid;
 
   // Reusable collections
   private _toRemove: string[] = [];
@@ -37,17 +39,18 @@ export class CarSystem {
   private _businessMap = new Map<string, Business>();
   private _houseMap = new Map<string, House>();
 
-  constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem, highwaySystem?: HighwaySystem) {
-    this.pathfinder = pathfinder;
+  constructor(pathfinder: Pathfinder, grid: Grid, pendingDeletionSystem: PendingDeletionSystem, highwaySystem?: HighwaySystem, gasStationSystem?: GasStationSystem) {
     this.pendingDeletionSystem = pendingDeletionSystem;
-    this.grid = grid;
 
-    this.router = new CarRouter(pathfinder, grid);
+    this.router = new CarRouter(pathfinder, grid, gasStationSystem);
     this.trafficManager = new CarTrafficManager(grid);
-    this.dispatcher = new CarDispatcher(pathfinder, this.router);
-    this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem);
+    this.dispatcher = new CarDispatcher(pathfinder, this.router, gasStationSystem, highwaySystem);
+    this.parkingManager = new CarParkingManager(pathfinder, this.router, pendingDeletionSystem, gasStationSystem, highwaySystem);
     this.movement = new CarMovement(grid, this.trafficManager, this.router, pendingDeletionSystem, highwaySystem);
     this.leaderIndex = new CarLeaderIndex();
+    this.refuelingManager = new CarRefuelingManager(pathfinder, this.router, gasStationSystem);
+    this.parkingManager.setRefuelingManager(this.refuelingManager);
+    this.rescueManager = new CarRescueManager(pathfinder, grid, this.router, gasStationSystem, highwaySystem);
   }
 
   getCars(): Car[] {
@@ -80,74 +83,8 @@ export class CarSystem {
     houseMap.clear();
     for (const h of houses) houseMap.set(h.id, h);
 
-    for (const car of this.cars) {
-      if (car.state === CarState.Unloading || car.state === CarState.WaitingToExit ||
-          car.state === CarState.ParkingIn || car.state === CarState.ParkingOut) continue;
-      if (car.state !== CarState.Stranded) continue;
-
-      const currentTile = this.router.getCarCurrentTile(car);
-      const home = houseMap.get(car.homeHouseId);
-
-      if (car.destination) {
-        const path = this.pathfinder.findPath(currentTile, car.destination);
-        if (path) {
-          car.state = home && car.destination.gx === home.pos.gx && car.destination.gy === home.pos.gy
-            ? CarState.GoingHome
-            : CarState.GoingToBusiness;
-          this.router.assignPath(car, path);
-          if (car.smoothPath.length >= 2) {
-            car.pixelPos.x = car.smoothPath[0].x;
-            car.pixelPos.y = car.smoothPath[0].y;
-          } else {
-            const center = gridToPixelCenter(currentTile);
-            car.pixelPos.x = center.x;
-            car.pixelPos.y = center.y;
-          }
-          continue;
-        }
-      }
-
-      if (home) {
-        const homePath = this.pathfinder.findPath(currentTile, home.pos, true);
-        if (homePath) {
-          car.state = CarState.GoingHome;
-          car.targetBusinessId = null;
-          car.destination = home.pos;
-          this.router.assignPath(car, homePath);
-          if (car.smoothPath.length >= 2) {
-            car.pixelPos.x = car.smoothPath[0].x;
-            car.pixelPos.y = car.smoothPath[0].y;
-          } else {
-            const center = gridToPixelCenter(currentTile);
-            car.pixelPos.x = center.x;
-            car.pixelPos.y = center.y;
-          }
-          continue;
-        }
-      }
-    }
-
-    // Reroute active cars whose path crosses a pending-deletion cell
-    for (const car of this.cars) {
-      if (car.path.length === 0) continue;
-      if (car.state !== CarState.GoingToBusiness && car.state !== CarState.GoingHome) continue;
-      if (car.onHighway) continue;
-
-      let crossesPending = false;
-      for (let i = car.pathIndex; i < car.path.length; i++) {
-        const step = car.path[i];
-        if (step.kind !== 'grid') continue;
-        const c = this.grid.getCell(step.pos.gx, step.pos.gy);
-        if (c?.pendingDeletion) {
-          if (car.state === CarState.GoingHome) { crossesPending = false; break; }
-          crossesPending = true;
-          break;
-        }
-      }
-      if (crossesPending) {
-        this.router.rerouteCar(car, houseMap);
-      }
-    }
+    this.rescueManager.rescueStrandedCars(this.cars, houseMap);
+    this.rescueManager.rerouteActiveCars(this.cars, houseMap);
   }
 
   private moveCars(dt: number, houses: House[], businesses: Business[], occupied: Map<number, string>, houseMap: Map<string, House>): void {
@@ -180,6 +117,10 @@ export class CarSystem {
 
     for (const car of this.cars) {
       if (car.state === CarState.Idle || car.state === CarState.Stranded) continue;
+      if (car.state === CarState.Refueling) {
+        this.refuelingManager.updateRefuelingCar(car, dt, bizMap, houseMap);
+        continue;
+      }
       if (car.state === CarState.Unloading) {
         this.parkingManager.updateUnloadingCar(car, dt, bizMap, () => {
           this.score++;
@@ -200,7 +141,7 @@ export class CarSystem {
         continue;
       }
       if (car.state === CarState.ParkingOut) {
-        this.parkingManager.updateParkingOutCar(car, dt, houses, bizMap, toRemove);
+        this.parkingManager.updateParkingOutCar(car, dt, houses, bizMap, toRemove, houseMap);
         continue;
       }
       this.movement.updateSingleCar(
@@ -222,12 +163,16 @@ export class CarSystem {
   }
 
   private handleArrival(car: Car, _houses: House[], bizMap: Map<string, Business>, toRemove: string[], houseMap: Map<string, House>): void {
+    if (car.state === CarState.GoingToGasStation) {
+      this.refuelingManager.handleGasStationArrival(car);
+      return;
+    }
     if (car.state === CarState.GoingToBusiness) {
       this.parkingManager.handleParkingArrival(car, houseMap, bizMap, toRemove);
     } else if (car.state === CarState.GoingHome) {
       const home = houseMap.get(car.homeHouseId);
       if (home) {
-        home.availableCars++;
+        home.returnCar(car);
       }
       this.onHomeReturn?.();
       toRemove.push(car.id);

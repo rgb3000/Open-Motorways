@@ -362,32 +362,16 @@ export class RoadLayer {
     }
 
     if (ROAD_GRAPH_DEBUG) {
-      // Connector lines: house connector → house center
+      // House debug circles
       for (const house of this.getHouses()) {
         const hcx = house.pos.gx * TILE_SIZE + half;
         const hcz = house.pos.gy * TILE_SIZE + half;
-        const ccx = house.connectorPos.gx * TILE_SIZE + half;
-        const ccz = house.connectorPos.gy * TILE_SIZE + half;
-        const points = [
-          new THREE.Vector3(ccx, LINE_Y, ccz),
-          new THREE.Vector3(hcx, LINE_Y, hcz),
-        ];
-        const geom = new THREE.BufferGeometry().setFromPoints(points);
-        const hLine = new THREE.Line(geom, this.connectorLineMat);
-        hLine.renderOrder = 900;
-        group.add(hLine);
 
-        const hCircle1 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
-        hCircle1.rotation.x = -Math.PI / 2;
-        hCircle1.position.set(hcx, 10, hcz);
-        hCircle1.renderOrder = 900;
-        group.add(hCircle1);
-
-        const hCircle2 = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
-        hCircle2.rotation.x = -Math.PI / 2;
-        hCircle2.position.set(ccx, LINE_Y, ccz);
-        hCircle2.renderOrder = 900;
-        group.add(hCircle2);
+        const hCircle = new THREE.Mesh(this.circleGeom, this.connectorCircleMat);
+        hCircle.rotation.x = -Math.PI / 2;
+        hCircle.position.set(hcx, 10, hcz);
+        hCircle.renderOrder = 900;
+        group.add(hCircle);
       }
 
       // Connector lines: business connector → parking lot center
@@ -429,7 +413,7 @@ export class RoadLayer {
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
         const cell = this.grid.getCell(gx, gy);
-        if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector)) continue;
+        if (!cell || (cell.type !== CellType.Road && cell.type !== CellType.Connector && cell.type !== CellType.House)) continue;
         if (cell.roadConnections === 0) continue;
 
         const key = cellKey(gx, gy);
@@ -439,7 +423,7 @@ export class RoadLayer {
           const nx = gx + off.gx;
           const ny = gy + off.gy;
           const nCell = this.grid.getCell(nx, ny);
-          if (!nCell || (nCell.type !== CellType.Road && nCell.type !== CellType.Connector)) return;
+          if (!nCell || (nCell.type !== CellType.Road && nCell.type !== CellType.Connector && nCell.type !== CellType.House)) return;
           neighbors.push({ neighbor: cellKey(nx, ny), dir });
         });
         adjacency.set(key, neighbors);
@@ -554,8 +538,8 @@ export class RoadLayer {
       if (chain) chains.push(chain);
     }
 
-    // Append building cells (House/ParkingLot) to chains that end at their Connector.
-    // This eliminates visual gaps where road chains meet building connectors.
+    // Append ParkingLot cells to chains that end at their business Connector.
+    // This eliminates visual gaps where road chains meet business connectors.
     const connectorToBuildings = new Map<number, number[]>();
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       for (let gx = 0; gx < GRID_COLS; gx++) {
@@ -569,7 +553,7 @@ export class RoadLayer {
           const nx = gx + off.gx;
           const ny = gy + off.gy;
           const nCell = this.grid.getCell(nx, ny);
-          if (nCell?.type === CellType.House || nCell?.type === CellType.ParkingLot) {
+          if (nCell?.type === CellType.ParkingLot) {
             let buildings = connectorToBuildings.get(key);
             if (!buildings) {
               buildings = [];

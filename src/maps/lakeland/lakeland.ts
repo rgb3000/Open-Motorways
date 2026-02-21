@@ -1,4 +1,4 @@
-import type { MapConfig, ObstacleDefinition } from './types';
+import type { MapConfig, ObstacleDefinition } from '../types';
 
 function lakePatch(cx: number, cy: number, radius: number): ObstacleDefinition[] {
   const cells: ObstacleDefinition[] = [];

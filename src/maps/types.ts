@@ -1,4 +1,4 @@
-import type { GameColor, Direction } from '../types';
+import type { GameColor } from '../types';
 
 export interface ObstacleDefinition {
   gx: number;
@@ -11,15 +11,13 @@ export interface HouseDefinition {
   gx: number;
   gy: number;
   color: GameColor;
-  connectorDir?: Direction;
 }
 
 export interface BusinessDefinition {
   gx: number;
   gy: number;
   color: GameColor;
-  orientation: 'horizontal' | 'vertical';
-  connectorSide: 'positive' | 'negative';
+  rotation: 0 | 90 | 180 | 270;
 }
 
 export interface RoadDefinition {
@@ -83,6 +81,13 @@ export interface GameConstants {
 
   // Day length
   DAY_LENGTH_SECONDS: number;
+
+  // Gas stations
+  FUEL_CAPACITY: number;
+  REFUEL_TIME: number;
+  GAS_STATION_COST: number;
+  GAS_STATION_REFUND: number;
+  GAS_STATION_PARKING_SLOTS: number;
 }
 
 export interface MapConfig {
@@ -90,6 +95,7 @@ export interface MapConfig {
   name: string;
   description: string;
   debug?: boolean;
+  terrainSvg?: string;  // resolved URL to custom terrain SVG (use Vite static import)
   obstacles?: ObstacleDefinition[];
   houses?: HouseDefinition[];
   businesses?: BusinessDefinition[];

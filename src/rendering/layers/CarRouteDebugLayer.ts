@@ -3,7 +3,7 @@ import type { Car } from '../../entities/Car';
 import { CarState } from '../../entities/Car';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
-import { COLOR_MAP, TILE_SIZE } from '../../constants';
+import { COLOR_MAP, TILE_SIZE, FUEL_CAPACITY } from '../../constants';
 import { stepGridPos } from '../../systems/car/CarRouter';
 
 const LINE_Y = 1;
@@ -15,6 +15,7 @@ export class CarRouteDebugLayer {
   private group: THREE.Group | null = null;
   private hoveredCarId: string | null = null;
   private cachedPathIndex = -1;
+  private cachedFuel = -1;
 
   update(
     scene: THREE.Scene,
@@ -47,9 +48,11 @@ export class CarRouteDebugLayer {
     }
 
     // Skip rebuild if same car and same progress
+    const fuelFloored = Math.floor(closestCar.fuel);
     if (
       closestCar.id === this.hoveredCarId &&
-      closestCar.pathIndex === this.cachedPathIndex
+      closestCar.pathIndex === this.cachedPathIndex &&
+      fuelFloored === this.cachedFuel
     ) {
       return;
     }
@@ -57,6 +60,7 @@ export class CarRouteDebugLayer {
     this.clearFromScene(scene);
     this.hoveredCarId = closestCar.id;
     this.cachedPathIndex = closestCar.pathIndex;
+    this.cachedFuel = fuelFloored;
 
     const group = new THREE.Group();
     const color = new THREE.Color(COLOR_MAP[closestCar.color]);
@@ -67,6 +71,9 @@ export class CarRouteDebugLayer {
     } else if (closestCar.path.length > 1) {
       this.buildFromGridPath(group, closestCar, color);
     }
+
+    // Fuel indicator
+    this.addFuelIndicator(group, closestCar);
 
     // Origin house marker
     const house = houses.find(h => h.id === closestCar!.homeHouseId);
@@ -182,6 +189,65 @@ export class CarRouteDebugLayer {
     }
   }
 
+  private addFuelIndicator(group: THREE.Group, car: Car): void {
+    const fuel = car.fuel;
+    const fuelPct = fuel / FUEL_CAPACITY;
+    const radius = TILE_SIZE * 0.2;
+    const cx = car.pixelPos.x + TILE_SIZE * 0.6;
+    const cz = car.pixelPos.y;
+    const y = 2;
+
+    // Background disc
+    const bgGeom = new THREE.CircleGeometry(radius, 32);
+    bgGeom.rotateX(-Math.PI / 2);
+    const bgMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.4,
+      depthTest: false,
+    });
+    const bgMesh = new THREE.Mesh(bgGeom, bgMat);
+    bgMesh.position.set(cx, y, cz);
+    bgMesh.renderOrder = 999;
+    group.add(bgMesh);
+
+    // Fuel arc
+    if (fuelPct > 0) {
+      const thetaLength = fuelPct * Math.PI * 2;
+      const arcGeom = new THREE.CircleGeometry(radius * 0.9, 32, -Math.PI / 2, thetaLength);
+      arcGeom.rotateX(-Math.PI / 2);
+      const arcColor = fuelPct > 0.5 ? 0x4CAF50 : fuelPct > 0.2 ? 0xFFC107 : 0xF44336;
+      const arcMat = new THREE.MeshBasicMaterial({
+        color: arcColor,
+        depthTest: false,
+      });
+      const arcMesh = new THREE.Mesh(arcGeom, arcMat);
+      arcMesh.position.set(cx, y + 0.1, cz);
+      arcMesh.renderOrder = 1000;
+      group.add(arcMesh);
+    }
+
+    // Percentage text sprite
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 64, 32);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${Math.round(fuelPct * 100)}%`, 32, 16);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(20, 10, 1);
+    sprite.position.set(cx, y + 8, cz);
+    sprite.renderOrder = 1000;
+    group.add(sprite);
+  }
+
   private addCircleMarker(group: THREE.Group, x: number, z: number, color: THREE.Color, opacity: number): void {
     const geom = new THREE.RingGeometry(MARKER_RADIUS * 0.7, MARKER_RADIUS, MARKER_SEGMENTS);
     geom.rotateX(-Math.PI / 2);
@@ -201,6 +267,7 @@ export class CarRouteDebugLayer {
     this.clearFromScene(scene);
     this.hoveredCarId = null;
     this.cachedPathIndex = -1;
+    this.cachedFuel = -1;
   }
 
   private clearFromScene(scene: THREE.Scene): void {
@@ -214,6 +281,10 @@ export class CarRouteDebugLayer {
           } else {
             (mat as THREE.Material).dispose();
           }
+        } else if (obj instanceof THREE.Sprite) {
+          const mat = obj.material as THREE.SpriteMaterial;
+          if (mat.map) mat.map.dispose();
+          mat.dispose();
         }
       });
       scene.remove(this.group);

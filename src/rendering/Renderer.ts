@@ -3,6 +3,7 @@ import type { Grid } from '../core/Grid';
 import type { House } from '../entities/House';
 import type { Business } from '../entities/Business';
 import type { Car } from '../entities/Car';
+import type { GasStation } from '../entities/GasStation';
 import type { GridPos } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, GRID_COLS, GRID_ROWS, TILE_SIZE, LAKE_DEPTH, LAKE_WATER_SURFACE_Y, LAKE_WATER_COLOR_HEX, LAKE_WATER_OPACITY, ROAD_DEBUG, CAR_ROUTE_DEBUG } from '../constants';
 import { lerp, clamp } from '../utils/math';
@@ -43,6 +44,7 @@ export class Renderer {
   private grid: Grid;
   private lakeCells: GridPos[] = [];
   private indicatorMesh: THREE.Mesh | null = null;
+  private gridLines: THREE.LineSegments | null = null;
 
   private offscreenCanvas: HTMLCanvasElement;
   private offCtx: CanvasRenderingContext2D;
@@ -69,7 +71,7 @@ export class Renderer {
 
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xe8d8b4);
+    this.scene.background = new THREE.Color(0xffffff);
 
     // Camera — orthographic, top-down (frustum set by updateFrustum)
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
@@ -137,6 +139,42 @@ export class Renderer {
     this.groundMesh.receiveShadow = true;
     this.groundMesh.castShadow = true;
     this.scene.add(this.groundMesh);
+
+    // Grid lines as 3D line geometry (constant 1px width at any zoom)
+    this.buildGridLines();
+  }
+
+  private buildGridLines(): void {
+    const w = GRID_COLS * TILE_SIZE;
+    const h = GRID_ROWS * TILE_SIZE;
+    const y = 0.15; // just above ground plane
+
+    const points: number[] = [];
+
+    // Vertical lines
+    for (let x = 0; x <= GRID_COLS; x++) {
+      const px = x * TILE_SIZE;
+      points.push(px, y, 0, px, y, h);
+    }
+
+    // Horizontal lines
+    for (let z = 0; z <= GRID_ROWS; z++) {
+      const pz = z * TILE_SIZE;
+      points.push(0, y, pz, w, y, pz);
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xD4C4A0,
+      transparent: true,
+      opacity: 0.5,
+      depthTest: true,
+    });
+
+    this.gridLines = new THREE.LineSegments(geom, mat);
+    this.scene.add(this.gridLines);
   }
 
   resize(width: number, height: number): void {
@@ -213,6 +251,14 @@ export class Renderer {
 
     // Create water surface
     this.buildWaterSurface(lakeCells);
+  }
+
+  async loadTerrain(svgPath?: string): Promise<void> {
+    await this.terrainLayer.load(svgPath);
+    // Re-render the ground texture with the loaded SVG
+    this.offCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.terrainLayer.render(this.offCtx, this.lakeCells);
+    this.groundTexture.needsUpdate = true;
   }
 
   private displaceGroundForLakes(lakeCells: GridPos[]): void {
@@ -361,6 +407,7 @@ export class Renderer {
     highwaySystem: HighwaySystem | null = null,
     activeTool: Tool = Tool.Road,
     highwayPlacementState: HighwayPlacementState | null = null,
+    gasStations: GasStation[] = [],
   ): void {
     // Smooth zoom/pan animation
     this.updateCamera();
@@ -389,7 +436,7 @@ export class Renderer {
     }
 
     // Update 3D meshes
-    this.buildingLayer.update(this.scene, houses, businesses);
+    this.buildingLayer.update(this.scene, houses, businesses, gasStations);
     this.carLayer.update(this.scene, cars, alpha);
     this.debugLayer.update(this.scene, spawnBounds);
     if (ROAD_DEBUG) this.roadDebugLayer.update(this.scene, this.grid, cars, businesses);
@@ -419,6 +466,12 @@ export class Renderer {
       this.waterSurface.geometry.dispose();
       (this.waterSurface.material as THREE.Material).dispose();
       this.waterSurface = null;
+    }
+    if (this.gridLines) {
+      this.scene.remove(this.gridLines);
+      this.gridLines.geometry.dispose();
+      (this.gridLines.material as THREE.Material).dispose();
+      this.gridLines = null;
     }
 
     // Dispose all remaining scene objects
