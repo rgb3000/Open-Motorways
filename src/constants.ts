@@ -1,9 +1,9 @@
 import { GameColor } from './types';
 
 // Grid
-export const GRID_COLS = 70;
-export const GRID_ROWS = 40;
-export const TILE_SIZE = 50;
+export const GRID_COLS = 80;
+export const GRID_ROWS = 50;
+export const TILE_SIZE = 40;
 export const CANVAS_WIDTH = GRID_COLS * TILE_SIZE;
 export const CANVAS_HEIGHT = GRID_ROWS * TILE_SIZE;
 
@@ -21,8 +21,8 @@ export const DEMAND_PIN_COOLDOWN = 5;  // minimum seconds between adding pins to
 export const CARS_PER_HOUSE = 2;
 export const CAR_SPEED = 1; // tiles per second
 export const LANE_OFFSET = TILE_SIZE * 0.12;    // px from tile center to lane center
-export const CAR_WIDTH = TILE_SIZE * 0.15;       // px (narrow dimension, perpendicular to travel)
-export const CAR_LENGTH = TILE_SIZE * 0.32;      // px (long dimension, along travel direction)
+export const CAR_WIDTH = TILE_SIZE * 0.12;       // px (narrow dimension, perpendicular to travel)
+export const CAR_LENGTH = TILE_SIZE * 0.3;      // px (long dimension, along travel direction)
 export const INTERSECTION_SPEED_MULTIPLIER = 0.7;
 export const INTERSECTION_DEADLOCK_TIMEOUT = 2.0; // seconds
 export const SAME_LANE_DEADLOCK_TIMEOUT = 5.0; // seconds (safety net only, arc-length following handles normal cases)
@@ -51,7 +51,7 @@ export const INITIAL_SPAWN_DELAY = 10;     // seconds before second color
 export const COLOR_UNLOCK_INTERVAL = 35;   // seconds between new colors
 export const HOUSE_CLUSTER_RADIUS = 3;     // tiles
 export const MIN_BUSINESS_DISTANCE = 8;    // tiles from matching houses
-export const SPAWN_INTERVAL = 18;          // seconds between spawns
+export const SPAWN_INTERVAL = 30;          // seconds between spawns
 export const MIN_SPAWN_INTERVAL = 10;
 export const SPAWN_INTERVAL_DECAY = 0.97;
 export const SPAWN_AREA_INTERVALS = [
@@ -81,8 +81,8 @@ export const GAS_STATION_REFUND = 100;
 export const GAS_STATION_PARKING_SLOTS = 2;
 
 // Building layout (shared margin system)
-export const CELL_MARGIN = 7.5;          // ground plate edge inset from cell boundary (px)
-export const GROUND_PLATE_MARGIN = 2.5;  // inner building space inset from plate edge (px)
+export const CELL_MARGIN = 6;          // ground plate edge inset from cell boundary (px)
+export const GROUND_PLATE_MARGIN = 3;  // inner building space inset from plate edge (px)
 
 // Highways
 export const HIGHWAY_COST = 200;
