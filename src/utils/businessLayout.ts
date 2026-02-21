@@ -1,6 +1,6 @@
 import type { BusinessRotation } from '../types';
-import { BIZ_PIN_SPACING } from '../constants';
-import { cellCenter, computeGroundPlate, computeInnerSpace, computeParkingSlots } from './buildingLayout';
+
+import { computeGroundPlate, computeInnerSpace, computeParkingSlots, computeCellWithinPlate } from './buildingLayout';
 import type { Rect2D, Point2D } from './buildingLayout';
 
 // Re-export shared types for backward compatibility
@@ -50,6 +50,12 @@ function getCellPositions(input: BusinessLayoutInput) {
   };
 }
 
+function getPlateInner(input: BusinessLayoutInput): Rect2D {
+  const cells = getCellPositions(input);
+  const plate = computeGroundPlate([cells.building, cells.pins, cells.connector, cells.parkingLot]);
+  return computeInnerSpace(plate);
+}
+
 export function getGroundPlateLayout(input: BusinessLayoutInput): Rect2D {
   const cells = getCellPositions(input);
   return computeGroundPlate([cells.building, cells.pins, cells.connector, cells.parkingLot]);
@@ -57,23 +63,28 @@ export function getGroundPlateLayout(input: BusinessLayoutInput): Rect2D {
 
 export function getBuildingLayout(input: BusinessLayoutInput): Rect2D {
   const cells = getCellPositions(input);
-  const bldgPlate = computeGroundPlate([cells.building]);
-  return computeInnerSpace(bldgPlate);
+  return computeCellWithinPlate(cells.building, getPlateInner(input));
 }
 
 export function getPinGridLayout(input: BusinessLayoutInput): Point2D[] {
   const cells = getCellPositions(input);
-  const pinsCenter = cellCenter(cells.pins);
+  const pinRect = computeCellWithinPlate(cells.pins, getPlateInner(input));
+
+  // Spread pins evenly across the cell's inner rect (4 cols × 2 rows)
+  const cols = 4;
+  const rows = 2;
+  const spacingX = pinRect.width / cols;
+  const spacingZ = pinRect.depth / rows;
 
   const points: Point2D[] = [];
   for (let i = 0; i < 8; i++) {
-    const col = i % 4;       // 0..3
-    const row = (i / 4) | 0; // 0 or 1
-    const offsetA = (col - 1.5) * BIZ_PIN_SPACING;
-    const offsetB = (row - 0.5) * BIZ_PIN_SPACING;
+    const col = i % cols;       // 0..3
+    const row = (i / cols) | 0; // 0 or 1
+    const offsetX = (col - (cols - 1) / 2) * spacingX;
+    const offsetZ = (row - (rows - 1) / 2) * spacingZ;
     points.push({
-      x: pinsCenter.x + offsetA,
-      z: pinsCenter.z + offsetB,
+      x: pinRect.centerX + offsetX,
+      z: pinRect.centerZ + offsetZ,
     });
   }
   return points;
@@ -81,8 +92,7 @@ export function getPinGridLayout(input: BusinessLayoutInput): Point2D[] {
 
 export function getParkingSlotLayout(input: BusinessLayoutInput): Rect2D[] {
   const cells = getCellPositions(input);
-  const lotPlate = computeGroundPlate([cells.parkingLot]);
-  const lotInner = computeInnerSpace(lotPlate);
+  const lotInner = computeCellWithinPlate(cells.parkingLot, getPlateInner(input));
   const axis = PARKING_AXIS[input.rotation];
   return computeParkingSlots(lotInner, 4, axis);
 }

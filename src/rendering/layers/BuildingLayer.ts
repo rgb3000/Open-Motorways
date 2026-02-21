@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { House } from '../../entities/House';
 import type { Business } from '../../entities/Business';
 import type { GasStation } from '../../entities/GasStation';
-import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, CELL_MARGIN } from '../../constants';
+import { TILE_SIZE, COLOR_MAP, MAX_DEMAND_PINS, DEMAND_DEBUG, CAR_LENGTH, CAR_WIDTH, CARS_PER_HOUSE, LANE_OFFSET, CELL_MARGIN, GROUND_PLATE_MARGIN } from '../../constants';
 import { computeGroundPlate, computeInnerSpace } from '../../utils/buildingLayout';
 import { getBusinessLayout } from '../../utils/businessLayout';
 import { getGasStationLayout } from '../../utils/gasStationLayout';
@@ -106,7 +106,7 @@ export class BuildingLayer {
     const houseInner = computeInnerSpace(housePlate);
     const plateSize = housePlate.width;                   // 35px
     const size = houseInner.width;                        // 30px
-    const height = 5;
+    const height = 10;
 
     // House body
     const bodyShape = roundedRectShape(size, size, 2);
@@ -121,10 +121,9 @@ export class BuildingLayer {
     this.housePlateGeom = new THREE.ExtrudeGeometry(plateShape, { depth: 0.8, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 3, curveSegments: 4 });
     this.housePlateGeom.rotateX(-Math.PI / 2);
 
-    // Business body (fits within a single cell's inner space)
-    const bizCellPlate = computeGroundPlate([{ gx: 0, gy: 0 }]);
-    const bizCellInner = computeInnerSpace(bizCellPlate);
-    const bizBodySize = bizCellInner.width; // square: fits in one cell
+    // Business body — fits within a corner cell of the 2×2 plate, with extra padding.
+    // Cell rect plate-edge side = 31px, minus GROUND_PLATE_MARGIN for visual padding.
+    const bizBodySize = TILE_SIZE - CELL_MARGIN - 2 * GROUND_PLATE_MARGIN; // 28px
     const buildingHeight = 14;
     const bizBodyShape = roundedRectShape(bizBodySize, bizBodySize, 2);
     this.bizBodyGeom = new THREE.ExtrudeGeometry(bizBodyShape, { depth: buildingHeight, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.0, bevelSegments: 3, curveSegments: 4 });
@@ -327,7 +326,7 @@ export class BuildingLayer {
 
     // Roof (cloned from prototype)
     const roof = new THREE.Mesh(this.houseRoofGeom.clone(), mat);
-    roof.position.y = 5 + 3 / 2;
+    roof.position.y = 10 + 3 / 2;
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     group.add(roof);

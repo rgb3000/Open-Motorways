@@ -54,6 +54,47 @@ export function computeInnerSpace(plate: Rect2D, margin = GROUND_PLATE_MARGIN): 
 }
 
 /**
+ * Compute the usable area for an element within a single cell of a multi-cell plate.
+ * The element sits inside the plate's inner space (plateInner), and gets an additional
+ * GROUND_PLATE_MARGIN inset on interior sides (sides facing neighboring cells).
+ * Plate-edge sides are already bounded by plateInner so no extra inset is needed there.
+ */
+export function computeCellWithinPlate(
+  cellPos: { gx: number; gy: number },
+  plateInner: Rect2D,
+  margin = GROUND_PLATE_MARGIN,
+): Rect2D {
+  const cellLeft = cellPos.gx * TILE_SIZE;
+  const cellRight = cellLeft + TILE_SIZE;
+  const cellTop = cellPos.gy * TILE_SIZE;
+  const cellBottom = cellTop + TILE_SIZE;
+
+  const plateLeft = plateInner.centerX - plateInner.width / 2;
+  const plateRight = plateInner.centerX + plateInner.width / 2;
+  const plateTop = plateInner.centerZ - plateInner.depth / 2;
+  const plateBottom = plateInner.centerZ + plateInner.depth / 2;
+
+  // Clip cell to plate inner space
+  let left = Math.max(cellLeft, plateLeft);
+  let right = Math.min(cellRight, plateRight);
+  let top = Math.max(cellTop, plateTop);
+  let bottom = Math.min(cellBottom, plateBottom);
+
+  // Add margin on interior sides (where the cell edge is inside the plate, not on the plate edge)
+  if (cellLeft > plateLeft) left += margin;
+  if (cellRight < plateRight) right -= margin;
+  if (cellTop > plateTop) top += margin;
+  if (cellBottom < plateBottom) bottom -= margin;
+
+  return {
+    centerX: (left + right) / 2,
+    centerZ: (top + bottom) / 2,
+    width: right - left,
+    depth: bottom - top,
+  };
+}
+
+/**
  * Place N slots in a row within a rectangular region.
  * axis: 'x' = slots laid out along X, 'z' = slots laid out along Z.
  */
