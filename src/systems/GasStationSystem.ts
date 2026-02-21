@@ -65,10 +65,6 @@ export class GasStationSystem {
       connectorDir: null,
     });
 
-    // Auto-connect connectors to adjacent road cells
-    this.autoConnectToRoads(station.entryConnectorPos);
-    this.autoConnectToRoads(station.exitConnectorPos);
-
     this.gasStations.push(station);
     this.isDirty = true;
     return station;
@@ -137,26 +133,6 @@ export class GasStationSystem {
     if (!cell || !cell.entityId) return undefined;
     if (cell.type !== CellType.GasStation && cell.type !== CellType.Connector) return undefined;
     return this.gasStations.find(gs => gs.id === cell.entityId);
-  }
-
-  private autoConnectToRoads(connectorPos: GridPos): void {
-    const connectorCell = this.grid.getCell(connectorPos.gx, connectorPos.gy);
-    if (!connectorCell) return;
-
-    for (const dir of ALL_DIRECTIONS) {
-      const off = DIRECTION_OFFSETS[dir];
-      const nx = connectorPos.gx + off.gx;
-      const ny = connectorPos.gy + off.gy;
-      const neighbor = this.grid.getCell(nx, ny);
-      if (!neighbor) continue;
-
-      if (neighbor.type === CellType.Road) {
-        // Connect connector → road
-        connectorCell.roadConnections |= dir;
-        // Connect road → connector
-        neighbor.roadConnections |= opposite(dir);
-      }
-    }
   }
 
   private disconnectFromRoads(connectorPos: GridPos): void {

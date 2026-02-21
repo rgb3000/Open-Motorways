@@ -5,6 +5,7 @@ import type { Grid } from '../core/Grid';
 import type { GridPos } from '../types';
 import { CellType, Direction, Tool } from '../types';
 import { GRID_COLS, GRID_ROWS, TILE_SIZE, ROAD_COST, ROAD_REFUND } from '../constants';
+import { connectionCount, forEachDirection, directionFromDelta, opposite } from '../utils/direction';
 import { findRoadPlacementPath } from '../pathfinding/RoadPlacementPathfinder';
 
 const DRAG_THRESHOLD_SQ = (TILE_SIZE * 0.5) ** 2;
@@ -30,6 +31,7 @@ export class RoadDrawer {
   private lastBuiltPos: GridPos | null = null;
   private prevCanvasX: number | null = null;
   private prevCanvasY: number | null = null;
+  private redirectSource: GridPos | null = null;
 
   onRoadPlace: (() => void) | null = null;
   onRoadDelete: (() => void) | null = null;
@@ -118,6 +120,14 @@ export class RoadDrawer {
 
           if (isOccupied) {
             this.prevPlacedPos = { ...gridPos };
+            // Detect redirect: house with 1+ connection or connector with 2+ (1 permanent + 1 external)
+            if (cell) {
+              const isHouseWithConn = cell.type === CellType.House && connectionCount(cell.roadConnections) >= 1;
+              const isConnectorWithExternal = cell.type === CellType.Connector && connectionCount(cell.roadConnections) >= 2;
+              if (isHouseWithConn || isConnectorWithExternal) {
+                this.redirectSource = { ...gridPos };
+              }
+            }
           } else {
             this.prevPlacedPos = null;
             this.tryPlace(gridPos.gx, gridPos.gy);
@@ -144,6 +154,48 @@ export class RoadDrawer {
           const nextCell = this.computeNextDragCell(this.lastGridPos, sx, sy);
           if (!nextCell) continue;
           if (nextCell.gx < 0 || nextCell.gx >= GRID_COLS || nextCell.gy < 0 || nextCell.gy >= GRID_ROWS) continue;
+
+          // Handle connection redirect: dragging from a house/connector with existing road
+          if (this.redirectSource) {
+            const src = this.redirectSource;
+            const srcCell = this.grid.getCell(src.gx, src.gy);
+            const targetCell = this.grid.getCell(nextCell.gx, nextCell.gy);
+            if (srcCell && targetCell && targetCell.type === CellType.Empty) {
+              // Must be adjacent to the redirect source
+              const ddx = nextCell.gx - src.gx;
+              const ddy = nextCell.gy - src.gy;
+              if (Math.max(Math.abs(ddx), Math.abs(ddy)) === 1) {
+                const oldRoad = this.findExternalRoadNeighbor(src.gx, src.gy);
+                if (oldRoad) {
+                  // Snapshot for undo
+                  this.undoSystem?.snapshotCellAndNeighbors(oldRoad.gx, oldRoad.gy);
+                  this.undoSystem?.snapshotCellAndNeighbors(src.gx, src.gy);
+                  this.undoSystem?.snapshotCellAndNeighbors(nextCell.gx, nextCell.gy);
+
+                  // Disconnect source from old road (don't delete the road cell)
+                  const oldDir = directionFromDelta(oldRoad.gx - src.gx, oldRoad.gy - src.gy);
+                  srcCell.roadConnections &= ~oldDir;
+                  const oldRoadCell = this.grid.getCell(oldRoad.gx, oldRoad.gy);
+                  if (oldRoadCell) {
+                    oldRoadCell.roadConnections &= ~opposite(oldDir);
+                  }
+                  this.roadSystem.markDirty();
+
+                  // Place new road and connect
+                  this.tryPlace(nextCell.gx, nextCell.gy);
+                  this.roadSystem.connectRoads(src.gx, src.gy, nextCell.gx, nextCell.gy);
+
+                  this.redirectSource = null;
+                  this.prevPlacedPos = { ...nextCell };
+                  this.lastGridPos = { ...nextCell };
+                  this.lastBuiltPos = { ...nextCell };
+                  continue;
+                }
+              }
+            }
+            // If we dragged but couldn't redirect (e.g. not adjacent or not empty), skip
+            continue;
+          }
 
           const c = this.grid.getCell(nextCell.gx, nextCell.gy);
           if (c && c.type === CellType.House) {
@@ -207,6 +259,7 @@ export class RoadDrawer {
       this.prevPlacedPos = null;
       this.prevCanvasX = null;
       this.prevCanvasY = null;
+      this.redirectSource = null;
     }
 
     this.wasLeftDown = leftDown;
@@ -291,6 +344,24 @@ export class RoadDrawer {
     this.roadSystem.connectRoads(this.prevPlacedPos.gx, this.prevPlacedPos.gy, gx, gy);
     this.lastBuiltPos = { gx, gy };
     return true;
+  }
+
+  /** Find the adjacent road cell connected to a house/connector (skipping ParkingLot for connectors). */
+  private findExternalRoadNeighbor(gx: number, gy: number): GridPos | null {
+    const cell = this.grid.getCell(gx, gy);
+    if (!cell) return null;
+    let result: GridPos | null = null;
+    forEachDirection(cell.roadConnections, (dir) => {
+      if (result) return;
+      const neighbor = this.grid.getNeighbor(gx, gy, dir);
+      if (!neighbor) return;
+      // For connectors, skip the permanent inward connection to ParkingLot
+      if (cell.type === CellType.Connector && neighbor.cell.type === CellType.ParkingLot) return;
+      if (neighbor.cell.type === CellType.Road) {
+        result = { gx: neighbor.gx, gy: neighbor.gy };
+      }
+    });
+    return result;
   }
 
   private bresenhamLine(x0: number, y0: number, x1: number, y1: number, callback: (x: number, y: number) => void): void {
